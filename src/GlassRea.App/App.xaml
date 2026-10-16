@@ -1,0 +1,150 @@
+<Application
+    x:Class="GlassRea.App.App"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:c="using:GlassRea.App.Controls">
+    <Application.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <XamlControlsResources xmlns="using:Microsoft.UI.Xaml.Controls" />
+            </ResourceDictionary.MergedDictionaries>
+
+            <!-- Shared brushes. Support/Appearance.cs rewrites their colours for the theme, palette and Glass setting. -->
+            <SolidColorBrush x:Key="AccentBrush" Color="#0F62D6" />
+            <SolidColorBrush x:Key="AccentSoftBrush" Color="#290F62D6" />
+            <SolidColorBrush x:Key="UpBrush" Color="#B5472F" />
+            <SolidColorBrush x:Key="OnAccentBrush" Color="White" />
+            <SolidColorBrush x:Key="CardBrush" Color="#8FFFFFFF" />
+            <SolidColorBrush x:Key="CardStrokeBrush" Color="#0F000000" />
+            <SolidColorBrush x:Key="RowBrush" Color="#8CFFFFFF" />
+            <SolidColorBrush x:Key="GlassTintBrush" Color="#4DFFFFFF" />
+            <SolidColorBrush x:Key="InkBrush" Color="#BFFFFFFF" />
+            <SolidColorBrush x:Key="EdgeBrush" Color="#99F3F3F3" />
+            <SolidColorBrush x:Key="GlowBrush" Color="#66FFFFFF" />
+            <!-- Text and selection for controls built in code; Fluent's own theme brushes resolve against the app's
+                 theme there, not the window's, so these follow Appearance instead. -->
+            <SolidColorBrush x:Key="TextBrush" Color="White" />
+            <SolidColorBrush x:Key="TextSecondaryBrush" Color="#C5FFFFFF" />
+            <SolidColorBrush x:Key="SelectedFillBrush" Color="#0FFFFFFF" />
+            <LinearGradientBrush x:Key="LogoBrush" StartPoint="0,0" EndPoint="1,1">
+                <GradientStop Offset="0" Color="#5B9BFF" />
+                <GradientStop Offset="1" Color="#0A3F9E" />
+            </LinearGradientBrush>
+            <!-- The rim catches light from above, fades along the sides, and glints again at the bottom. -->
+            <LinearGradientBrush x:Key="GlassRimBrush" StartPoint="0,0" EndPoint="0,1">
+                <GradientStop Offset="0" Color="#F2FFFFFF" />
+                <GradientStop Offset="0.5" Color="#0AFFFFFF" />
+                <GradientStop Offset="1" Color="#60FFFFFF" />
+            </LinearGradientBrush>
+            <ThemeShadow x:Key="GlassShadow" />
+
+            <CornerRadius x:Key="CardRadius">12</CornerRadius>
+
+            <Style x:Key="Card" TargetType="Border">
+                <Setter Property="Background" Value="{StaticResource CardBrush}" />
+                <Setter Property="BorderBrush" Value="{StaticResource CardStrokeBrush}" />
+                <Setter Property="BorderThickness" Value="1" />
+                <Setter Property="CornerRadius" Value="12" />
+                <Setter Property="Padding" Value="18" />
+            </Style>
+            <Style x:Key="Row" TargetType="Border">
+                <Setter Property="Background" Value="{StaticResource RowBrush}" />
+                <Setter Property="BorderBrush" Value="{StaticResource CardStrokeBrush}" />
+                <Setter Property="BorderThickness" Value="1" />
+                <Setter Property="CornerRadius" Value="8" />
+                <Setter Property="Padding" Value="12,10" />
+            </Style>
+
+            <Style x:Key="CardTitle" TargetType="TextBlock" BasedOn="{StaticResource BodyStrongTextBlockStyle}" />
+            <Style x:Key="Caption" TargetType="TextBlock" BasedOn="{StaticResource CaptionTextBlockStyle}">
+                <Setter Property="Foreground" Value="{ThemeResource TextFillColorSecondaryBrush}" />
+                <Setter Property="TextWrapping" Value="Wrap" />
+            </Style>
+            <Style x:Key="Muted" TargetType="TextBlock" BasedOn="{StaticResource BodyTextBlockStyle}">
+                <Setter Property="Foreground" Value="{ThemeResource TextFillColorSecondaryBrush}" />
+            </Style>
+            <Style x:Key="Headline" TargetType="TextBlock">
+                <Setter Property="FontFamily" Value="Segoe UI Variable Display" />
+                <Setter Property="FontSize" Value="26" />
+                <Setter Property="LineHeight" Value="34" />
+                <Setter Property="FontWeight" Value="SemiBold" />
+                <Setter Property="TextWrapping" Value="Wrap" />
+                <Setter Property="MaxWidth" Value="560" />
+                <Setter Property="HorizontalAlignment" Value="Left" />
+            </Style>
+            <Style x:Key="BigNumber" TargetType="TextBlock">
+                <Setter Property="FontFamily" Value="Segoe UI Variable Display" />
+                <Setter Property="FontSize" Value="28" />
+                <Setter Property="FontWeight" Value="SemiBold" />
+            </Style>
+            <Style x:Key="PageTitle" TargetType="TextBlock" BasedOn="{StaticResource SubtitleTextBlockStyle}" />
+
+            <!-- A tab in the floating glass bar: no chrome of its own; the sliding lens behind it marks the selection. -->
+            <Style x:Key="TabButton" TargetType="Button">
+                <Setter Property="Background" Value="Transparent" />
+                <Setter Property="BorderThickness" Value="0" />
+                <Setter Property="Padding" Value="14,8" />
+                <Setter Property="CornerRadius" Value="17" />
+                <Setter Property="Foreground" Value="{ThemeResource TextFillColorSecondaryBrush}" />
+                <Setter Property="FocusVisualMargin" Value="-2" />
+                <Setter Property="Template">
+                    <Setter.Value>
+                        <ControlTemplate TargetType="Button">
+                            <Grid x:Name="Root" Background="Transparent" CornerRadius="{TemplateBinding CornerRadius}">
+                                <VisualStateManager.VisualStateGroups>
+                                    <VisualStateGroup x:Name="CommonStates">
+                                        <VisualState x:Name="Normal" />
+                                        <VisualState x:Name="PointerOver">
+                                            <VisualState.Setters>
+                                                <Setter Target="Content.Opacity" Value="1" />
+                                                <Setter Target="Root.Background" Value="{ThemeResource SubtleFillColorSecondaryBrush}" />
+                                            </VisualState.Setters>
+                                        </VisualState>
+                                        <VisualState x:Name="Pressed">
+                                            <VisualState.Setters>
+                                                <Setter Target="Root.Background" Value="{ThemeResource SubtleFillColorTertiaryBrush}" />
+                                            </VisualState.Setters>
+                                        </VisualState>
+                                    </VisualStateGroup>
+                                </VisualStateManager.VisualStateGroups>
+                                <ContentPresenter x:Name="Content" Padding="{TemplateBinding Padding}" Foreground="{TemplateBinding Foreground}"
+                                                  HorizontalAlignment="Center" VerticalAlignment="Center" />
+                            </Grid>
+                        </ControlTemplate>
+                    </Setter.Value>
+                </Setter>
+            </Style>
+
+            <Style TargetType="c:Glass">
+                <Setter Property="CornerRadius" Value="999" />
+                <Setter Property="Padding" Value="4" />
+                <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                <Setter Property="VerticalContentAlignment" Value="Stretch" />
+                <Setter Property="IsTabStop" Value="False" />
+                <Setter Property="Template">
+                    <Setter.Value>
+                        <ControlTemplate TargetType="c:Glass">
+                            <Grid CornerRadius="{TemplateBinding CornerRadius}" Shadow="{StaticResource GlassShadow}" Translation="0,0,24">
+                                <Border x:Name="Backdrop" />
+                                <Border Background="{StaticResource GlassTintBrush}" />
+                                <Border x:Name="Highlight" IsHitTestVisible="False">
+                                    <Border.Background>
+                                        <RadialGradientBrush Center="0.25,-0.1" GradientOrigin="0.25,-0.1" RadiusX="0.6" RadiusY="1.1">
+                                            <GradientStop Offset="0" Color="#38FFFFFF" />
+                                            <GradientStop Offset="1" Color="#00FFFFFF" />
+                                        </RadialGradientBrush>
+                                    </Border.Background>
+                                </Border>
+                                <Canvas x:Name="GlowLayer" IsHitTestVisible="False" />
+                                <Border BorderThickness="1" BorderBrush="{StaticResource GlassRimBrush}" CornerRadius="{TemplateBinding CornerRadius}" IsHitTestVisible="False" />
+                                <ContentPresenter Padding="{TemplateBinding Padding}"
+                                                  HorizontalContentAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                                  VerticalContentAlignment="{TemplateBinding VerticalContentAlignment}" />
+                            </Grid>
+                        </ControlTemplate>
+                    </Setter.Value>
+                </Setter>
+            </Style>
+        </ResourceDictionary>
+    </Application.Resources>
+</Application>

@@ -1,0 +1,42 @@
+using System.Text.Json;
+
+namespace GlassRea.App.Support;
+
+/// <summary>What Settings > General and Notifications keep on this PC, for this Windows user.</summary>
+public sealed class PreferencesState
+{
+    /// <summary>Minimizing hides the window to the tray instead of the taskbar.</summary>
+    public bool MinimizeToTray { get; set; }
+    /// <summary>Closing the window keeps the app in the tray. When off, closing quits it.</summary>
+    public bool CloseToTray { get; set; } = true;
+    /// <summary>New alerts pop up as Windows notifications. They're listed on the Alerts page either way.</summary>
+    public bool ShowNotifications { get; set; } = true;
+}
+
+public static class Preferences
+{
+    private static readonly string FilePath = Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Glass-Rea", "preferences.json");
+
+    public static PreferencesState State { get; private set; } = new();
+
+    public static void Load()
+    {
+        try
+        {
+            if (File.Exists(FilePath)) State = JsonSerializer.Deserialize<PreferencesState>(File.ReadAllText(FilePath)) ?? new();
+        }
+        catch { State = new(); }
+    }
+
+    public static void Update(Action<PreferencesState> change)
+    {
+        change(State);
+        try
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(FilePath)!);
+            File.WriteAllText(FilePath, JsonSerializer.Serialize(State));
+        }
+        catch { /* a read-only profile keeps the choice for this run only */ }
+    }
+}

@@ -1,0 +1,238 @@
+<UserControl
+    x:Class="GlassRea.App.Pages.SettingsPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:c="using:GlassRea.App.Controls">
+
+    <!-- Settings is split into sections, picked at the top. Each section is a few cards; every change saves itself. -->
+    <Grid RowSpacing="12">
+        <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="*" /></Grid.RowDefinitions>
+
+        <c:Segmented x:Name="SectionPick" AutomationProperties.Name="Settings sections" />
+
+        <ScrollViewer Grid.Row="1">
+            <Grid x:Name="Sections" Padding="0,0,0,90">
+
+                <!-- General -->
+                <Grid x:Name="GeneralSection" VerticalAlignment="Top" ColumnSpacing="12" RowSpacing="12">
+                    <Grid.ColumnDefinitions><ColumnDefinition /><ColumnDefinition /><ColumnDefinition /></Grid.ColumnDefinitions>
+
+                    <Border Style="{StaticResource Card}">
+                        <StackPanel Spacing="10">
+                            <StackPanel Orientation="Horizontal" Spacing="8"><FontIcon Glyph="&#xE7E8;" FontSize="15" /><TextBlock Text="Startup" Style="{StaticResource CardTitle}" /></StackPanel>
+                            <Border Style="{StaticResource Row}">
+                                <Grid ColumnSpacing="12">
+                                    <Grid.ColumnDefinitions><ColumnDefinition /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                                    <StackPanel VerticalAlignment="Center"><TextBlock Text="Start with Windows" /><TextBlock Text="Opens when you sign in" Style="{StaticResource Caption}" /></StackPanel>
+                                    <ToggleSwitch x:Name="StartupBox" Grid.Column="1" MinWidth="0" OnContent="" OffContent="" Toggled="OnStartup" AutomationProperties.Name="Start with Windows" />
+                                </Grid>
+                            </Border>
+                            <Border Style="{StaticResource Row}">
+                                <Grid ColumnSpacing="12">
+                                    <Grid.ColumnDefinitions><ColumnDefinition /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                                    <StackPanel VerticalAlignment="Center"><TextBlock Text="Start hidden in the tray" /><TextBlock Text="No window at sign-in, just the tray icon" Style="{StaticResource Caption}" /></StackPanel>
+                                    <ToggleSwitch x:Name="StartHiddenBox" Grid.Column="1" MinWidth="0" OnContent="" OffContent="" Toggled="OnStartup" AutomationProperties.Name="Start hidden in the tray" />
+                                </Grid>
+                            </Border>
+                            <TextBlock Text="Recording never stops: the service runs whether this window is open or not." Style="{StaticResource Caption}" />
+                        </StackPanel>
+                    </Border>
+
+                    <Border Grid.Column="1" Style="{StaticResource Card}">
+                        <StackPanel Spacing="10">
+                            <StackPanel Orientation="Horizontal" Spacing="8"><FontIcon Glyph="&#xE737;" FontSize="15" /><TextBlock Text="Window" Style="{StaticResource CardTitle}" /></StackPanel>
+                            <Border Style="{StaticResource Row}">
+                                <Grid ColumnSpacing="12">
+                                    <Grid.ColumnDefinitions><ColumnDefinition /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                                    <StackPanel VerticalAlignment="Center"><TextBlock Text="Minimize to the tray" /><TextBlock Text="Minimizing hides the window from the taskbar" Style="{StaticResource Caption}" /></StackPanel>
+                                    <ToggleSwitch x:Name="MinimizeTrayBox" Grid.Column="1" MinWidth="0" OnContent="" OffContent="" Toggled="OnWindowPrefs" AutomationProperties.Name="Minimize to the tray" />
+                                </Grid>
+                            </Border>
+                            <Border Style="{StaticResource Row}">
+                                <Grid ColumnSpacing="12">
+                                    <Grid.ColumnDefinitions><ColumnDefinition /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                                    <StackPanel VerticalAlignment="Center"><TextBlock Text="Close to the tray" /><TextBlock Text="Closing keeps Glass-Rea in the tray" Style="{StaticResource Caption}" /></StackPanel>
+                                    <ToggleSwitch x:Name="CloseTrayBox" Grid.Column="1" MinWidth="0" OnContent="" OffContent="" Toggled="OnWindowPrefs" AutomationProperties.Name="Close to the tray" />
+                                </Grid>
+                            </Border>
+                            <TextBlock Text="With Close to the tray off, closing the window quits the app and its notifications. Recording carries on." Style="{StaticResource Caption}" />
+                        </StackPanel>
+                    </Border>
+
+                    <Border Grid.Column="2" Style="{StaticResource Card}">
+                        <StackPanel Spacing="10">
+                            <StackPanel Orientation="Horizontal" Spacing="8"><FontIcon Glyph="&#xE9D9;" FontSize="15" /><TextBlock Text="Priority" Style="{StaticResource CardTitle}" /></StackPanel>
+                            <Border Style="{StaticResource Row}">
+                                <StackPanel Spacing="10">
+                                    <StackPanel><TextBlock Text="Ask Windows for priority" /><TextBlock Text="More processor time when the PC is busy, so recording and live numbers keep up" Style="{StaticResource Caption}" /></StackPanel>
+                                    <c:Segmented x:Name="PriorityPick" AutomationProperties.Name="Priority" />
+                                </StackPanel>
+                            </Border>
+                            <TextBlock x:Name="PriorityNote" Style="{StaticResource Caption}" Text="Normal suits most PCs. High can slow games and other apps a little." />
+                        </StackPanel>
+                    </Border>
+                </Grid>
+
+                <!-- Notifications -->
+                <Grid x:Name="NotificationsSection" VerticalAlignment="Top" ColumnSpacing="12" RowSpacing="12" Visibility="Collapsed">
+                    <Grid.ColumnDefinitions><ColumnDefinition /><ColumnDefinition /></Grid.ColumnDefinitions>
+
+                    <Border Style="{StaticResource Card}">
+                        <StackPanel Spacing="10">
+                            <StackPanel Orientation="Horizontal" Spacing="8"><FontIcon Glyph="&#xEA8F;" FontSize="15" /><TextBlock Text="What to tell you about" Style="{StaticResource CardTitle}" /></StackPanel>
+                            <Border Style="{StaticResource Row}">
+                                <Grid ColumnSpacing="12">
+                                    <Grid.ColumnDefinitions><ColumnDefinition /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                                    <StackPanel VerticalAlignment="Center"><TextBlock Text="A new app goes online" /><TextBlock Text="The first time a program uses the internet" Style="{StaticResource Caption}" /></StackPanel>
+                                    <ToggleSwitch x:Name="NewAppBox" Grid.Column="1" MinWidth="0" OnContent="" OffContent="" Toggled="OnAlerts" AutomationProperties.Name="Alert when a new app goes online" />
+                                </Grid>
+                            </Border>
+                            <Border Style="{StaticResource Row}">
+                                <Grid ColumnSpacing="12">
+                                    <Grid.ColumnDefinitions><ColumnDefinition /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                                    <StackPanel VerticalAlignment="Center"><TextBlock Text="A new device joins your network" /><TextBlock Text="A phone, laptop or gadget not seen before" Style="{StaticResource Caption}" /></StackPanel>
+                                    <ToggleSwitch x:Name="NewDeviceBox" Grid.Column="1" MinWidth="0" OnContent="" OffContent="" Toggled="OnAlerts" AutomationProperties.Name="Alert when a new device joins" />
+                                </Grid>
+                            </Border>
+                            <TextBlock Text="Data limit warnings are always on once a limit is set, at 80% and at 100%." Style="{StaticResource Caption}" />
+                        </StackPanel>
+                    </Border>
+
+                    <Border Grid.Column="1" Style="{StaticResource Card}">
+                        <StackPanel Spacing="10">
+                            <StackPanel Orientation="Horizontal" Spacing="8"><FontIcon Glyph="&#xE91C;" FontSize="15" /><TextBlock Text="Windows notifications" Style="{StaticResource CardTitle}" /></StackPanel>
+                            <Border Style="{StaticResource Row}">
+                                <Grid ColumnSpacing="12">
+                                    <Grid.ColumnDefinitions><ColumnDefinition /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                                    <StackPanel VerticalAlignment="Center"><TextBlock Text="Show notifications" /><TextBlock Text="When off, alerts are only listed on the Alerts page" Style="{StaticResource Caption}" /></StackPanel>
+                                    <ToggleSwitch x:Name="ShowNotifyBox" Grid.Column="1" MinWidth="0" OnContent="" OffContent="" Toggled="OnWindowPrefs" AutomationProperties.Name="Show Windows notifications" />
+                                </Grid>
+                            </Border>
+                            <Border Style="{StaticResource Row}">
+                                <Grid ColumnSpacing="12">
+                                    <Grid.ColumnDefinitions><ColumnDefinition /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                                    <StackPanel VerticalAlignment="Center"><TextBlock Text="Try it" /><TextBlock Text="Each one has a short title and a line on what it means" Style="{StaticResource Caption}" /></StackPanel>
+                                    <Button x:Name="TestNotifyButton" Grid.Column="1" Content="Send a test" VerticalAlignment="Center" Click="OnTestNotify" />
+                                </Grid>
+                            </Border>
+                            <TextBlock Text="Windows' Do not disturb and Focus hold them back until you're free." Style="{StaticResource Caption}" />
+                        </StackPanel>
+                    </Border>
+                </Grid>
+
+                <!-- Data -->
+                <Grid x:Name="DataSection" VerticalAlignment="Top" ColumnSpacing="12" RowSpacing="12" Visibility="Collapsed">
+                    <Grid.ColumnDefinitions><ColumnDefinition /><ColumnDefinition /></Grid.ColumnDefinitions>
+
+                    <Border Style="{StaticResource Card}">
+                        <StackPanel Spacing="10">
+                            <StackPanel Orientation="Horizontal" Spacing="8"><FontIcon Glyph="&#xE9D2;" FontSize="15" /><TextBlock Text="Data limits" Style="{StaticResource CardTitle}" /></StackPanel>
+                            <Border Style="{StaticResource Row}">
+                                <Grid ColumnSpacing="8">
+                                    <Grid.ColumnDefinitions><ColumnDefinition /><ColumnDefinition Width="80" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                                    <StackPanel VerticalAlignment="Center"><TextBlock Text="Daily limit" /><TextBlock Text="Starts again at midnight" Style="{StaticResource Caption}" /></StackPanel>
+                                    <TextBox x:Name="DailyBox" Grid.Column="1" InputScope="Number" TextAlignment="Right" PlaceholderText="None" LostFocus="OnLimits" AutomationProperties.Name="Daily limit in GB" />
+                                    <TextBlock Grid.Column="2" Text="GB" VerticalAlignment="Center" Style="{StaticResource Muted}" />
+                                </Grid>
+                            </Border>
+                            <Border Style="{StaticResource Row}">
+                                <Grid ColumnSpacing="8">
+                                    <Grid.ColumnDefinitions><ColumnDefinition /><ColumnDefinition Width="80" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                                    <StackPanel VerticalAlignment="Center"><TextBlock Text="Monthly limit" /><TextBlock Text="Starts again on the 1st" Style="{StaticResource Caption}" /></StackPanel>
+                                    <TextBox x:Name="MonthlyBox" Grid.Column="1" InputScope="Number" TextAlignment="Right" PlaceholderText="None" LostFocus="OnLimits" AutomationProperties.Name="Monthly limit in GB" />
+                                    <TextBlock Grid.Column="2" Text="GB" VerticalAlignment="Center" Style="{StaticResource Muted}" />
+                                </Grid>
+                            </Border>
+                            <TextBlock x:Name="LimitsNote" Style="{StaticResource Caption}" Text="Counts internet traffic only. Leave empty for no limit." />
+                        </StackPanel>
+                    </Border>
+
+                    <Border Grid.Column="1" Style="{StaticResource Card}">
+                        <StackPanel Spacing="10">
+                            <StackPanel Orientation="Horizontal" Spacing="8"><FontIcon Glyph="&#xE72E;" FontSize="15" /><TextBlock Text="VPN tunnels" Style="{StaticResource CardTitle}" /></StackPanel>
+                            <TextBlock Style="{StaticResource Caption}" Text="A VPN such as Cloudflare WARP carries an encrypted copy of every app's traffic. These programs are listed but not added to totals, so nothing is counted twice." />
+                            <TextBox x:Name="TunnelBox" PlaceholderText="warp-svc.exe, wireguard.exe" LostFocus="OnTunnels" AutomationProperties.Name="VPN tunnel programs, comma separated" />
+                            <TextBlock x:Name="TunnelNote" Style="{StaticResource Caption}" Text="Program file names, separated by commas." />
+                        </StackPanel>
+                    </Border>
+                </Grid>
+
+                <!-- Appearance -->
+                <Grid x:Name="AppearanceSection" VerticalAlignment="Top" Visibility="Collapsed">
+                    <Border Style="{StaticResource Card}">
+                        <StackPanel Spacing="10">
+                            <StackPanel Orientation="Horizontal" Spacing="8"><FontIcon Glyph="&#xE790;" FontSize="15" /><TextBlock Text="Appearance" Style="{StaticResource CardTitle}" /></StackPanel>
+                            <Border Style="{StaticResource Row}">
+                                <Grid ColumnSpacing="12">
+                                    <Grid.ColumnDefinitions><ColumnDefinition /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                                    <StackPanel VerticalAlignment="Center"><TextBlock Text="Theme" /><TextBlock Text="Light, dark, or whatever Windows uses" Style="{StaticResource Caption}" /></StackPanel>
+                                    <c:Segmented x:Name="ThemePick" Grid.Column="1" VerticalAlignment="Center" />
+                                </Grid>
+                            </Border>
+                            <Border Style="{StaticResource Row}">
+                                <StackPanel Spacing="12">
+                                    <Grid ColumnSpacing="12">
+                                        <Grid.ColumnDefinitions><ColumnDefinition /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                                        <StackPanel VerticalAlignment="Center"><TextBlock Text="Accent colour" /><TextBlock Text="Use your Windows accent, or pick one of ours" Style="{StaticResource Caption}" /></StackPanel>
+                                        <ToggleSwitch x:Name="FollowBox" Grid.Column="1" OnContent="Follow Windows" OffContent="Follow Windows" MinWidth="0" Toggled="OnFollow" />
+                                    </Grid>
+                                    <ItemsRepeater x:Name="Swatches">
+                                        <ItemsRepeater.Layout>
+                                            <UniformGridLayout MinItemWidth="110" MinItemHeight="34" MinColumnSpacing="6" MinRowSpacing="6" ItemsStretch="Fill" />
+                                        </ItemsRepeater.Layout>
+                                    </ItemsRepeater>
+                                </StackPanel>
+                            </Border>
+                            <Grid ColumnSpacing="10">
+                                <Grid.ColumnDefinitions><ColumnDefinition /><ColumnDefinition /></Grid.ColumnDefinitions>
+                                <Border Style="{StaticResource Row}">
+                                    <StackPanel Spacing="4">
+                                        <Grid><TextBlock Text="Blur" /><TextBlock x:Name="BlurValue" HorizontalAlignment="Right" FontWeight="SemiBold" /></Grid>
+                                        <TextBlock Text="How much the glass softens what's behind it" Style="{StaticResource Caption}" />
+                                        <Slider x:Name="BlurSlider" Minimum="0" Maximum="100" StepFrequency="1" ValueChanged="OnBlur" AutomationProperties.Name="Blur amount" />
+                                    </StackPanel>
+                                </Border>
+                                <Border Grid.Column="1" Style="{StaticResource Row}">
+                                    <StackPanel Spacing="4">
+                                        <Grid><TextBlock Text="Glass" /><TextBlock x:Name="GlassValue" HorizontalAlignment="Right" FontWeight="SemiBold" /></Grid>
+                                        <TextBlock Text="From solid surfaces to clear glass" Style="{StaticResource Caption}" />
+                                        <Slider x:Name="GlassSlider" Minimum="0" Maximum="100" StepFrequency="1" ValueChanged="OnGlass" AutomationProperties.Name="Glass clarity" />
+                                    </StackPanel>
+                                </Border>
+                            </Grid>
+                            <TextBlock x:Name="EffectsNote" Style="{StaticResource Caption}"
+                                       Text="If Transparency effects is off in Windows settings, the app stays solid whatever these say. Windows sets how strongly the window itself blurs the desktop; Blur controls the app's own glass." />
+                        </StackPanel>
+                    </Border>
+                </Grid>
+
+                <!-- About -->
+                <Grid x:Name="AboutSection" VerticalAlignment="Top" ColumnSpacing="12" Visibility="Collapsed">
+                    <Grid.ColumnDefinitions><ColumnDefinition /><ColumnDefinition /></Grid.ColumnDefinitions>
+
+                    <Border Style="{StaticResource Card}">
+                        <StackPanel Spacing="12">
+                            <StackPanel Orientation="Horizontal" Spacing="14">
+                                <c:LogoMark Width="48" Height="48" />
+                                <StackPanel VerticalAlignment="Center">
+                                    <TextBlock Text="Glass-Rea" FontWeight="SemiBold" />
+                                    <TextBlock x:Name="VersionText" Style="{StaticResource Caption}" />
+                                    <TextBlock Text="Made by Tem Revil" FontFamily="Segoe UI Variable Display" FontStyle="Italic" FontWeight="SemiBold" FontSize="15" Margin="0,4,0,0" />
+                                </StackPanel>
+                            </StackPanel>
+                            <TextBlock Style="{StaticResource Caption}" Text="A personal network monitor for this PC: what uses the internet, how much, and what's on your network." />
+                            <HyperlinkButton Content="temrevil.com" NavigateUri="https://temrevil.com" Padding="0" AutomationProperties.Name="Visit temrevil.com" />
+                        </StackPanel>
+                    </Border>
+
+                    <Border Grid.Column="1" Style="{StaticResource Card}">
+                        <StackPanel Spacing="10">
+                            <StackPanel Orientation="Horizontal" Spacing="8"><FontIcon Glyph="&#xE9F5;" FontSize="15" /><TextBlock Text="Recording service" Style="{StaticResource CardTitle}" /></StackPanel>
+                            <TextBlock x:Name="ServiceText" Style="{StaticResource Caption}" IsTextSelectionEnabled="True" />
+                        </StackPanel>
+                    </Border>
+                </Grid>
+            </Grid>
+        </ScrollViewer>
+    </Grid>
+</UserControl>

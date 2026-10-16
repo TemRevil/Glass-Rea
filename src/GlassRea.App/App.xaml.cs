@@ -1,0 +1,134 @@
+using System.IO.Pipes;
+using GlassRea.App.Support;
+using GlassRea.Core.Protocol;
+using Microsoft.UI.Dispatching;
+using Microsoft.UI.Xaml;
+
+namespace GlassRea.App;
+
+/// <summary>
+/// Tray app. Closing the window keeps it running in the tray; new alerts from the service appear as Windows
+/// notifications; Exit in the tray menu quits.
+/// </summary>
+public partial class App : Application
+{
+    private readonly bool _startInTray;
+    private readonly CancellationTokenSource _stop = new();
+    private DispatcherQueue? _ui;
+    private MainWindow? _window;
+    private Tray? _tray;
+    private long _lastAlertId = -1;
+
+    public App(bool startInTray)
+    {
+        _startInTray = startInTray;
+        InitializeComponent();
+        UnhandledException += (_, e) =>
+        {
+            // A refresh that fails because the service went away must not take the window down with it.
+            if (Service.IsOffline(e.Exception) || e.Exception is ServiceException) e.Handled = true;
+        };
+    }
+
+    public static new App Current => (App)Application.Current;
+
+    public static string IconPath => Path.Combine(AppContext.BaseDirectory, "Assets", "app.ico");
+
+    protected override void OnLaunched(LaunchActivatedEventArgs args)
+    {
+        _ui = DispatcherQueue.GetForCurrentThread();
+        Appearance.Load();
+        Appearance.Prime();
+        Preferences.Load();
+        _tray = new Tray(IconPath, () => _ui.TryEnqueue(() => ShowWindow()), () => _ui.TryEnqueue(() => ShowWindow("alerts")), () => _ui.TryEnqueue(Exit));
+        _ = ListenForShowRequests(_stop.Token);
+        _ = WatchAlerts(_stop.Token);
+        _ = ApplySavedPriority(_stop.Token);
+        if (!_startInTray) ShowWindow();
+    }
+
+    public void ShowWindow(string? page = null)
+    {
+        _window ??= new MainWindow();
+        _window.Reveal(page);
+    }
+
+    /// <summary>Shows a Windows notification, unless they're turned off in Settings.</summary>
+    public void Notify(string title, string body, bool evenWhenOff = false)
+    {
+        if (evenWhenOff || Preferences.State.ShowNotifications) _tray?.Notify(title, body);
+    }
+
+    /// <summary>Quits the app: the window, the tray icon and notifications. The service keeps recording.</summary>
+    public void Quit() => Exit();
+
+    private new void Exit()
+    {
+        _stop.Cancel();
+        _tray?.Dispose();
+        _tray = null;
+        _window?.Shutdown();
+        base.Exit();
+    }
+
+    /// <summary>Polls the service for alerts and shows each new one as a notification.</summary>
+    private async Task WatchAlerts(CancellationToken ct)
+    {
+        while (!ct.IsCancellationRequested)
+        {
+            try
+            {
+                if (_lastAlertId < 0)
+                {
+                    // Start from the newest alert so old ones aren't replayed after a restart.
+                    var latest = await Service.Call<List<AlertInfo>>("alerts", afterId: 0);
+                    _lastAlertId = latest.Count > 0 ? latest.Max(a => a.Id) : 0;
+                }
+                else
+                {
+                    var fresh = await Service.Call<List<AlertInfo>>("alerts", afterId: _lastAlertId);
+                    foreach (var a in fresh.OrderBy(a => a.Id))
+                    {
+                        Notify(Pages.AlertsPage.Title(a), a.Body);
+                        _lastAlertId = Math.Max(_lastAlertId, a.Id);
+                    }
+                }
+            }
+            catch { /* the service isn't running yet; try again shortly */ }
+            try { await Task.Delay(TimeSpan.FromSeconds(8), ct); } catch (OperationCanceledException) { }
+        }
+    }
+
+    /// <summary>The service holds the priority setting; once it answers, this process asks Windows for the same.</summary>
+    private static async Task ApplySavedPriority(CancellationToken ct)
+    {
+        while (!ct.IsCancellationRequested)
+        {
+            try
+            {
+                var settings = await Service.Call<Dictionary<string, string>>("settings");
+                Priority.ApplyToSelf(settings.GetValueOrDefault(SettingKeys.Priority));
+                return;
+            }
+            catch { /* the service isn't running yet */ }
+            try { await Task.Delay(TimeSpan.FromSeconds(8), ct); } catch (OperationCanceledException) { }
+        }
+    }
+
+    /// <summary>A second launch connects here and asks for the window.</summary>
+    private async Task ListenForShowRequests(CancellationToken ct)
+    {
+        while (!ct.IsCancellationRequested)
+        {
+            try
+            {
+                await using var server = new NamedPipeServerStream(Program.InstanceName, PipeDirection.In, 1,
+                    PipeTransmissionMode.Byte, PipeOptions.Asynchronous | PipeOptions.CurrentUserOnly);
+                await server.WaitForConnectionAsync(ct);
+                _ui?.TryEnqueue(() => ShowWindow());
+            }
+            catch (OperationCanceledException) { break; }
+            catch (IOException) { await Task.Delay(500, ct); }
+        }
+    }
+}

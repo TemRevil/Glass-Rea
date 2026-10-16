@@ -1,0 +1,82 @@
+<UserControl
+    x:Class="GlassRea.App.Pages.ConnectionsPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:c="using:GlassRea.App.Controls"
+    xmlns:p="using:GlassRea.App.Pages">
+
+    <Grid ColumnSpacing="12">
+        <Grid.ColumnDefinitions><ColumnDefinition Width="340" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+
+        <!-- The list drives the detail on the right. -->
+        <Border Style="{StaticResource Card}" Padding="8,14,8,0">
+            <Grid RowSpacing="10">
+                <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="*" /></Grid.RowDefinitions>
+                <ContentPresenter x:Name="PickerHost" Margin="6,0" HorizontalAlignment="Left" />
+                <ListView x:Name="Apps" Grid.Row="1" SelectionMode="Single" SelectionChanged="OnApp" Padding="0,0,0,84">
+                    <ListView.ItemTemplate>
+                        <DataTemplate x:DataType="p:ConnApp">
+                            <Grid ColumnSpacing="10" Padding="0,7">
+                                <Grid.ColumnDefinitions><ColumnDefinition Width="Auto" /><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                                <c:AppIconView AppPath="{x:Bind Path}" AppName="{x:Bind Name}" />
+                                <TextBlock Grid.Column="1" Text="{x:Bind Name}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                                <TextBlock Grid.Column="2" Text="{x:Bind Total}" Style="{StaticResource Caption}" VerticalAlignment="Center" />
+                            </Grid>
+                        </DataTemplate>
+                    </ListView.ItemTemplate>
+                </ListView>
+                <TextBlock x:Name="NoApps" Grid.Row="1" Text="No app used the network in this period." Style="{StaticResource Muted}" Margin="8" Visibility="Collapsed" TextWrapping="Wrap" />
+            </Grid>
+        </Border>
+
+        <Border Grid.Column="1" Style="{StaticResource Card}" Padding="24,20,24,0">
+            <Grid x:Name="Detail" RowSpacing="16">
+                <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /><RowDefinition Height="*" /></Grid.RowDefinitions>
+                <Grid ColumnSpacing="14">
+                    <Grid.ColumnDefinitions><ColumnDefinition Width="Auto" /><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                    <c:AppIconView x:Name="AppIcon" Width="44" Height="44" />
+                    <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                        <TextBlock x:Name="AppTitle" Style="{StaticResource PageTitle}" TextTrimming="CharacterEllipsis" />
+                        <TextBlock x:Name="AppSub" Style="{StaticResource Caption}" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" />
+                    </StackPanel>
+                    <Button x:Name="BlockButton" Grid.Column="2" Click="OnBlock" VerticalAlignment="Center" />
+                </Grid>
+                <InfoBar x:Name="BlockError" Grid.Row="1" Severity="Error" IsOpen="False" IsClosable="True" />
+                <Grid Grid.Row="2" ColumnSpacing="12">
+                    <Grid.ColumnDefinitions><ColumnDefinition /><ColumnDefinition /><ColumnDefinition /></Grid.ColumnDefinitions>
+                    <Border Style="{StaticResource Row}"><StackPanel><TextBlock Text="Downloaded" Style="{StaticResource Caption}" /><TextBlock x:Name="KDown" Style="{StaticResource BigNumber}" FontSize="20" /></StackPanel></Border>
+                    <Border Grid.Column="1" Style="{StaticResource Row}"><StackPanel><TextBlock Text="Uploaded" Style="{StaticResource Caption}" /><TextBlock x:Name="KUp" Style="{StaticResource BigNumber}" FontSize="20" /></StackPanel></Border>
+                    <Border Grid.Column="2" Style="{StaticResource Row}"><StackPanel><TextBlock Text="Share of the period" Style="{StaticResource Caption}" /><TextBlock x:Name="KShare" Style="{StaticResource BigNumber}" FontSize="20" /></StackPanel></Border>
+                </Grid>
+                <Grid Grid.Row="3" RowSpacing="6">
+                    <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /><RowDefinition Height="*" /></Grid.RowDefinitions>
+                    <TextBlock Text="Who it talked to" Style="{StaticResource CardTitle}" />
+                    <Grid Grid.Row="1" Padding="12,0,28,0" ColumnSpacing="12">
+                        <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="100" /><ColumnDefinition Width="100" /><ColumnDefinition Width="100" /></Grid.ColumnDefinitions>
+                        <TextBlock Text="Host" Style="{StaticResource Caption}" />
+                        <TextBlock Grid.Column="1" Text="Download" Style="{StaticResource Caption}" HorizontalAlignment="Right" />
+                        <TextBlock Grid.Column="2" Text="Upload" Style="{StaticResource Caption}" HorizontalAlignment="Right" />
+                        <TextBlock Grid.Column="3" Text="Last seen" Style="{StaticResource Caption}" HorizontalAlignment="Right" />
+                    </Grid>
+                    <ListView x:Name="Hosts" Grid.Row="2" SelectionMode="None" Padding="0,0,0,84">
+                        <ListView.ItemTemplate>
+                            <DataTemplate x:DataType="p:HostRow">
+                                <Grid Padding="0,6" ColumnSpacing="12">
+                                    <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="100" /><ColumnDefinition Width="100" /><ColumnDefinition Width="100" /></Grid.ColumnDefinitions>
+                                    <StackPanel>
+                                        <TextBlock Text="{x:Bind Name}" TextTrimming="CharacterEllipsis" IsTextSelectionEnabled="True" />
+                                        <TextBlock Text="{x:Bind Ip}" Style="{StaticResource Caption}" FontFamily="Cascadia Mono, Consolas" IsTextSelectionEnabled="True" />
+                                    </StackPanel>
+                                    <TextBlock Grid.Column="1" Text="{x:Bind Down}" HorizontalAlignment="Right" VerticalAlignment="Center" />
+                                    <TextBlock Grid.Column="2" Text="{x:Bind Up}" HorizontalAlignment="Right" VerticalAlignment="Center" />
+                                    <TextBlock Grid.Column="3" Text="{x:Bind Seen}" Style="{StaticResource Caption}" HorizontalAlignment="Right" VerticalAlignment="Center" />
+                                </Grid>
+                            </DataTemplate>
+                        </ListView.ItemTemplate>
+                    </ListView>
+                    <TextBlock x:Name="NoHosts" Grid.Row="2" Text="No connections recorded for this app in this period. Windows' history doesn't keep hosts, so older periods only show totals." Style="{StaticResource Muted}" TextWrapping="Wrap" Visibility="Collapsed" />
+                </Grid>
+            </Grid>
+        </Border>
+    </Grid>
+</UserControl>
