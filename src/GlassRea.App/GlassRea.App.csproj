@@ -16,6 +16,8 @@
          Every binary it brings is Microsoft-signed, which Smart App Control accepts. -->
     <WindowsPackageType>None</WindowsPackageType>
     <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
+    <!-- Without it, dotnet publish leaves out GlassRea.pri (the compiled XAML), and the installed app crashes on start. -->
+    <EnableMsixTooling>true</EnableMsixTooling>
     <!-- Program.cs owns Main so a second launch can hand over to the running copy before any XAML starts. -->
     <DefineConstants>$(DefineConstants);DISABLE_XAML_GENERATED_MAIN</DefineConstants>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>

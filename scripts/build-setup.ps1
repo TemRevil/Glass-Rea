@@ -21,6 +21,9 @@ foreach ($p in @(
     if ($LASTEXITCODE -ne 0) { throw "Build of $($p.Out) failed." }
 }
 
+# The app can't start without its compiled XAML; never pack a build that lost it.
+if (-not (Test-Path (Join-Path $stage 'App\GlassRea.pri'))) { throw 'The app build has no GlassRea.pri; the installed app would crash on start.' }
+
 # Signed as Tem Revil when scripts\make-cert.ps1 has made the certificate; unsigned otherwise.
 $cert = Get-ChildItem Cert:\CurrentUser\My -CodeSigningCert | Where-Object { $_.Subject -eq 'CN=Tem Revil' -and $_.NotAfter -gt (Get-Date) } | Select-Object -First 1
 function Sign([string[]]$files) {
