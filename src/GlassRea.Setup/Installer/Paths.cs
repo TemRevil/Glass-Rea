@@ -21,7 +21,8 @@ public static class Paths
     public static string ServiceDll => Path.Combine(ServiceDir, "GlassRea.Service.dll");
     public static string Uninstaller => Path.Combine(InstallDir, "Uninstall Glass-Rea.exe");
     public const string AppExeName = "GlassRea.exe";
-    public const string Website = "https://temrevil.com";
+    /// <summary>Opened when setup finishes; a temrevil.com link that redirects and counts the visit as coming from setup.</summary>
+    public const string Website = "https://temrevil.com/revil/ge2CozAa";
 
     public static readonly string DataDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), ProductName);
     public static readonly string UserDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), ProductName);

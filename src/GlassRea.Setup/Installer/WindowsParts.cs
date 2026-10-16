@@ -89,11 +89,11 @@ public static class AppProcess
         }
     }
 
-    /// <summary>Through Explorer, so the app runs as the user, not with this installer's admin rights.</summary>
-    public static void OpenAsUser() => Process.Start(new ProcessStartInfo("explorer.exe", $"\"{Paths.AppExe}\"") { UseShellExecute = false });
+    /// <summary>Starts the app as the user, not with this installer's admin rights.</summary>
+    public static void OpenAsUser() => UserShell.Open(Paths.AppExe);
 
-    /// <summary>Opens a web page in the person's own browser, also through Explorer so the browser isn't elevated.</summary>
-    public static void OpenWebsiteAsUser(string url) => Process.Start(new ProcessStartInfo("explorer.exe", $"\"{url}\"") { UseShellExecute = false });
+    /// <summary>Opens a web page in the person's own browser, unelevated.</summary>
+    public static void OpenWebsiteAsUser(string url) => UserShell.Open(url);
 }
 
 /// <summary>Start menu, Installed apps, and start-with-Windows entries.</summary>

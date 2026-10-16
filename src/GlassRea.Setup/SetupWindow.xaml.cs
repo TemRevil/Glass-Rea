@@ -161,7 +161,11 @@ public sealed partial class SetupWindow : Window
         InstallPathText.Text = dir;
     }
 
-    private void OnFinish(object sender, RoutedEventArgs e) => Close();
+    private void OnFinish(object sender, RoutedEventArgs e)
+    {
+        Finish(); // Close() from code doesn't raise AppWindow.Closing, so Finish can't wait for it
+        Close();
+    }
 
     /// <summary>Does what the finished page's boxes ask for, once, as the signed-in user.</summary>
     private void Finish()
@@ -170,12 +174,12 @@ public sealed partial class SetupWindow : Window
         _finished = true;
         if (OpenAppCheck.Visibility == Visibility.Visible && OpenAppCheck.IsChecked == true)
         {
-            try { AppProcess.OpenAsUser(); }
+            try { AppProcess.OpenAsUser(); Log.Write("Opened the app"); }
             catch (Exception ex) { Log.Write($"Could not open the app: {ex}"); }
         }
         if (OpenSiteCheck.IsChecked == true)
         {
-            try { AppProcess.OpenWebsiteAsUser(Paths.Website); }
+            try { AppProcess.OpenWebsiteAsUser(Paths.Website); Log.Write($"Opened {Paths.Website}"); }
             catch (Exception ex) { Log.Write($"Could not open {Paths.Website}: {ex}"); }
         }
     }
