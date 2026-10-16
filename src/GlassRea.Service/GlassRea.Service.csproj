@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk.Worker">
+  <PropertyGroup>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <RootNamespace>GlassRea.Service</RootNamespace>
+    <AssemblyName>GlassRea.Service</AssemblyName>
+    <OutputType>Exe</OutputType>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <!-- No unsigned GlassRea.Service.exe: the service runs as "dotnet.exe GlassRea.Service.dll", since Smart App Control only lets signed binaries start as services. -->
+    <UseAppHost>false</UseAppHost>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Hosting" Version="10.0.13" />
+    <PackageReference Include="Microsoft.Extensions.Hosting.WindowsServices" Version="10.0.13" />
+    <PackageReference Include="Microsoft.Diagnostics.Tracing.TraceEvent" Version="4.0.0" />
+    <PackageReference Include="ManagedEsent" Version="2.0.0" />
+    <PackageReference Include="System.Management" Version="10.0.13" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\GlassRea.Core\GlassRea.Core.csproj" />
+  </ItemGroup>
+</Project>

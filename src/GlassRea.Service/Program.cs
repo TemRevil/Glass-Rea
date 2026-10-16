@@ -1,0 +1,35 @@
+using System.Globalization;
+using GlassRea.Core.Protocol;
+using GlassRea.Core.Storage;
+using GlassRea.Core.Usage;
+using GlassRea.Service;
+using GlassRea.Service.Capture;
+using GlassRea.Service.History;
+
+// Numbers, dates and file names are always written in invariant form (Latin digits, Gregorian calendar).
+CultureInfo.DefaultThreadCurrentCulture = CultureInfo.InvariantCulture;
+CultureInfo.CurrentCulture = CultureInfo.InvariantCulture;
+
+var builder = Host.CreateApplicationBuilder(args);
+builder.Services.AddWindowsService(o => o.ServiceName = "GlassRea");
+builder.Logging.AddEventLog(o => o.SourceName = "Glass-Rea");
+
+builder.Services.AddSingleton(_ => Database.OpenFile(Path.Combine(ServiceState.DataDirectory, "data.db")));
+builder.Services.AddSingleton(_ => new UsageAccumulator());
+builder.Services.AddSingleton<ServiceState>();
+builder.Services.AddSingleton<ProcessResolver>();
+builder.Services.AddSingleton<DnsCache>();
+builder.Services.AddSingleton<FirewallManager>();
+builder.Services.AddSingleton<DeviceScanner>();
+
+builder.Services.AddHostedService<EtwCapture>();
+builder.Services.AddHostedService<FlushService>();
+builder.Services.AddHostedService<LimitWatcher>();
+builder.Services.AddHostedService<SrumImporter>();
+builder.Services.AddHostedService(sp => sp.GetRequiredService<DeviceScanner>());
+builder.Services.AddHostedService<PipeServer>();
+
+var host = builder.Build();
+// Asks Windows for the processor share chosen in Settings > General, before capture starts.
+Priority.ApplyToSelf(host.Services.GetRequiredService<ServiceState>().Setting(SettingKeys.Priority));
+host.Run();
