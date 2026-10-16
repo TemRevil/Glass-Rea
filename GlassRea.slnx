@@ -1,0 +1,11 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/GlassRea.App/GlassRea.App.csproj" />
+    <Project Path="src/GlassRea.Core/GlassRea.Core.csproj" />
+    <Project Path="src/GlassRea.Service/GlassRea.Service.csproj" />
+    <Project Path="src/GlassRea.Setup/GlassRea.Setup.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/GlassRea.Tests/GlassRea.Tests.csproj" />
+  </Folder>
+</Solution>

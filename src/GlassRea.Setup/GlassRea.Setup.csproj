@@ -1,0 +1,44 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows10.0.22621.0</TargetFramework>
+    <TargetPlatformMinVersion>10.0.19041.0</TargetPlatformMinVersion>
+    <Platforms>x64</Platforms>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <RootNamespace>GlassRea.Setup</RootNamespace>
+    <AssemblyName>GlassRea.Setup</AssemblyName>
+    <!-- Windows shows this name in the admin prompt. -->
+    <AssemblyTitle>Glass-Rea Setup</AssemblyTitle>
+    <ApplicationIcon>..\GlassRea.App\Assets\app.ico</ApplicationIcon>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <UseWinUI>true</UseWinUI>
+    <!-- Runs on a PC with nothing installed yet: its own .NET and Windows App SDK travel inside it. -->
+    <WindowsPackageType>None</WindowsPackageType>
+    <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
+    <SelfContained>true</SelfContained>
+    <DefineConstants>$(DefineConstants);DISABLE_XAML_GENERATED_MAIN</DefineConstants>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <!-- Windows App SDK looks for resources.pri, then "<exe name>.pri". The exe ships as "Glass-Rea Setup.exe"
+         and is copied as the uninstaller, so the name it finds must not depend on the exe's. -->
+    <ProjectPriFileName>resources.pri</ProjectPriFileName>
+    <!-- The app and service to install, zipped by scripts\build-setup.ps1. A plain build has none and says so. -->
+    <PayloadZip Condition="'$(PayloadZip)' == ''">$(MSBuildProjectDirectory)\obj\payload.zip</PayloadZip>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(PublishSingleFile)' == 'true'">
+    <IncludeAllContentForSelfExtract>true</IncludeAllContentForSelfExtract>
+    <EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>
+    <!-- resources.pri embedded in the bundle -->
+    <EnableMsixTooling>true</EnableMsixTooling>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.WindowsAppSDK" Version="2.5.1" />
+    <PackageReference Include="System.ServiceProcess.ServiceController" Version="10.0.13" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- Same look as the app: its palettes, theme handling, window glass and logo. -->
+    <Compile Include="..\GlassRea.App\Support\Appearance.cs" Link="Shared\Appearance.cs" />
+    <Compile Include="..\GlassRea.App\Controls\LogoMark.cs" Link="Shared\LogoMark.cs" />
+    <Content Include="..\GlassRea.App\Assets\app.ico" Link="Assets\app.ico" CopyToOutputDirectory="PreserveNewest" />
+    <EmbeddedResource Include="$(PayloadZip)" LogicalName="payload.zip" Condition="Exists('$(PayloadZip)')" />
+  </ItemGroup>
+</Project>
