@@ -15,6 +15,34 @@ public static class Releases
     /// <summary>The product name in Glass-Rea's file properties (Directory.Build.props), which the signature covers.</summary>
     public const string Product = "Glass-Rea";
     public const string LatestUrl = $"https://api.github.com/repos/{Repository}/releases/latest";
+
+    /// <summary>
+    /// The latest release's own description, attached to it as "release.json" by the release scripts
+    /// (scripts/write-manifest.ps1): the same fields as <see cref="LatestUrl"/> gives, served as an ordinary download.
+    /// GitHub allows only 60 API requests an hour from one address without signing in, and VPNs such as Cloudflare
+    /// WARP share one address among many people, so the API is asked only when a release has no release.json.
+    /// </summary>
+    public const string ManifestUrl = $"https://github.com/{Repository}/releases/latest/download/release.json";
+
+    /// <summary>
+    /// Finds the latest release: from its release.json, or from the API when there isn't one. <paramref name="get"/>
+    /// fetches a URL and gives the HTTP status and body. Status is 200 with the release (null when it isn't one
+    /// Glass-Rea can install), 404 when nothing is released, or whatever else the API answered.
+    /// </summary>
+    public static async Task<(int Status, Release? Release)> FindLatest(
+        Func<string, CancellationToken, Task<(int Status, string Body)>> get, CancellationToken ct)
+    {
+        var manifest = await get(ManifestUrl, ct);
+        if (manifest.Status == 200 && TryParse(manifest.Body) is { } fromManifest) return (200, fromManifest);
+        var api = await get(LatestUrl, ct);
+        return api.Status == 200 ? (200, TryParse(api.Body)) : (api.Status, null);
+    }
+
+    private static Release? TryParse(string json)
+    {
+        try { return Parse(json); }
+        catch (JsonException) { return null; }
+    }
     public const string PageUrl = $"https://github.com/{Repository}/releases";
 
     /// <summary>

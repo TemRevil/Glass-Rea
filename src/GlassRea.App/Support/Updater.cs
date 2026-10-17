@@ -48,17 +48,10 @@ public static partial class Updater
         {
             using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
             timeout.CancelAfter(TimeSpan.FromSeconds(20));
-            using var response = await Http.GetAsync(Releases.LatestUrl, timeout.Token);
-            if (response.StatusCode == System.Net.HttpStatusCode.NotFound) Available = null; // nothing released yet
-            else
-            {
-                if (!response.IsSuccessStatusCode)
-                    throw new UpdateException(response.StatusCode == System.Net.HttpStatusCode.Forbidden
-                        ? "GitHub is limiting requests from this network for now. Try again in an hour."
-                        : $"GitHub answered {(int)response.StatusCode}. Try again later.");
-                var release = Releases.Parse(await response.Content.ReadAsStringAsync(timeout.Token));
-                Available = release is not null && Releases.IsNewer(release, Current) ? release : null;
-            }
+            var (status, release) = await Releases.FindLatest(Get, timeout.Token);
+            if (status is 403 or 429) throw new UpdateException("GitHub is limiting requests from this network for now. Try again in an hour.");
+            if (status is not (200 or 404)) throw new UpdateException($"GitHub answered {status}. Try again later.");
+            Available = release is not null && Releases.IsNewer(release, Current) ? release : null; // 404: nothing released yet
             LastChecked = DateTimeOffset.Now;
             Preferences.Update(p => p.LastUpdateCheck = LastChecked.Value.ToUnixTimeSeconds());
             Checked?.Invoke();
@@ -68,6 +61,12 @@ public static partial class Updater
         {
             throw new UpdateException("Couldn't reach GitHub. Check the internet connection and try again.");
         }
+    }
+
+    private static async Task<(int, string)> Get(string url, CancellationToken ct)
+    {
+        using var response = await Http.GetAsync(url, ct);
+        return ((int)response.StatusCode, response.IsSuccessStatusCode ? await response.Content.ReadAsStringAsync(ct) : "");
     }
 
     /// <summary>

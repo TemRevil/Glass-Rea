@@ -174,3 +174,5 @@ jobs:
           $local = 'sha256:' + (Get-FileHash $exe -Algorithm SHA256).Hash.ToLowerInvariant()
           if ($asset.digest -ne $local) { throw "GitHub recorded '$($asset.digest)' for the setup, but the signed file is $local." }
           "Released v$version, $($asset.digest)"
+          # The release's own description, which the app reads instead of the rate-limited API.
+          scripts\write-manifest.ps1 -Tag "v$version"

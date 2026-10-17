@@ -38,7 +38,7 @@ $signer = (Get-AuthenticodeSignature $exe).SignerCertificate
 if (-not $signer -or $signer.Thumbprint -ne $pinned) { throw "The setup isn't signed with the Tem Revil certificate ($pinned); the app would refuse it as an update." }
 
 $notesFile = Join-Path $root 'publish\release-notes.md'
-Set-Content -Path $notesFile -Value $notes -Encoding utf8
+[IO.File]::WriteAllText($notesFile, $notes, (New-Object Text.UTF8Encoding $false)) # no BOM: it would start the notes on GitHub
 gh release create $tag $exe --title "Glass-Rea $version" --notes-file $notesFile --target main
 if ($LASTEXITCODE -ne 0) { throw 'GitHub refused the release.' }
 
@@ -49,3 +49,6 @@ $digest = $asset.digest
 $local = 'sha256:' + (Get-FileHash $exe -Algorithm SHA256).Hash.ToLowerInvariant()
 if ($digest -ne $local) { throw "GitHub recorded '$digest' for the setup, but the file here is $local." }
 Write-Host "Released $tag with $([math]::Round((Get-Item $exe).Length / 1MB)) MB setup, $digest"
+
+& powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot 'write-manifest.ps1') -Tag $tag
+if ($LASTEXITCODE -ne 0) { throw 'Attaching release.json failed; run scripts\write-manifest.ps1 -Tag ' + $tag + ' again.' }

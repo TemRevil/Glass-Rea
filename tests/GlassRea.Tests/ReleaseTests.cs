@@ -13,7 +13,7 @@ public class ReleaseTests
           "html_url": "https://github.com/TemRevil/Glass-Rea/releases/tag/{{tag}}",
           "tag_name": "{{tag}}", "name": "Glass-Rea 1.2.0", "draft": {{(draft ? "true" : "false")}}, "prerelease": {{(prerelease ? "true" : "false")}},
           "published_at": "2026-11-02T09:30:00Z",
-          "body": "## What's new\r\n\r\n- **Faster** scans\r\n- Fixed `x`",
+          "body": "﻿## What's new\r\n\r\n- **Faster** scans\r\n- Fixed `x`",
           "assets": [
             { "name": "notes.txt", "size": 10, "browser_download_url": "https://github.com/TemRevil/Glass-Rea/releases/download/v1.2.0/notes.txt" },
             { "name": "{{asset}}", "size": {{size}}, "digest": "{{digest}}", "browser_download_url": "{{url}}" }
@@ -59,6 +59,41 @@ public class ReleaseTests
         Assert.Equal(new Version(1, 2, 0), Releases.VersionOf("1.2"));
         Assert.Equal(new Version(2, 0, 1), Releases.VersionOf("V2.0.1"));
         Assert.Null(Releases.VersionOf("v1.2.0.5"));
+    }
+
+    /// <summary>A fake GitHub: answers by URL and records what was asked.</summary>
+    private static (Func<string, CancellationToken, Task<(int, string)>> Get, List<string> Asked) GitHub(
+        (int, string) manifest, (int, string) api)
+    {
+        var asked = new List<string>();
+        return ((url, _) =>
+        {
+            asked.Add(url);
+            return Task.FromResult(url == Releases.ManifestUrl ? manifest : url == Releases.LatestUrl ? api : (404, ""));
+        }, asked);
+    }
+
+    [Fact]
+    public async Task TheReleasesOwnDescriptionIsReadWithoutAskingTheApi()
+    {
+        var (get, asked) = GitHub((200, Json()), (403, ""));
+        var (status, release) = await Releases.FindLatest(get, default);
+        Assert.Equal((200, new Version(1, 2, 0)), (status, release?.Version));
+        Assert.Equal([Releases.ManifestUrl], asked);
+    }
+
+    [Fact]
+    public async Task TheApiIsAskedOnlyWhenTheReleaseHasNoUsableDescription()
+    {
+        foreach (var manifest in new[] { (404, ""), (200, "<html>not json</html>"), (200, Json(asset: "Glass-Rea.zip")) })
+        {
+            var (get, asked) = GitHub(manifest, (200, Json(tag: "v1.3.0")));
+            var (status, release) = await Releases.FindLatest(get, default);
+            Assert.Equal((200, new Version(1, 3, 0)), (status, release?.Version));
+            Assert.Equal([Releases.ManifestUrl, Releases.LatestUrl], asked);
+        }
+        Assert.Equal((403, null), await Releases.FindLatest(GitHub((404, ""), (403, "")).Get, default));
+        Assert.Equal((404, null), await Releases.FindLatest(GitHub((404, ""), (404, "")).Get, default));
     }
 
     private const string TemRevil = Releases.SignerThumbprint;

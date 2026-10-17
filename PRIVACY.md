@@ -8,7 +8,7 @@ How much each app sends and receives, the addresses and names of the computers t
 
 ## When it uses the internet on its own
 
-**Checking for updates.** The app asks GitHub (`api.github.com`) for Glass-Rea's latest release once a day, and when you click Check in Settings > About. When a new version is out and you choose to install it, the setup is downloaded from GitHub. These requests carry only what any web request does: your IP address, and the app's name and version ("Glass-Rea/1.2.0"). Turn off **Check for updates automatically** in Settings > About and the app contacts GitHub only when you click Check. GitHub's privacy statement: https://docs.github.com/site-policy/privacy-policies/github-general-privacy-statement
+**Checking for updates.** The app asks GitHub (`github.com`, and `api.github.com` when a release has no description file) for Glass-Rea's latest release once a day, and when you click Check in Settings > About. When a new version is out and you choose to install it, the setup is downloaded from GitHub. These requests carry only what any web request does: your IP address, and the app's name and version ("Glass-Rea/1.2.0"). Turn off **Check for updates automatically** in Settings > About and the app contacts GitHub only when you click Check. GitHub's privacy statement: https://docs.github.com/site-policy/privacy-policies/github-general-privacy-statement
 
 That is the only thing the app or the service sends over the internet by itself.
 

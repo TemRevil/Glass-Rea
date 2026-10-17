@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.2.1
+
+- Fix: checking for updates said "GitHub is limiting requests from this network" on networks many people share, such as Cloudflare WARP. GitHub allows only 60 of the requests it used per hour from one address. The app now reads each release's own description file, an ordinary download GitHub doesn't limit that way, and asks the limited service only for a release without one.
+
 ## 1.2.0
 
 - Glass settings: Settings > Appearance has a Glass card with the same controls as RealGlass (https://real-glass.vercel.app): chromatic aberration, frosting, glass opacity, light strength, edge smoothness, refraction index, corner radius, specular shininess, thickness, tint colour and tint strength, and a button to put them back. Chromatic aberration splits the edge into colours the way a prism does, from each colour's own refractive index. Blur is now called Frosting, and Glass is now Glass opacity (the same setting, read the other way round).
