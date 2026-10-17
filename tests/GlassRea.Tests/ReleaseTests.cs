@@ -63,24 +63,29 @@ public class ReleaseTests
 
     private const string TemRevil = Releases.SignerThumbprint;
     private const string SignPath = Releases.SignPathFoundation;
+    private const string Glass = Releases.Product;
 
     [Fact]
     public void SignPathFoundationIsAcceptedOnlyWithAChainWindowsTrusts()
     {
-        Assert.True(Releases.AcceptsSigner(0, "0123456789ABCDEF0123456789ABCDEF01234567", SignPath, SignPath));
-        Assert.False(Releases.AcceptsSigner(Releases.UntrustedRoot, "0123456789ABCDEF0123456789ABCDEF01234567", SignPath, SignPath));
-        Assert.False(Releases.AcceptsSigner(unchecked((int)0x80096010), null, SignPath, SignPath)); // tampered: bad digest
-        Assert.False(Releases.AcceptsSigner(0, null, SignPath, "Someone Else"));                   // only the name, not the organisation
-        Assert.False(Releases.AcceptsSigner(0, null, "Someone Else", SignPath));
+        Assert.True(Releases.AcceptsSigner(0, "0123456789ABCDEF0123456789ABCDEF01234567", SignPath, SignPath, Glass));
+        Assert.False(Releases.AcceptsSigner(Releases.UntrustedRoot, "0123456789ABCDEF0123456789ABCDEF01234567", SignPath, SignPath, Glass));
+        Assert.False(Releases.AcceptsSigner(unchecked((int)0x80096010), null, SignPath, SignPath, Glass)); // tampered: bad digest
+        Assert.False(Releases.AcceptsSigner(0, null, SignPath, "Someone Else", Glass));                   // only the name, not the organisation
+        Assert.False(Releases.AcceptsSigner(0, null, "Someone Else", SignPath, Glass));
+        // SignPath Foundation signs many projects: another project's file isn't Glass-Rea's setup.
+        Assert.False(Releases.AcceptsSigner(0, null, SignPath, SignPath, "Another App"));
+        Assert.False(Releases.AcceptsSigner(0, null, SignPath, SignPath, null));
+        Assert.False(Releases.AcceptsSigner(0, null, SignPath, SignPath, "glass-rea"));
     }
 
     [Fact]
     public void TemRevilsOwnCertificateIsAcceptedByThumbprint()
     {
-        Assert.True(Releases.AcceptsSigner(Releases.UntrustedRoot, TemRevil, "Tem Revil", null));
-        Assert.True(Releases.AcceptsSigner(0, TemRevil.ToLowerInvariant(), "Tem Revil", null));
-        Assert.False(Releases.AcceptsSigner(Releases.UntrustedRoot, "0123456789ABCDEF0123456789ABCDEF01234567", "Tem Revil", null));
-        Assert.False(Releases.AcceptsSigner(unchecked((int)0x80096010), TemRevil, "Tem Revil", null));
-        Assert.False(Releases.AcceptsSigner(0, null, null, null)); // unsigned
+        Assert.True(Releases.AcceptsSigner(Releases.UntrustedRoot, TemRevil, "Tem Revil", null, Glass));
+        Assert.True(Releases.AcceptsSigner(0, TemRevil.ToLowerInvariant(), "Tem Revil", null, Glass));
+        Assert.False(Releases.AcceptsSigner(Releases.UntrustedRoot, "0123456789ABCDEF0123456789ABCDEF01234567", "Tem Revil", null, Glass));
+        Assert.False(Releases.AcceptsSigner(unchecked((int)0x80096010), TemRevil, "Tem Revil", null, Glass));
+        Assert.False(Releases.AcceptsSigner(0, null, null, null, Glass)); // unsigned
     }
 }

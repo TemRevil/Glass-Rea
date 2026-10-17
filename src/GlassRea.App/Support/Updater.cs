@@ -186,16 +186,17 @@ public static partial class Updater
     internal static string? Verify(string path, Release release)
     {
         if (new FileInfo(path).Length != release.SetupSize) return "The download isn't the size the release says. It was thrown away.";
-        if (release.SetupSha256 is { } expected)
+        if (release.SetupSha256 is not { } expected)
+            return "GitHub has no record of this release's file to check the download against. It was thrown away; get the setup from the release page instead.";
+        using (var file = File.OpenRead(path))
         {
-            using var file = File.OpenRead(path);
             if (!Convert.ToHexStringLower(SHA256.HashData(file)).Equals(expected, StringComparison.Ordinal))
                 return "The download doesn't match the file GitHub recorded for this release. It was thrown away.";
         }
         var trust = SignatureStatus(path);
         if (trust is not (0 or Releases.UntrustedRoot)) return "The download isn't properly signed. It was thrown away.";
         var (thumbprint, name, organization) = Signer(path);
-        if (!Releases.AcceptsSigner(trust, thumbprint, name, organization))
+        if (!Releases.AcceptsSigner(trust, thumbprint, name, organization, FileVersionInfo.GetVersionInfo(path).ProductName))
             return "The download isn't signed by Glass-Rea's publisher. It was thrown away.";
         return null;
     }

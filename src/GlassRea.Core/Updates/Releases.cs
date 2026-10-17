@@ -12,6 +12,8 @@ public sealed record Release(Version Version, string Tag, string Notes, DateTime
 public static class Releases
 {
     public const string Repository = "TemRevil/Glass-Rea";
+    /// <summary>The product name in Glass-Rea's file properties (Directory.Build.props), which the signature covers.</summary>
+    public const string Product = "Glass-Rea";
     public const string LatestUrl = $"https://api.github.com/repos/{Repository}/releases/latest";
     public const string PageUrl = $"https://github.com/{Repository}/releases";
 
@@ -33,12 +35,14 @@ public static class Releases
 
     /// <summary>
     /// Whether a setup with this signature may be installed as an update. <paramref name="trust"/> is what
-    /// WinVerifyTrust said (0 is fully trusted); the rest describe the signer's certificate. The file must also be
-    /// byte for byte what GitHub recorded for the release, which is checked first and matters most: the signature
-    /// only says who built it.
+    /// WinVerifyTrust said (0 is fully trusted); the next three describe the signer's certificate, and
+    /// <paramref name="product"/> is the file's own product name. SignPath Foundation signs many open-source
+    /// projects, so its signature only counts on a file that calls itself Glass-Rea (SignPath signs Glass-Rea's
+    /// files only with that name, and the signature covers it). The file must also be byte for byte what GitHub
+    /// recorded for the release, which is checked first and matters most: the signature only says who built it.
     /// </summary>
-    public static bool AcceptsSigner(int trust, string? thumbprint, string? commonName, string? organization) =>
-        trust == 0 && commonName == SignPathFoundation && organization == SignPathFoundation
+    public static bool AcceptsSigner(int trust, string? thumbprint, string? commonName, string? organization, string? product) =>
+        trust == 0 && commonName == SignPathFoundation && organization == SignPathFoundation && product == Product
         || (trust is 0 or UntrustedRoot) && string.Equals(thumbprint, SignerThumbprint, StringComparison.OrdinalIgnoreCase);
 
     private const string DownloadPrefix = $"https://github.com/{Repository}/releases/download/";
