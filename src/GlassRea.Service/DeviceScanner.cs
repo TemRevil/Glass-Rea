@@ -100,14 +100,18 @@ public sealed partial class DeviceScanner(Database db, ServiceState state, ILogg
             var id = DeviceClassifier.Classify(e);
             var device = new DeviceInfo(mac, d.Address.ToString(), e.IsThisPc ? Environment.MachineName : id.Name, e.Randomized, e.IsGateway,
                 e.IsThisPc, now, now, e.Vendor, id.Model, id.Kind, id.Os, Network: network);
-            if (Previous(device, before.Values, here) is { } was)
+            var was = Previous(device, before.Values, here);
+            if (was is not null)
             {
                 db.MergeDevice(was.Mac, mac);
                 before.Remove(was.Mac); // it didn't leave: it's here under its new address
             }
-            if (db.SaveDevice(device) && !firstScan && state.Flag(SettingKeys.AlertNewDevice))
+            // A merge rests on a name the device chose, which anyone can copy, so it's reported like a new device.
+            if ((db.SaveDevice(device) || was is not null) && !firstScan && state.Flag(SettingKeys.AlertNewDevice))
             {
-                var (title, body) = AlertText.NewDevice(DeviceLabel.For(device), device.Ip, mac);
+                var (title, body) = was is null
+                    ? AlertText.NewDevice(DeviceLabel.For(device), device.Ip, mac)
+                    : AlertText.DeviceNewAddress(DeviceLabel.For(device), device.Ip, mac);
                 db.AddAlert("new_device", title, body, now);
             }
         }

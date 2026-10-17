@@ -17,6 +17,14 @@ public static class AlertText
         string.IsNullOrWhiteSpace(name) ? "A new device joined your network" : $"{name.Trim()} joined your network",
         $"Seen for the first time at {ip}, hardware address {mac}. If it isn't yours, someone else may be using your network.");
 
+    /// <summary>
+    /// A device that came back on a new private address under the name of one of yours, and was taken for it. Anyone
+    /// can name a device that way, so it's reported like a new device rather than merged in silence.
+    /// </summary>
+    public static (string Title, string Body) DeviceNewAddress(string name, string ip, string mac) => (
+        $"{name.Trim()} is on a new private address",
+        $"Now at {ip}, hardware address {mac}. Phones change their private address now and then, so it's shown as the same device. If it isn't yours, Forget it on the Devices page; someone else may be using your network.");
+
     public static (string Title, string Body) DeviceLeft(string name, string ip, long goneSeconds) => (
         $"{name.Trim()} left your network",
         $"Not seen for {Span(goneSeconds)}. It was at {ip}. You'll be told when it comes back.");

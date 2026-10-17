@@ -6,7 +6,7 @@
 - The usage chart grows in once it's on screen, instead of showing the bars first and then animating them.
 - The bottom bar is properly frosted: the page no longer shows through it sharply.
 - Firewall opens at once, even with hundreds of apps: only the rows on screen are made. Pages that take a moment to open show a thin loading line until they are ready.
-- Devices: Forget takes a device off the list; if it's still on your network, the next scan brings it back. Scan now waits for the scan to finish and then shows what it found. A phone that switches to a new private address is kept as one device, with your name for it, instead of being listed twice. A Samsung TV is no longer taken for a Samsung phone.
+- Devices: Forget takes a device off the list; if it's still on your network, the next scan brings it back. Scan now waits for the scan to finish and then shows what it found. A phone that switches to a new private address is kept as one device, with your name for it, instead of being listed twice; you get a new-device alert saying so, since anyone could copy its name. A Samsung TV is no longer taken for a Samsung phone.
 - A tidier install: about 170 MB instead of 320 MB. The uninstaller no longer carries a second copy of the app, WinUI's text ships in English only (the app is in English), and only the parts of the Windows App SDK in use are installed.
 
 ## 1.2.2

@@ -264,6 +264,17 @@ public class AlertTextTests
     }
 
     [Fact]
+    public void ADeviceOnANewAddressIsStillReported()
+    {
+        // Anyone can give a device a known phone's name, so taking it for that phone is said out loud.
+        var (title, body) = AlertText.DeviceNewAddress("Tems-iPhone", "192.168.1.40", "AA:00:00:00:00:09");
+        Assert.Equal("Tems-iPhone is on a new private address", title);
+        Assert.Contains("192.168.1.40", body);
+        Assert.Contains("AA:00:00:00:00:09", body);
+        Assert.Contains("Forget", body);
+    }
+
+    [Fact]
     public void LimitsSayHowMuchAndWhenTheCountRestarts()
     {
         var warn = AlertText.Limit("Daily", 80, 8L << 30, 10L << 30);
@@ -280,7 +291,7 @@ public class AlertTextTests
         var all = new[]
         {
             AlertText.NewApp("A", "p"), AlertText.NewApp(null, "p"), AlertText.NewDevice("D", "1", "2"),
-            AlertText.Limit("Daily", 80, 1, 2), AlertText.Limit("Monthly", 100, 2, 1),
+            AlertText.DeviceNewAddress("D", "1", "2"), AlertText.Limit("Daily", 80, 1, 2), AlertText.Limit("Monthly", 100, 2, 1),
         };
         Assert.DoesNotContain(all, t => (t.Title + t.Body).Contains('\u2014'));
     }
