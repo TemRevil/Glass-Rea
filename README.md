@@ -63,3 +63,7 @@ To publish a release, raise `<Version>` in `Directory.Build.props`, give it a `#
 Every push and pull request runs CI on GitHub: the build with warnings as errors, the tests, and an unsigned setup kept for a week under the run's Artifacts. Dependabot proposes updates to the Actions and NuGet packages weekly.
 
 `scripts\make-icon.ps1` regenerates `src\GlassRea.App\Assets\app.ico` from the Twin flow mark (`design\logo\twin-flow.svg`).
+
+## Credits
+
+Built by [Tem Revil](https://github.com/TemRevil), with Claude as coding assistant.
