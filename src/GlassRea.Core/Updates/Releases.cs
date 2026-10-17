@@ -120,8 +120,8 @@ public static class Releases
     public static bool IsOwnDownload(string url) =>
         url.StartsWith(DownloadPrefix, StringComparison.Ordinal) && Uri.TryCreate(url, UriKind.Absolute, out var u) && u.Query.Length == 0;
 
-    /// <summary>The release notes as plain lines: Markdown list marks, headings and bold dropped.</summary>
-    public static string PlainNotes(string notes) => string.Join("\n", notes.Replace("\r", "").Split('\n')
+    /// <summary>The release notes as plain lines: Markdown list marks, headings, bold and a stray byte-order mark dropped.</summary>
+    public static string PlainNotes(string notes) => string.Join("\n", notes.Replace("\r", "").Replace("﻿", "").Split('\n')
         .Select(l => l.Trim())
         .Where(l => l.Length > 0)
         .Select(l => l.TrimStart('#', ' ').Replace("**", "").Replace("`", ""))
