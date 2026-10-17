@@ -12,6 +12,8 @@ A personal network monitor for Windows by Tem Revil: per-app internet use, live 
 | `src/GlassRea.Setup` | Elevated single-file installer with the app, the service and `Uninstall Glass-Rea.exe` embedded as `payload.zip`. The uninstaller is this project built with `-p:Uninstaller=true` (no payload), so the install folder holds one copy of the app, not two; `build-setup.ps1` builds it into the stage. |
 | `tests/GlassRea.Tests` | xUnit tests for Core and the service's pure logic. |
 
+`README.md` is for people; `INSTALL.md` walks an AI assistant through installing Glass-Rea for someone (checks, official download and verification, setup's screens, troubleshooting). When setup's screens, requirements, paths or signing change, update both.
+
 The lists show one row per app: `Core/Usage/AppKinds.cs` tells apps, Store apps, services, Windows, VPN tunnels and unknown programs apart and adds an app's rows together (each version, Windows' history rows, each sign-in's copy of a service); `App/Support/AppFaces.cs` gives each its name, icon and kind label from Windows (services from the registry, packages from `PackageManager`); `App/Support/AppIcons.cs` draws icons one at a time on its own thread, because the shell answers "pending" to several at once.
 
 ## Build and check
