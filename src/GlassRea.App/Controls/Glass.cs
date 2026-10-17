@@ -87,12 +87,14 @@ public sealed class Glass : ContentControl
             OnAppearance(); // the look may have changed while this glass was off screen
             Appearance.Changed += OnAppearance;
             GlassLens.Lost += OnLensLost;
+            Motion.BackdropMoving += OnBackdropMoving;
             LayoutUpdated += Track;
         };
         Unloaded += (_, _) =>
         {
             Appearance.Changed -= OnAppearance;
             GlassLens.Lost -= OnLensLost;
+            Motion.BackdropMoving -= OnBackdropMoving;
             LayoutUpdated -= Track;
             CompositionTarget.Rendering -= OnTweenFrame;
         };
@@ -324,6 +326,23 @@ public sealed class Glass : ContentControl
 
     private void OnLensLost() { _lensFor = default; Resize(); }
 
+    /// <summary>
+    /// Lets the refraction go while a page change moves what's behind, and brings it back once it has settled. Over the
+    /// blurred page the bend is barely visible, but every step redrawing every frame made the page change stutter.
+    /// </summary>
+    private void OnBackdropMoving(bool moving)
+    {
+        if (_bands.Count == 0) return;
+        var c = _bands[0].Sprite.Compositor;
+        foreach (var band in _bands)
+        {
+            var fade = c.CreateScalarKeyFrameAnimation();
+            fade.InsertKeyFrame(1, moving ? 0 : 1, moving ? Motion.Accelerate(c) : Motion.Decelerate(c));
+            fade.Duration = moving ? Motion.SettleTime : Motion.InTime;
+            band.Sprite.StartAnimation("Opacity", fade);
+        }
+    }
+
     private void OnAppearance()
     {
         _brush?.Properties.InsertScalar("Blur.BlurAmount", Appearance.GlassBlur);
@@ -384,10 +403,17 @@ public sealed class Glass : ContentControl
         Squeeze(true);
         if (_glow is null || !Motion.Enabled) return;
         var p = e.GetCurrentPoint(_glow).Position;
+        // A soft light, brightest where pressed and fading to nothing at its edge. A solid disc, clipped by the bar's
+        // height, read as a hard-edged block sweeping across the tabs.
+        var light = Application.Current.Resources["GlowBrush"] is SolidColorBrush g ? g.Color : Microsoft.UI.Colors.White;
+        var bloom = new RadialGradientBrush();
+        bloom.GradientStops.Add(new GradientStop { Offset = 0, Color = light });
+        bloom.GradientStops.Add(new GradientStop { Offset = 0.5, Color = Appearance.WithAlpha(light, light.A / 255.0 * 0.4) });
+        bloom.GradientStops.Add(new GradientStop { Offset = 1, Color = Appearance.WithAlpha(light, 0) });
         var dot = new Ellipse
         {
             Width = 12, Height = 12, IsHitTestVisible = false,
-            Fill = (Brush)Application.Current.Resources["GlowBrush"],
+            Fill = bloom,
             RenderTransformOrigin = new Point(0.5, 0.5),
             RenderTransform = new ScaleTransform(),
         };
@@ -398,7 +424,7 @@ public sealed class Glass : ContentControl
         var ease = new ExponentialEase { EasingMode = EasingMode.EaseOut, Exponent = 5 };
         foreach (var prop in new[] { "ScaleX", "ScaleY" })
         {
-            var a = new DoubleAnimation { From = 1, To = 26, Duration = TimeSpan.FromMilliseconds(700), EasingFunction = ease };
+            var a = new DoubleAnimation { From = 1, To = 10, Duration = TimeSpan.FromMilliseconds(700), EasingFunction = ease };
             Storyboard.SetTarget(a, dot.RenderTransform);
             Storyboard.SetTargetProperty(a, prop);
             sb.Children.Add(a);

@@ -25,39 +25,89 @@ public static class Motion
     public static CubicBezierEasingFunction Accelerate(Compositor c) => c.CreateCubicBezierEasingFunction(new(0.7f, 0f), new(1f, 0.5f));
 
     /// <summary>
-    /// Replaces the page inside <paramref name="host"/>: the old page fades out into blur, the new one sharpens in.
-    /// The blur is drawn from a live copy of the page in <paramref name="ghost"/>, a sibling layer above the host;
-    /// the real page stays interactive underneath the whole time.
+    /// Starts softly, then settles: for a whole page arriving. <see cref="Decelerate"/> is nearly done a tenth of the
+    /// way in, which brought the new page in over two frames, a flash under the floating bar's glass.
     /// </summary>
-    public static async Task SwapPage(Grid host, Grid ghost, UIElement next, Action? arrived = null)
+    public static CubicBezierEasingFunction Settle(Compositor c) => c.CreateCubicBezierEasingFunction(new(0.3f, 0f), new(0.2f, 1f));
+
+    /// <summary>
+    /// True just before a page change starts moving what's behind the floating bar, false once it has settled. The
+    /// bar's glass fades its refraction out meanwhile: each step redraws the blur whenever its backdrop moves, and with
+    /// all of them redrawing every frame the page change ran at a fraction of the screen's rate.
+    /// </summary>
+    public static event Action<bool>? BackdropMoving;
+
+    /// <summary>How long the glass takes to let go of its refraction; a page change starts moving only after it.</summary>
+    public static readonly TimeSpan SettleTime = TimeSpan.FromMilliseconds(140);
+
+    private static Task _swapping = Task.CompletedTask;
+
+    /// <summary>
+    /// Replaces the page inside <paramref name="host"/>: the old page dissolves into blur while the new one sharpens
+    /// out of it, at the same time, so the page area is never empty in between. The blur is drawn from live copies
+    /// of the pages in <paramref name="ghost"/>, a sibling layer above the host; the new page is laid out and drawn,
+    /// hidden, before either starts to move, and is interactive underneath. The children of <paramref name="stagger"/>
+    /// then arrive one after another (<see cref="Stagger"/>). One swap runs at a time; one that is no longer
+    /// <paramref name="wanted"/> by its turn (another tab was picked meanwhile) is skipped.
+    /// </summary>
+    public static async Task SwapPage(Grid host, Grid ghost, UIElement next, Panel? stagger = null, Func<bool>? wanted = null)
+    {
+        var turn = new TaskCompletionSource();
+        var before = _swapping;
+        _swapping = turn.Task;
+        try
+        {
+            await before;
+            if (wanted?.Invoke() == false) return;
+            await Swap(host, ghost, next, stagger);
+        }
+        finally { turn.SetResult(); }
+    }
+
+    private static async Task Swap(Grid host, Grid ghost, UIElement next, Panel? stagger)
     {
         var current = host.Children.Count > 0 ? host.Children[0] : null;
+        if (current == next) return;
         if (!Enabled || current is null)
         {
             host.Children.Clear();
             host.Children.Add(next);
-            arrived?.Invoke();
+            if (stagger is not null) Stagger(stagger);
             return;
         }
         var hostVisual = ElementCompositionPreview.GetElementVisual(host);
         var c = hostVisual.Compositor;
 
-        var outgoing = Ghost(c, host, current, ghost);
-        hostVisual.Clip = c.CreateInsetClip(0, 0, 100000, 100000); // hidden while the ghost stands in for it
-        await Animate(c, outgoing, from: 0, to: 8, opacityFrom: 1, opacityTo: 0, dy: -4, OutTime, Accelerate(c));
-        Remove(ghost, outgoing.Sprite);
+        BackdropMoving?.Invoke(true);
+        var settled = Task.Delay(SettleTime); // runs alongside building the new page, so it rarely adds a wait
+        try
+        {
+            var outgoing = Ghost(c, host, current, ghost);
+            hostVisual.Clip = c.CreateInsetClip(0, 0, 100000, 100000); // hidden while the ghosts stand in for it
+            host.Children.Add(next);
+            // Hidden now, while the page is being drawn anyway: hiding them as the page set off held its first frames.
+            if (stagger is not null) Hide(stagger);
+            await Rendered(next);
+            await settled;
 
-        host.Children.Clear();
-        host.Children.Add(next);
-        arrived?.Invoke();
-        await Rendered(next);
-        var incoming = Ghost(c, host, next, ghost);
-        await Animate(c, incoming, from: 12, to: 0, opacityFrom: 0, opacityTo: 1, dy: 8, InTime, Decelerate(c));
-        hostVisual.Clip = null;
-        Remove(ghost, incoming.Sprite);
+            if (stagger is not null) Stagger(stagger);
+            var incoming = Ghost(c, host, next, ghost);
+            // The old page stays in the tree until it has faded: its ghost is a live copy of it.
+            await Task.WhenAll(
+                Animate(c, outgoing, from: 0, to: 8, opacityFrom: 1, opacityTo: 0, dy: -4, OutTime, Accelerate(c)),
+                Animate(c, incoming, from: 12, to: 0, opacityFrom: 0, opacityTo: 1, dy: 8, InTime, Settle(c)));
+            Remove(ghost, outgoing.Sprite);
+            host.Children.Remove(current);
+            hostVisual.Clip = null;
+            Remove(ghost, incoming.Sprite);
+        }
+        finally { BackdropMoving?.Invoke(false); }
     }
 
     private sealed record GhostCopy(SpriteVisual Sprite, CompositionEffectBrush Brush);
+
+    // Made once: building an effect compiles it, which held up the first frames of every page change.
+    private static CompositionEffectFactory? _ghostBlur;
 
     private static GhostCopy Ghost(Compositor c, FrameworkElement host, UIElement page, Grid ghostLayer)
     {
@@ -68,8 +118,10 @@ public static class Motion
         surface.SourceVisual = ElementCompositionPreview.GetElementVisual(page);
         surface.SourceOffset = new Vector2(-pad, -pad);
         surface.SourceSize = size + new Vector2(pad * 2);
-        var blur = new GaussianBlurEffect { Name = "Blur", BlurAmount = 0, BorderMode = EffectBorderMode.Soft, Optimization = EffectOptimization.Speed, Source = new CompositionEffectSourceParameter("page") };
-        var brush = c.CreateEffectFactory(blur, ["Blur.BlurAmount"]).CreateBrush();
+        _ghostBlur ??= c.CreateEffectFactory(
+            new GaussianBlurEffect { Name = "Blur", BlurAmount = 0, BorderMode = EffectBorderMode.Soft, Optimization = EffectOptimization.Speed, Source = new CompositionEffectSourceParameter("page") },
+            ["Blur.BlurAmount"]);
+        var brush = _ghostBlur.CreateBrush();
         brush.SetSourceParameter("page", c.CreateSurfaceBrush(surface));
         var at = host.TransformToVisual(ghostLayer).TransformPoint(default);
         var sprite = c.CreateSpriteVisual();
@@ -132,7 +184,11 @@ public static class Motion
         return Task.WhenAny(drawn.Task, Task.Delay(100));
     }
 
-    /// <summary>Waits until the element has been laid out and drawn once.</summary>
+    /// <summary>
+    /// Waits until the element is in the tree and the app is drawing at full rate again, so the page has really been
+    /// drawn (up to 0.6 s). A page change started while the new page was still being drawn froze for a
+    /// few frames, and the tab pill froze with it.
+    /// </summary>
     public static async Task Rendered(UIElement e)
     {
         if (e is FrameworkElement { IsLoaded: false } fe)
@@ -142,7 +198,22 @@ public static class Motion
             fe.Loaded += OnLoaded;
             await loaded.Task;
         }
-        await Task.Delay(32);
+        var smooth = new TaskCompletionSource();
+        var clock = System.Diagnostics.Stopwatch.StartNew();
+        var last = TimeSpan.Zero;
+        var steady = 0;
+        void OnFrame(object? s, object a)
+        {
+            var now = clock.Elapsed;
+            // Three frames in a row, each within about one and a half frames of the last.
+            steady = now - last <= TimeSpan.FromMilliseconds(25) ? steady + 1 : 0;
+            last = now;
+            if (steady < 3) return;
+            Microsoft.UI.Xaml.Media.CompositionTarget.Rendering -= OnFrame;
+            smooth.TrySetResult();
+        }
+        Microsoft.UI.Xaml.Media.CompositionTarget.Rendering += OnFrame;
+        if (await Task.WhenAny(smooth.Task, Task.Delay(600)) != smooth.Task) Microsoft.UI.Xaml.Media.CompositionTarget.Rendering -= OnFrame;
     }
 
     /// <summary>Children of a panel arrive one after another: rising 12 px and fading in, 45 ms apart.</summary>
@@ -157,7 +228,23 @@ public static class Motion
         }
     }
 
-    public static void Arrive(UIElement e, int delayMs = 0, float rise = 12)
+    /// <summary>Puts a panel's children where <see cref="Stagger"/> brings them in from, ahead of time.</summary>
+    public static void Hide(Panel panel)
+    {
+        if (!Enabled) return;
+        foreach (var child in panel.Children)
+        {
+            if (child.Visibility != Visibility.Visible) continue;
+            ElementCompositionPreview.SetIsTranslationEnabled(child, true);
+            var v = ElementCompositionPreview.GetElementVisual(child);
+            v.Opacity = 0;
+            v.Properties.InsertVector3("Translation", new Vector3(0, Rise, 0));
+        }
+    }
+
+    private const float Rise = 12;
+
+    public static void Arrive(UIElement e, int delayMs = 0, float rise = Rise)
     {
         if (!Enabled) return;
         var v = ElementCompositionPreview.GetElementVisual(e);

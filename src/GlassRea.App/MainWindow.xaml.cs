@@ -44,6 +44,7 @@ public sealed partial class MainWindow : Window
     private DateTime _lastRefresh = DateTime.MinValue;
     private bool _refreshing, _closing, _shown;
     private readonly AutoScroll _autoScroll = new();
+    private readonly TabLens _lens;
 
     public static MainWindow? Instance { get; private set; }
     /// <summary>The newest live sample, shared with pages that show "right now".</summary>
@@ -73,7 +74,10 @@ public sealed partial class MainWindow : Window
         WatchMinimize();
 
         foreach (var t in _tabs) Tabs.Children.Add(MakeTab(t));
-        TabsGlass.BlurSource = ThemeGlass.BlurSource = PageHost;
+        _lens = new TabLens(LensHost);
+        // The tabs change width when one turns bold, and with the text size; the pill follows to wherever the tab is now.
+        Tabs.SizeChanged += (_, _) => { if (_current != "") MoveLens(animate: true); };
+        TabsGlass.BlurSource = ThemeGlass.BlurSource = Stage;
         RatesGlass.BlurSource = Pulse;
         Pulse.TipAvoid = RatesGlass;
         Grid.SetRowSpan(_autoScroll, 3);
@@ -173,13 +177,17 @@ public sealed partial class MainWindow : Window
             ((TextBlock)((StackPanel)b.Content).Children[1]).FontWeight = on ? Microsoft.UI.Text.FontWeights.SemiBold : Microsoft.UI.Text.FontWeights.Normal;
         }
         MoveLens(animate: !first);
+        // Building or re-adding a page holds this thread, and Windows' compositor with it, so the pill would freeze
+        // mid-slide and then jump. The page waits until the pill has all but arrived.
+        var travelled = first || !Motion.Enabled ? Task.CompletedTask : Task.Delay(TabLens.Arrives);
 
         if (!_pages.TryGetValue(key, out var page))
         {
             fresh = true;
             // The loader goes up first and reaches the screen before the page is built, which can take a moment.
             ShowLoading(true);
-            await Motion.NextFrame();
+            await Task.WhenAll(Motion.NextFrame(), travelled);
+            if (key != _current) { ShowLoading(false); return; }
             _pages[key] = page = _tabs.First(t => t.Key == key).Create();
             // Give a new page a moment to fetch its data, so it arrives filled rather than filling in afterwards.
             if (page is IPage p)
@@ -197,7 +205,9 @@ public sealed partial class MainWindow : Window
             else ShowLoading(false);
             if (key != _current) return; // another tab was picked meanwhile; this page waits for its turn
         }
-        await Motion.SwapPage(PageHost, Ghost, page, arrived: () => { if (StaggerTarget(page) is { } panel) Motion.Stagger(panel); });
+        await travelled;
+        await Motion.SwapPage(PageHost, Ghost, page, StaggerTarget(page), wanted: () => key == _current);
+        if (key != _current) return;
         Log.IfSlow("Window", $"Opening the {key} page{(fresh ? " the first time" : "")}", System.Diagnostics.Stopwatch.GetElapsedTime(opening));
         _lastRefresh = DateTime.MinValue;
         await Tick();
@@ -246,40 +256,12 @@ public sealed partial class MainWindow : Window
         b.UpdateLayout();
         if (b.ActualWidth == 0) { DispatcherQueue.TryEnqueue(DispatcherQueuePriority.Low, () => MoveLens(animate)); return; }
         var x = b.TransformToVisual(Tabs).TransformPoint(default).X;
-        Lens.Height = b.ActualHeight;
-        Lens.CornerRadius = new CornerRadius(b.ActualHeight / 2);
-        if (!animate || !Motion.Enabled)
-        {
-            Lens.Width = b.ActualWidth;
-            LensMove.TranslateX = x;
-            return;
-        }
-        // The lens slides with a gel-like overshoot and squashes slightly as it travels, then settles.
-        var sb = new Storyboard();
-        var gel = new BackEase { EasingMode = EasingMode.EaseOut, Amplitude = 0.32 };
-        var time = TimeSpan.FromMilliseconds(560);
-        sb.Children.Add(Anim(LensMove, "TranslateX", x, time, gel));
-        var width = Anim(Lens, "Width", b.ActualWidth, time, gel);
-        width.EnableDependentAnimation = true;
-        sb.Children.Add(width);
-        sb.Children.Add(Squash(LensMove, "ScaleY", 0.86, time));
-        sb.Children.Add(Squash(LensMove, "ScaleX", 1.04, time));
-        sb.Begin();
+        _lens.MoveTo((float)x, (float)b.ActualWidth, (float)b.ActualHeight, animate);
     }
 
     private static DoubleAnimation Anim(DependencyObject target, string prop, double to, TimeSpan time, EasingFunctionBase ease)
     {
         var a = new DoubleAnimation { To = to, Duration = time, EasingFunction = ease };
-        Storyboard.SetTarget(a, target);
-        Storyboard.SetTargetProperty(a, prop);
-        return a;
-    }
-
-    private static DoubleAnimationUsingKeyFrames Squash(DependencyObject target, string prop, double mid, TimeSpan time)
-    {
-        var a = new DoubleAnimationUsingKeyFrames();
-        a.KeyFrames.Add(new EasingDoubleKeyFrame { KeyTime = TimeSpan.FromMilliseconds(time.TotalMilliseconds * 0.3), Value = mid, EasingFunction = new SineEase() });
-        a.KeyFrames.Add(new EasingDoubleKeyFrame { KeyTime = time, Value = 1, EasingFunction = new BackEase { EasingMode = EasingMode.EaseOut, Amplitude = 0.4 } });
         Storyboard.SetTarget(a, target);
         Storyboard.SetTargetProperty(a, prop);
         return a;

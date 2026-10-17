@@ -55,28 +55,28 @@
         </Border>
 
         <Grid Grid.Row="2">
-            <Grid x:Name="PageHost" Margin="14,12,14,0" />
-            <Grid x:Name="Ghost" IsHitTestVisible="False" />
-            <!-- Runs in the gap above the page while a page gets ready the first time. -->
-            <ProgressBar x:Name="Loading" IsIndeterminate="True" Visibility="Collapsed" Opacity="0" IsHitTestVisible="False"
-                         VerticalAlignment="Top" Margin="34,4,34,0" AutomationProperties.Name="Loading the page">
-                <ProgressBar.OpacityTransition><ScalarTransition Duration="0:0:0.25" /></ProgressBar.OpacityTransition>
-            </ProgressBar>
+            <!-- Everything the floating bar floats over, so its glass blurs what's really on screen, the page's
+                 fade between pages (Ghost) included. -->
+            <Grid x:Name="Stage">
+                <Grid x:Name="PageHost" Margin="14,12,14,0" />
+                <Grid x:Name="Ghost" IsHitTestVisible="False" />
+                <!-- Runs in the gap above the page while a page gets ready the first time. -->
+                <ProgressBar x:Name="Loading" IsIndeterminate="True" Visibility="Collapsed" Opacity="0" IsHitTestVisible="False"
+                             VerticalAlignment="Top" Margin="34,4,34,0" AutomationProperties.Name="Loading the page">
+                    <ProgressBar.OpacityTransition><ScalarTransition Duration="0:0:0.25" /></ProgressBar.OpacityTransition>
+                </ProgressBar>
 
-            <InfoBar x:Name="Offline" IsOpen="False" IsClosable="False" Severity="Warning" Margin="14,12,14,0" VerticalAlignment="Top"
-                     Title="The Glass-Rea service isn't running"
-                     Message="Nothing is being recorded right now. It starts with Windows; if it stays stopped, run the installer again." />
+                <InfoBar x:Name="Offline" IsOpen="False" IsClosable="False" Severity="Warning" Margin="14,12,14,0" VerticalAlignment="Top"
+                         Title="The Glass-Rea service isn't running"
+                         Message="Nothing is being recorded right now. It starts with Windows; if it stays stopped, run the installer again." />
+            </Grid>
 
             <!-- The floating bar: one glass capsule of tabs, and a separate round button for light and dark. -->
             <StackPanel x:Name="Dock" Orientation="Horizontal" Spacing="10" HorizontalAlignment="Center" VerticalAlignment="Bottom" Margin="0,0,0,18">
                 <c:Glass x:Name="TabsGlass" Padding="4">
                     <Grid>
-                        <Border x:Name="Lens" HorizontalAlignment="Left" CornerRadius="17" Background="{StaticResource InkBrush}"
-                                BorderThickness="1" BorderBrush="{StaticResource GlassRimBrush}" RenderTransformOrigin="0.5,0.5">
-                            <Border.RenderTransform>
-                                <CompositeTransform x:Name="LensMove" />
-                            </Border.RenderTransform>
-                        </Border>
+                        <!-- The pill behind the selected tab (Controls/TabLens.cs). -->
+                        <Border x:Name="LensHost" IsHitTestVisible="False" />
                         <StackPanel x:Name="Tabs" Orientation="Horizontal" Spacing="2" />
                     </Grid>
                 </c:Glass>

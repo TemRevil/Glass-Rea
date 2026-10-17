@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- The bottom bar stays frosted while pages change: the old page dissolves and the new one sharpens in behind the glass, at the same time, so the bar never shows an empty or unblurred moment.
+- The highlight under the selected tab slides smoothly to it and the page follows, instead of the highlight stalling halfway and jumping. The page change runs at the screen's full rate (about 10 frames a second before) and eases in instead of snapping into place.
+- Pressing the bar gives a soft light instead of a hard-edged block sweeping across the tabs.
+
 ## 1.2.3
 
 - Lighter on the PC: the app uses about a third of the processor it did while open (16% of one core instead of 47% on the Overview, on the PC this was measured on) and much less memory. The live graph is drawn once a second and Windows' compositor slides it in between; the glass bends light only where it doesn't change every second; nothing is drawn while the window is minimised.
