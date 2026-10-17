@@ -53,6 +53,7 @@ public partial class App : Application
                 ShowWindow("settings");
             }))), _stop.Token);
         if (!_startInTray) ShowWindow();
+        else TrimMemorySoon();
     }
 
     public void ShowWindow(string? page = null)
@@ -60,6 +61,34 @@ public partial class App : Application
         _window ??= new MainWindow();
         _window.Reveal(page);
     }
+
+    /// <summary>
+    /// Hands the memory the hidden window isn't using back to Windows, a moment after it went to the tray. It stays
+    /// the app's, and comes back page by page as it's touched again. Hidden, the app held about 200 MB of RAM; after
+    /// this, about 40.
+    /// </summary>
+    public void TrimMemorySoon()
+    {
+        if (_trim is null)
+        {
+            _trim = _ui!.CreateTimer(); // held here: a timer nobody references gets collected before it fires
+            _trim.Interval = TimeSpan.FromSeconds(2);
+            _trim.IsRepeating = false;
+            _trim.Tick += (_, _) =>
+            {
+                if (_window?.AppWindow.IsVisible == true) return; // opened again meanwhile
+                using var self = System.Diagnostics.Process.GetCurrentProcess();
+                SetProcessWorkingSetSize(self.Handle, -1, -1);
+            };
+        }
+        _trim.Stop();
+        _trim.Start();
+    }
+
+    private DispatcherQueueTimer? _trim;
+
+    [System.Runtime.InteropServices.DllImport("kernel32.dll")]
+    private static extern bool SetProcessWorkingSetSize(nint process, nint minimum, nint maximum);
 
     /// <summary>Shows a Windows notification, unless they're turned off in Settings.</summary>
     public void Notify(string title, string body, bool evenWhenOff = false, Action? onClick = null)

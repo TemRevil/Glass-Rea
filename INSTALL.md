@@ -16,8 +16,9 @@ Glass-Rea is a free, open-source network monitor for Windows: data use per app, 
 | An administrator account (setup asks for admin once) | The person can approve a UAC prompt |
 | Internet during setup, if .NET 10 isn't installed | Setup downloads it from Microsoft (`aka.ms/dotnet`) |
 | About 400 MB free on a local drive | The installed folder is about 170 MB |
+| 4 GB of memory or more (8 GB recommended) | `[math]::Round((Get-CimInstance Win32_ComputerSystem).TotalPhysicalMemory / 1GB)` |
 
-ARM PCs (such as Snapdragon laptops) are not supported.
+ARM PCs (such as Snapdragon laptops) are not supported. Recommended specs and measured processor and memory use are in the [README](README.md#-requirements). On a slow PC, **Settings > General > Ultra performance** makes the app much lighter while its window is open.
 
 ## 🛡️ 2. Check Smart App Control
 

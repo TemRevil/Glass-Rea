@@ -198,6 +198,12 @@ public sealed partial class SettingsPage : UserControl, IPage
         });
     }
 
+    private void OnUltra(object sender, RoutedEventArgs e)
+    {
+        if (_loading || UltraBox.IsOn == Appearance.State.UltraPerformance) return;
+        Appearance.Update(s => s.UltraPerformance = UltraBox.IsOn);
+    }
+
     private void OnTestNotify(object sender, RoutedEventArgs e) =>
         App.Current.Notify("Notifications are working",
             "This is how Glass-Rea tells you about new apps, new devices and data limits. Click one to see it on the Alerts page.",
@@ -255,6 +261,7 @@ public sealed partial class SettingsPage : UserControl, IPage
         _loading = true;
         var s = Appearance.State;
         ThemePick.SelectedIndex = (int)s.Theme;
+        UltraBox.IsOn = s.UltraPerformance;
         FollowBox.IsOn = s.FollowWindowsAccent;
         foreach (var (key, b) in _swatches)
         {
@@ -274,7 +281,7 @@ public sealed partial class SettingsPage : UserControl, IPage
         _tintSwatch!.Fill = new SolidColorBrush(tint);
         _tintHex!.Text = s.TintColor;
         if (_tintPicker!.Color != tint) _tintPicker.Color = tint;
-        EffectsNote.Opacity = Appearance.EffectsEnabled ? 0.8 : 1;
+        EffectsNote.Opacity = Appearance.Solid ? 1 : 0.8;
         _loading = false;
     }
 

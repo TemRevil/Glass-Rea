@@ -59,6 +59,10 @@ The app has to stay light on low-end PCs. Most of its processor time is Windows'
 - Animations that must start when seen (the usage chart's grow) count on the frame clock while the control is on screen, not on wall time.
 - Lists that can be long use a virtualized `ListView` (no `StackPanel` items panel); a recycled row's handlers read the row from `DataContext`.
 - Page changes (`Motion.SwapPage`): the floating bar's glass blurs `Stage` (the page and its fading copies), and lets its refraction go while the page moves (`Motion.BackdropMoving`), since every band redrawing every frame ran the change at about 10 fps. Building or re-adding a page holds the UI thread and the compositor with it, so nothing may be moving then: the tab pill (`Controls/TabLens.cs`, a composition shape) slides first, the page is built once it has all but arrived (`TabLens.Arrives`), and the fade starts only once frames are steady again (`Motion.Rendered`). A page's first open still holds about 80 ms as its fade starts.
+- No forever animation even when stepped or tiny: any running animation keeps the compositor producing frames, and every frame redraws every glass blur (a breathing "Live" dot did this). Timers that wait, such as `SmoothWidth`'s shrink delay, use a `DispatcherQueueTimer`, not `CompositionTarget.Rendering`.
+- `Glass.Track` assigns the blur's `SourceOffset`/`SourceSize` only when they change; assigning them, even to the same value, redraws the blur.
+- `Appearance.Solid` (Windows' transparency effects off, or **Ultra performance** on) drops the glass's source visual entirely, so it copies and blurs nothing; Ultra also swaps the window's acrylic for a plain colour and turns `Motion.Enabled` off. New glass or motion code must honour both.
+- Hidden in the tray, the app trims its working set (`App.TrimMemorySoon`, `SetProcessWorkingSetSize(-1, -1)`): WinUI keeps its native memory for the life of the process, so closing the window frees almost nothing on its own.
 - The window does no work while minimised. Measure (CPU over 20 s after 20 s settling, or `dotnet-trace`) before and after; don't guess.
 
 ## Checking the UI

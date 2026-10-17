@@ -44,6 +44,8 @@ public sealed class AppearanceState
     public string TintColor { get; set; } = "#FFFFFF";
     /// <summary>0..100.</summary>
     public int Tint { get; set; }
+    /// <summary>The least processor the window can use: solid glass, a plain window and no animations.</summary>
+    public bool UltraPerformance { get; set; }
 
     /// <summary>Puts every glass setting back as shipped; theme and accent stay.</summary>
     public void ResetGlass()
@@ -79,8 +81,13 @@ public static class Appearance
     public static bool IsDark { get; private set; }
     /// <summary>Windows' own "Transparency effects" switch. When off, glass turns solid.</summary>
     public static bool EffectsEnabled => System.AdvancedEffectsEnabled;
+    /// <summary>
+    /// Glass and cards are opaque and nothing is blurred: Windows' transparency effects are off, or Ultra performance
+    /// is on. Solid glass copies nothing from behind it, which is most of what the app's window costs to draw.
+    /// </summary>
+    public static bool Solid => !EffectsEnabled || State.UltraPerformance;
     /// <summary>Blur radius for the app's own glass (the tab bar, the rate chip, the chart tooltips).</summary>
-    public static float GlassBlur => EffectsEnabled ? State.Blur * 0.3f : 0f;
+    public static float GlassBlur => Solid ? 0f : State.Blur * 0.3f;
 
     /// <summary>The glass's optics, from the settings.</summary>
     public static LiquidGlass Optics => new(
@@ -215,7 +222,7 @@ public static class Appearance
         if (res["LogoBrush"] is LinearGradientBrush logo) { logo.GradientStops[0].Color = hueA; logo.GradientStops[1].Color = hueB; }
 
         // The content layer (cards) is translucent; the navigation layer (glass) floats above it and is clearer still.
-        var solid = !EffectsEnabled;
+        var solid = Solid;
         Set(res, "CardBrush", IsDark
             ? WithAlpha(Hex("#303036"), solid ? 1 : 0.9 - glass * 0.6)
             : WithAlpha(Colors.White, solid ? 1 : 0.88 - glass * 0.45));

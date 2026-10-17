@@ -46,7 +46,39 @@ A free, private network monitor for Windows, made of glass.
 - Running a newer setup updates in place; your history, settings and blocks are kept.
 - Installing over the old "Glasswire REA" moves its history, settings and firewall blocks across and removes the old copy.
 
-**Needs:** Windows 10 version 2004 or later, or Windows 11, on a 64-bit Intel or AMD PC, and an administrator account.
+**Needs:** see [Requirements](#-requirements) below.
+
+</details>
+
+---
+
+## 💻 Requirements
+
+| | Minimum | Recommended |
+| :--- | :--- | :--- |
+| 🪟 **Windows** | Windows 10 version 2004 (build 19041) | Windows 11 |
+| 🧠 **Processor** | Any 64-bit Intel or AMD dual-core | Quad-core, Intel 6th generation / AMD Ryzen or newer |
+| 💾 **Memory** | 4 GB | 8 GB or more |
+| 🖥️ **Screen** | 1280 × 800 at 100% scaling (the window is at least 980 × 680) | 1920 × 1080 at 100 or 125% |
+| 📦 **Disk** | About 400 MB free during setup, 170 MB once installed | The same; history adds only a few MB, since it keeps hourly totals |
+| 🌐 **Other** | An administrator account to install; internet during setup if .NET 10 isn't there | Transparency effects on in Windows, for the glass |
+
+ARM PCs (such as Snapdragon laptops) aren't supported.
+
+<details>
+<summary><b>📈 What it uses, measured</b></summary>
+<br/>
+
+On an Intel Core i7-6700 (4 cores, 8 threads, from 2015) with 16 GB, Windows 11, Overview page open, averaged over repeated runs:
+
+| State | Processor (share of one core) | Memory |
+| :--- | :--- | :--- |
+| Window open, glass on | about 14% (under 2% of the whole processor) | 150 to 270 MB, more after visiting every page |
+| Window open, **Ultra performance** on | about 4% | the same |
+| In the tray | under 1% | about 20 to 40 MB in use; Windows can reclaim the rest |
+| Recording service (always running) | under 0.5% | about 45 MB |
+
+The glass is the expensive part: it copies and blurs what's behind it every frame something moves. **Settings > General > Ultra performance** turns it solid, makes the window plain and turns animations off, for PCs where every bit of processor counts. With Windows' transparency effects off, the glass is solid anyway.
 
 </details>
 
@@ -62,7 +94,7 @@ A free, private network monitor for Windows, made of glass.
 | 🛡️ | **Firewall** | Block or unblock any app's internet access in one click. They're Windows Firewall rules, so blocks hold even when the app is closed. |
 | 📡 | **Devices** | Devices on your network, named and recognised: the name each gives itself (or one you give it), its maker, what it is (phone, TV, printer...) and its system (iOS, Android, Windows...), with IP, MAC, whether the MAC is a randomized private one, and first and last seen. |
 | 🔔 | **Alerts** | An app going online for the first time, a new device joining your network, a device leaving or coming back (optional), and 80% and 100% of a daily or monthly limit. Each also pops up as a Windows notification. |
-| ⚙️ | **Settings** | **General**, **Notifications**, **Data** (limits, when the month and week start, VPN tunnels), **Appearance** (theme, accent, and the glass itself: frosting, opacity, chromatic aberration, light, shininess, refraction, thickness, edge softness, corner radius, tint) and **About** (version, service state, updates, logs). |
+| ⚙️ | **Settings** | **General** (startup, tray, Ultra performance, priority), **Notifications**, **Data** (limits, when the month and week start, VPN tunnels), **Appearance** (theme, accent, and the glass itself: frosting, opacity, chromatic aberration, light, shininess, refraction, thickness, edge softness, corner radius, tint) and **About** (version, service state, updates, logs). |
 
 A live strip of the last two minutes runs along the top of every page.
 

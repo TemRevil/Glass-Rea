@@ -12,12 +12,12 @@ namespace GlassRea.App.Controls;
 /// <summary>
 /// The motion grammar: things leave with a quick fade into blur (160 ms, accelerating) and arrive by sharpening out
 /// of blur (420 ms, decelerating), lists arrive one item after another, numbers count up. All of it is skipped
-/// when Windows' "Animation effects" is off.
+/// when Windows' "Animation effects" is off, or Ultra performance is on.
 /// </summary>
 public static class Motion
 {
     private static readonly UISettings Settings = new();
-    public static bool Enabled => Settings.AnimationsEnabled;
+    public static bool Enabled => Settings.AnimationsEnabled && !Support.Appearance.State.UltraPerformance;
 
     public static readonly TimeSpan OutTime = TimeSpan.FromMilliseconds(160), InTime = TimeSpan.FromMilliseconds(420);
 

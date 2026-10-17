@@ -29,7 +29,7 @@
             <Grid>
                 <c:LiveGraph x:Name="Pulse" Margin="0,14,0,0" />
                 <StackPanel Orientation="Horizontal" Spacing="7" Margin="16,12,0,0" VerticalAlignment="Top" HorizontalAlignment="Left">
-                    <Ellipse x:Name="LiveDot" Width="6" Height="6" Fill="{StaticResource AccentBrush}" VerticalAlignment="Center" />
+                    <Ellipse Width="6" Height="6" Fill="{StaticResource AccentBrush}" VerticalAlignment="Center" />
                     <TextBlock Text="Live, last 2 minutes" Style="{StaticResource Caption}" />
                 </StackPanel>
                 <c:Glass x:Name="RatesGlass" Refracts="False" HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,12,0" CornerRadius="16" Padding="16,8"

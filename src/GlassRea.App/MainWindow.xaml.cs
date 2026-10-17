@@ -84,14 +84,13 @@ public sealed partial class MainWindow : Window
         Root.Children.Add(_autoScroll);
         _autoScroll.Attach(Root);
         Activated += (_, e) => { if (e.WindowActivationState == WindowActivationState.Deactivated) _autoScroll.Stop(); };
+        Appearance.Changed += OnAppearance;
         Appearance.Attach(Root, _backdrop, UpdateCaptionButtons);
-        Appearance.Changed += UpdateThemeIcon;
-        UpdateThemeIcon();
 
         _timer = DispatcherQueue.CreateTimer();
         _timer.Interval = TimeSpan.FromSeconds(1);
         _timer.Tick += async (_, _) => await Tick();
-        Root.Loaded += (_, _) => { Navigate("overview"); Breathe(); };
+        Root.Loaded += (_, _) => Navigate("overview");
     }
 
     public void Reveal(string? page)
@@ -109,6 +108,7 @@ public sealed partial class MainWindow : Window
     {
         AppWindow.Hide();
         _timer?.Stop();
+        App.Current.TrimMemorySoon();
     }
 
     // ---------- minimize to the tray ----------
@@ -270,19 +270,20 @@ public sealed partial class MainWindow : Window
     /// <summary>The bar materializes: it sharpens in from below instead of just appearing.</summary>
     private void ArriveDock() => Motion.Arrive(Dock, 220, rise: 18);
 
-    /// <summary>The live dot breathes slowly, like a recording light.</summary>
-    private void Breathe()
-    {
-        if (!Motion.Enabled) return;
-        var v = Microsoft.UI.Xaml.Hosting.ElementCompositionPreview.GetElementVisual(LiveDot);
-        var a = v.Compositor.CreateScalarKeyFrameAnimation();
-        a.InsertKeyFrame(0, 1); a.InsertKeyFrame(0.5f, 0.3f); a.InsertKeyFrame(1, 1);
-        a.Duration = TimeSpan.FromSeconds(2.4);
-        a.IterationBehavior = Microsoft.UI.Composition.AnimationIterationBehavior.Forever;
-        v.StartAnimation("Opacity", a);
-    }
-
     // ---------- light and dark ----------
+
+    private readonly SolidColorBrush _plain = new();
+
+    private void OnAppearance()
+    {
+        UpdateThemeIcon();
+        // Ultra performance swaps the window's acrylic, which Windows redraws whenever anything behind the window moves,
+        // for its plain colour.
+        var plain = Appearance.State.UltraPerformance;
+        if (plain != (SystemBackdrop is null)) SystemBackdrop = plain ? null : _backdrop;
+        _plain.Color = Appearance.WindowTint;
+        Root.Background = plain ? _plain : null;
+    }
 
     private void OnThemeClick(object sender, RoutedEventArgs e) =>
         Appearance.Update(s => s.Theme = Appearance.IsDark ? ThemeChoice.Light : ThemeChoice.Dark);

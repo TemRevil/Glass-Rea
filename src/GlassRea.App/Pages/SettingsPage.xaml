@@ -61,7 +61,14 @@
 
                     <Border Grid.Column="2" Style="{StaticResource Card}">
                         <StackPanel Spacing="10">
-                            <StackPanel Orientation="Horizontal" Spacing="8"><FontIcon Glyph="&#xE9D9;" FontSize="15" /><TextBlock Text="Priority" Style="{StaticResource CardTitle}" /></StackPanel>
+                            <StackPanel Orientation="Horizontal" Spacing="8"><FontIcon Glyph="&#xE9D9;" FontSize="15" /><TextBlock Text="Performance" Style="{StaticResource CardTitle}" /></StackPanel>
+                            <Border Style="{StaticResource Row}">
+                                <Grid ColumnSpacing="12">
+                                    <Grid.ColumnDefinitions><ColumnDefinition /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                                    <StackPanel VerticalAlignment="Center"><TextBlock Text="Ultra performance" /><TextBlock Text="Solid glass, a plain window and no animations, for the least processor while the window is open" Style="{StaticResource Caption}" TextWrapping="Wrap" /></StackPanel>
+                                    <ToggleSwitch x:Name="UltraBox" Grid.Column="1" MinWidth="0" OnContent="" OffContent="" Toggled="OnUltra" AutomationProperties.Name="Ultra performance" />
+                                </Grid>
+                            </Border>
                             <Border Style="{StaticResource Row}">
                                 <StackPanel Spacing="10">
                                     <StackPanel><TextBlock Text="Ask Windows for priority" /><TextBlock Text="More processor time when the PC is busy, so recording and live numbers keep up" Style="{StaticResource Caption}" /></StackPanel>
@@ -229,7 +236,7 @@
                                 <Grid.ColumnDefinitions><ColumnDefinition /><ColumnDefinition /><ColumnDefinition /></Grid.ColumnDefinitions>
                             </Grid>
                             <TextBlock x:Name="EffectsNote" Style="{StaticResource Caption}"
-                                       Text="If Transparency effects is off in Windows settings, the app stays solid whatever these say. Windows sets how strongly the window itself blurs the desktop; Frosting controls the app's own glass." />
+                                       Text="With Ultra performance on, or Transparency effects off in Windows settings, the app stays solid whatever these say. Windows sets how strongly the window itself blurs the desktop; Frosting controls the app's own glass." />
                         </StackPanel>
                     </Border>
                 </Grid>

@@ -1,6 +1,7 @@
 using System.Numerics;
 using GlassRea.App.Support;
 using Microsoft.Graphics.Canvas.Effects;
+using Microsoft.UI.Dispatching;
 using Microsoft.UI.Composition;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
@@ -65,6 +66,7 @@ public sealed class Glass : ContentControl
     private CompositionRoundedRectangleGeometry? _shape;
     private CompositionVisualSurface? _surface, _blurred;
     private CompositionMaskBrush? _body, _wash;
+    private SpriteVisual? _bodyLayer;
     private CompositionColorBrush? _washColour;
     private CompositionEffectFactory? _split;
     private readonly List<Band> _bands = [];
@@ -97,6 +99,7 @@ public sealed class Glass : ContentControl
             Motion.BackdropMoving -= OnBackdropMoving;
             LayoutUpdated -= Track;
             CompositionTarget.Rendering -= OnTweenFrame;
+            _shrink?.Stop();
         };
         SizeChanged += (_, _) => Resize();
         PointerEntered += (_, _) => FadeSpot(true);
@@ -140,7 +143,6 @@ public sealed class Glass : ContentControl
         var tint = new TintEffect { Name = "Tint", Color = Appearance.GlassTint, Source = saturate };
         _brush = c.CreateEffectFactory(tint, ["Blur.BlurAmount", "Tint.Color", "Base.Color"]).CreateBrush();
         _surface = c.CreateVisualSurface();
-        _surface.SourceVisual = ElementCompositionPreview.GetElementVisual(BlurSource);
         var copy = c.CreateSurfaceBrush(_surface);
         copy.Stretch = CompositionStretch.None;
         copy.HorizontalAlignmentRatio = 0;
@@ -158,7 +160,7 @@ public sealed class Glass : ContentControl
         _layers = c.CreateContainerVisual();
         _body = c.CreateMaskBrush();
         _body.Source = Copy(c);
-        Layer(c, _body);
+        _bodyLayer = Layer(c, _body);
         for (var level = 1; level <= (Refracts ? GlassLens.Levels : 0); level++)
         {
             var mask = c.CreateMaskBrush();
@@ -243,8 +245,12 @@ public sealed class Glass : ContentControl
     {
         if (_surface is null || BlurSource is null || ActualWidth == 0) return;
         var at = TransformToVisual(BlurSource).TransformPoint(default);
-        _surface.SourceOffset = new Vector2((float)at.X, (float)at.Y);
-        _surface.SourceSize = new Vector2((float)ActualWidth, (float)ActualHeight);
+        // Only when it really moved: this runs on every layout pass anywhere in the window, and setting either one,
+        // even to the same value, makes the glass redraw its blur.
+        var offset = new Vector2((float)at.X, (float)at.Y);
+        var size = new Vector2((float)ActualWidth, (float)ActualHeight);
+        if (_surface.SourceOffset != offset) _surface.SourceOffset = offset;
+        if (_surface.SourceSize != size) _surface.SourceSize = size;
     }
 
     private void Resize()
@@ -256,6 +262,7 @@ public sealed class Glass : ContentControl
         var r = (float)Math.Max(2, Core.Look.LiquidGlass.Corner(_design, _capsule, w, h, Appearance.Roundness));
         if (_designKnown && Math.Abs(CornerRadius.TopLeft - r) > 0.01) CornerRadius = new CornerRadius(r);
         if (_sprite is null || _shape is null || _blurred is null || _layers is null) return;
+        Solidify();
         var size = new Vector2(w, h);
         _sprite.Size = size;
         _shape.Size = size;
@@ -273,8 +280,7 @@ public sealed class Glass : ContentControl
         for (var i = 0; i < _bands.Count; i++)
         {
             var band = _bands[i];
-            // With Windows' transparency effects off the glass is solid, and steps nobody can see still cost a blur each.
-            band.Sprite.IsVisible = Appearance.EffectsEnabled;
+            band.Sprite.IsVisible = !Appearance.Solid;
             var (red, green, blue) = GlassLens.StepShift(optics, r, i + 1);
             Magnify(band.Green, green);
             if (split)
@@ -325,6 +331,19 @@ public sealed class Glass : ContentControl
     }
 
     private void OnLensLost() { _lensFor = default; Resize(); }
+
+    /// <summary>
+    /// Solid glass (<see cref="Appearance.Solid"/>) is just its opaque wash and rim: it stops copying what's behind it,
+    /// so the copy, its blur and every refraction step stop being drawn at all, not merely hidden under the wash.
+    /// </summary>
+    private void Solidify()
+    {
+        if (_surface is null || _bodyLayer is null || BlurSource is null) return;
+        var solid = Appearance.Solid;
+        var source = solid ? null : ElementCompositionPreview.GetElementVisual(BlurSource);
+        if (_surface.SourceVisual != source) _surface.SourceVisual = source;
+        _bodyLayer.IsVisible = !solid;
+    }
 
     /// <summary>
     /// Lets the refraction go while a page change moves what's behind, and brings it back once it has settled. Over the
@@ -454,8 +473,9 @@ public sealed class Glass : ContentControl
     // ---------- smooth width ----------
 
     private double _shownWidth = double.NaN, _fromWidth, _targetWidth, _naturalWidth;
-    private long _tweenStart, _narrowerSince;
+    private long _tweenStart;
     private double _tweenMs;
+    private DispatcherQueueTimer? _shrink;
 
     protected override Size MeasureOverride(Size available)
     {
@@ -469,13 +489,13 @@ public sealed class Glass : ContentControl
         }
         if (natural.Width > _targetWidth + 0.5) TweenTo(natural.Width, 220);          // grow now, quickly
         else if (natural.Width < _targetWidth - 0.5) WaitToShrink();                   // shrink once it has settled
-        else _narrowerSince = 0;
+        else _shrink?.Stop();                                                          // grew back in time
         return new Size(_shownWidth, natural.Height);
     }
 
     private void TweenTo(double width, double ms)
     {
-        _narrowerSince = 0;
+        _shrink?.Stop();
         _fromWidth = _shownWidth;
         _targetWidth = width;
         _tweenMs = ms;
@@ -484,27 +504,27 @@ public sealed class Glass : ContentControl
         CompositionTarget.Rendering += OnTweenFrame;
     }
 
+    /// <summary>
+    /// A timer, not the frame callback: while hooked to frames the whole window redraws every frame, and the rates
+    /// change every second, so waiting on frames kept the window redrawing all the time (a sixth of a core).
+    /// </summary>
     private void WaitToShrink()
     {
-        if (_narrowerSince == 0) _narrowerSince = Environment.TickCount64;
-        CompositionTarget.Rendering -= OnTweenFrame;
-        CompositionTarget.Rendering += OnTweenFrame;
+        if (_shrink is null)
+        {
+            _shrink = DispatcherQueue.CreateTimer();
+            _shrink.Interval = TimeSpan.FromMilliseconds(1500);
+            _shrink.IsRepeating = false;
+            _shrink.Tick += (_, _) => { if (_naturalWidth < _targetWidth - 0.5) TweenTo(_naturalWidth, 420); };
+        }
+        if (!_shrink.IsRunning) _shrink.Start();
     }
 
     private void OnTweenFrame(object? sender, object e)
     {
-        var now = Environment.TickCount64;
-        if (_narrowerSince != 0)
-        {
-            if (_naturalWidth >= _targetWidth - 0.5) _narrowerSince = 0; // the content grew back in time
-            else if (now - _narrowerSince >= 1500) { TweenTo(_naturalWidth, 420); return; }
-        }
-        if (_shownWidth != _targetWidth)
-        {
-            var p = Math.Min(1, (now - _tweenStart) / _tweenMs);
-            _shownWidth = p >= 1 ? _targetWidth : _fromWidth + (_targetWidth - _fromWidth) * (1 - Math.Pow(1 - p, 3));
-            InvalidateMeasure();
-        }
-        if (_shownWidth == _targetWidth && _narrowerSince == 0) CompositionTarget.Rendering -= OnTweenFrame;
+        var p = Math.Min(1, (Environment.TickCount64 - _tweenStart) / _tweenMs);
+        _shownWidth = p >= 1 ? _targetWidth : _fromWidth + (_targetWidth - _fromWidth) * (1 - Math.Pow(1 - p, 3));
+        InvalidateMeasure();
+        if (p >= 1) CompositionTarget.Rendering -= OnTweenFrame;
     }
 }
