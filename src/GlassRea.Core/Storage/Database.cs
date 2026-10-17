@@ -85,6 +85,16 @@ public sealed class Database : IDisposable
         }
     }
 
+    /// <summary>Gives an app known only by name the program it turned out to be.</summary>
+    public void SetAppPath(long appId, string path, bool isTunnel)
+    {
+        lock (_gate)
+        {
+            using var c = Cmd("UPDATE apps SET path=$p, is_tunnel=$t WHERE id=$i", ("$p", path), ("$t", isTunnel ? 1 : 0), ("$i", appId));
+            c.ExecuteNonQuery();
+        }
+    }
+
     public void SetTunnel(long appId, bool isTunnel)
     {
         lock (_gate) { using var c = Cmd("UPDATE apps SET is_tunnel=$t WHERE id=$i", ("$t", isTunnel ? 1 : 0), ("$i", appId)); c.ExecuteNonQuery(); }

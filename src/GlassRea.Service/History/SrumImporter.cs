@@ -192,6 +192,8 @@ public sealed class SrumImporter(Database db, ServiceState state, ProcessResolve
     private int Split(Dictionary<(string App, long Hour), Row> rows)
     {
         var ids = new Dictionary<string, long>();
+        // Every app, not just those with VPN traffic: this is also when a VPN service known only by name is recognised.
+        foreach (var app in rows.Keys.Select(k => k.App).Distinct()) AppId(ids, app);
         var marked = rows.Where(kv => kv.Value.TunIn + kv.Value.TunOut > 0)
             .Select(kv => (AppId(ids, kv.Key.App), kv.Key.Hour, kv.Value.TunIn, kv.Value.TunOut)).ToList();
         db.SetImportedTunnel(marked);
@@ -201,7 +203,12 @@ public sealed class SrumImporter(Database db, ServiceState state, ProcessResolve
 
     private long AppId(Dictionary<string, long> ids, string app)
     {
-        if (!ids.TryGetValue(app, out var id)) id = ids[app] = db.EnsureApp(Identify(app, state.TunnelNames()), DateTimeOffset.UtcNow.ToUnixTimeSeconds(), out _);
+        if (ids.TryGetValue(app, out var id)) return id;
+        var identity = Identify(app, state.TunnelNames());
+        id = ids[app] = db.EnsureApp(identity, DateTimeOffset.UtcNow.ToUnixTimeSeconds(), out _);
+        // A VPN service imported before its program was looked up gets its path and tunnel mark now, so the
+        // tunnel setting keeps it marked from then on.
+        if (identity.IsTunnel && identity.Path is { } path) db.SetAppPath(id, path, isTunnel: true);
         return id;
     }
 
@@ -211,7 +218,35 @@ public sealed class SrumImporter(Database db, ServiceState state, ProcessResolve
         var path = resolver.Paths.Normalize(srumName);
         if (Path.IsPathFullyQualified(path))
             return new AppIdentity(AppIdentity.KeyFor(path, null), resolver.FriendlyName(path), path, null, TunnelProcesses.IsTunnel(path, tunnels));
-        // Store apps and services appear by name only.
-        return new AppIdentity("srum:" + srumName.ToLowerInvariant(), srumName, null, null, false);
+        // Store apps and services appear by name only. A service is the program it runs: Cloudflare WARP's
+        // traffic is recorded as "CloudflareWARP", the service that runs warp-svc.exe.
+        var key = "srum:" + srumName.ToLowerInvariant();
+        if (ServiceProgram(srumName) is { } program && TunnelProcesses.IsTunnel(program, tunnels))
+            return new AppIdentity(key, srumName, program, srumName, true);
+        return new AppIdentity(key, srumName, null, null, false);
+    }
+
+    private static string? ServiceProgram(string serviceName)
+    {
+        if (serviceName.Length is 0 or > 256 || serviceName.IndexOfAny(['\\', '/']) >= 0) return null;
+        try
+        {
+            using var key = Microsoft.Win32.Registry.LocalMachine.OpenSubKey($@"SYSTEM\CurrentControlSet\Services\{serviceName}");
+            return key?.GetValue("ImagePath", null, Microsoft.Win32.RegistryValueOptions.None) is string image ? ProgramOf(image) : null;
+        }
+        catch (Exception ex) when (ex is System.Security.SecurityException or UnauthorizedAccessException or IOException) { return null; }
+    }
+
+    /// <summary>The program in a service's command line: <c>"C:\Program Files\x\a.exe" --run</c> or <c>C:\x\a.exe -k y</c> give the exe.</summary>
+    public static string? ProgramOf(string imagePath)
+    {
+        var text = imagePath.Trim();
+        if (text.StartsWith('"'))
+        {
+            var end = text.IndexOf('"', 1);
+            return end > 1 ? text[1..end] : null;
+        }
+        var exe = text.IndexOf(".exe", StringComparison.OrdinalIgnoreCase);
+        return exe > 0 ? text[..(exe + 4)] : null;
     }
 }

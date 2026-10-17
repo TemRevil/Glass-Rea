@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Fix: Windows history records some VPNs under their service name (Cloudflare WARP as "CloudflareWARP"), so their traffic was counted as an ordinary app on top of the apps it carried. The service's program is now looked up, and history already imported is corrected once. On the PC this was found on, October dropped from 300 GB to 158 GB.
+
 ## 1.1.0
 
 - Updates: Settings > About checks GitHub for a newer release (and, unless turned off, does so once a day with a notification when one is out), shows what's new, and downloads and installs it. A download is installed only if it is exactly the file GitHub recorded for the release and is signed by Tem Revil.

@@ -77,6 +77,30 @@ public class ConnectionCountTests
     }
 
     [Fact]
+    public void ServicesAreTheProgramsTheyRun()
+    {
+        Assert.Equal(@"C:\Program Files\Cloudflare\Cloudflare WARP\warp-svc.exe",
+            GlassRea.Service.History.SrumImporter.ProgramOf("\"C:\\Program Files\\Cloudflare\\Cloudflare WARP\\warp-svc.exe\""));
+        Assert.Equal(@"C:\WINDOWS\system32\svchost.exe", GlassRea.Service.History.SrumImporter.ProgramOf(@"C:\WINDOWS\system32\svchost.exe -k netsvcs -p"));
+        Assert.Equal(@"C:\Tools\vpn.exe", GlassRea.Service.History.SrumImporter.ProgramOf("  \"C:\\Tools\\vpn.exe\" --service"));
+        Assert.Null(GlassRea.Service.History.SrumImporter.ProgramOf(@"\SystemRoot\System32\drivers\tcpip.sys"));
+        Assert.True(TunnelProcesses.IsTunnel(GlassRea.Service.History.SrumImporter.ProgramOf("\"C:\\Program Files\\Cloudflare\\Cloudflare WARP\\warp-svc.exe\""), TunnelProcesses.Defaults));
+    }
+
+    [Fact]
+    public void AnAppFoundToBeTheVpnLeavesTheAppsTotal()
+    {
+        using var db = Database.InMemory();
+        var warp = db.EnsureApp(new AppIdentity("srum:cloudflarewarp", "CloudflareWARP", null, null, false), 0, out _);
+        var chrome = db.EnsureApp(Chrome, 0, out _);
+        db.AddUsage([(warp, new UsageDelta("", Hour, 900, 100, 0, 0)), (chrome, new UsageDelta("", Hour, 800, 80, 0, 0))], UsageSource.WindowsHistory);
+        db.SetAppPath(warp, @"C:\Program Files\Cloudflare\Cloudflare WARP\warp-svc.exe", isTunnel: true);
+        var r = db.Report(Hour * 3600, (Hour + 1) * 3600, new HashSet<long>());
+        Assert.Equal((800L, 1000L), (r.NetIn, r.TunnelIn + r.TunnelOut));
+        Assert.Equal(@"C:\Program Files\Cloudflare\Cloudflare WARP\warp-svc.exe", Assert.Single(db.AllApps(), a => a.Id == warp).Path);
+    }
+
+    [Fact]
     public void KnowsVpnAdapters()
     {
         Assert.True(TunnelAdapters.IsTunnel("CloudflareWARP", "Cloudflare WARP Interface Tunnel", 53));
