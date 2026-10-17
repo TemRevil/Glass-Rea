@@ -58,6 +58,8 @@ dotnet test tests\GlassRea.Tests
 
 Build the installer with `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\build-setup.ps1`; it writes `publish\Glass-Rea Setup.exe`. It's signed as Tem Revil once `scripts\make-cert.ps1` has made the certificate on this PC (trusted on this PC only), and unsigned otherwise.
 
-To publish a release, raise `<Version>` in `Directory.Build.props`, give it a `## <version>` section in `CHANGELOG.md`, commit and push to main, then run **Release** from the Actions tab. It builds and tests on GitHub, has SignPath sign Glass-Rea's files and then the setup (each approved on signpath.io), creates the GitHub release with that section as its notes, and checks GitHub stored the exact file. `scripts\release.ps1` does the same from this PC, signed with the Tem Revil certificate instead.
+To publish a release, raise `<Version>` in `Directory.Build.props`, give it a `## <version>` section in `CHANGELOG.md`, and push both to main: the **Release** workflow starts by itself (or run it from the Actions tab). It builds and tests on GitHub, has SignPath sign Glass-Rea's files and then the setup (each approved on signpath.io), creates the GitHub release with that section as its notes, and checks GitHub stored the exact file. `scripts\release.ps1` does the same from this PC, signed with the Tem Revil certificate instead.
+
+Every push and pull request runs CI on GitHub: the build with warnings as errors, the tests, and an unsigned setup kept for a week under the run's Artifacts. Dependabot proposes updates to the Actions and NuGet packages weekly.
 
 `scripts\make-icon.ps1` regenerates `src\GlassRea.App\Assets\app.ico` from the Twin flow mark (`design\logo\twin-flow.svg`).

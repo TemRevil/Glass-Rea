@@ -2,9 +2,11 @@
 # for open source, certificate by SignPath Foundation), and creates release v<Version> (the <Version> in
 # Directory.Build.props) with that version's CHANGELOG.md section as its notes and the setup attached.
 #
-# Run it from the Actions tab (Release, then Run workflow) once main has the new <Version> and its CHANGELOG
-# section. Each run asks for two approvals on signpath.io: first Glass-Rea's files inside the app, then the setup
-# built around them (the setup carries the app inside it, so the app is signed first).
+# It starts by itself when a push to main changes Directory.Build.props to a <Version> that isn't released yet
+# (give it its CHANGELOG section in the same push), or from the Actions tab (Release, then Run workflow). Started
+# by a push, it quietly does nothing while SignPath isn't set up or the version is already out; run by hand, it
+# says why it stopped. Each run asks for two approvals on signpath.io: first Glass-Rea's files inside the app, then
+# the setup built around them (the setup carries the app inside it, so the app is signed first).
 #
 # Needs, in the repository's settings:
 #   secret   SIGNPATH_API_TOKEN          a SignPath user token that may submit signing requests
@@ -14,6 +16,9 @@
 name: Release
 on:
   workflow_dispatch:
+  push:
+    branches: [main]
+    paths: [Directory.Build.props]
 permissions:
   contents: write # create the release
   actions: read   # SignPath reads this job and downloads its artifacts
@@ -21,7 +26,37 @@ concurrency:
   group: release
   cancel-in-progress: false
 jobs:
+  # Decides whether there is anything to release, on a cheap Linux machine.
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      go: ${{ steps.check.outputs.go }}
+    env:
+      GH_TOKEN: ${{ github.token }}
+      BY_HAND: ${{ github.event_name == 'workflow_dispatch' }}
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Anything to release?
+        id: check
+        run: |
+          function Stop([string]$why) {
+            if ($env:BY_HAND -eq 'true') { throw $why }
+            "::notice::Nothing released: $why"; "go=false" >> $env:GITHUB_OUTPUT; exit 0
+          }
+          if ('${{ github.ref }}' -ne 'refs/heads/main') { Stop 'Release from main.' }
+          if (-not '${{ vars.SIGNPATH_ORGANIZATION_ID }}') { Stop 'SignPath is not set up yet (no SIGNPATH_ORGANIZATION_ID variable in the repository settings).' }
+          $version = ([xml](Get-Content Directory.Build.props)).Project.PropertyGroup.Version
+          $tags = gh release list --limit 200 --json tagName --jq '.[].tagName'
+          if ($tags -contains "v$version") { Stop "v$version is already released. Raise <Version> in Directory.Build.props for the next one." }
+          "go=true" >> $env:GITHUB_OUTPUT
+
   release:
+    needs: check
+    if: needs.check.outputs.go == 'true'
     runs-on: windows-latest
     timeout-minutes: 300
     env:
@@ -37,14 +72,10 @@ jobs:
         with:
           dotnet-version: '10.0.x'
 
-      - name: Check the version and write the notes
+      - name: Read the version and write the notes
         id: version
         run: |
-          if ('${{ github.ref }}' -ne 'refs/heads/main') { throw 'Release from main.' }
-          if (-not '${{ vars.SIGNPATH_ORGANIZATION_ID }}') { throw 'Set the SIGNPATH_ORGANIZATION_ID variable in the repository settings.' }
           $version = ([xml](Get-Content Directory.Build.props)).Project.PropertyGroup.Version
-          $tags = gh release list --limit 200 --json tagName --jq '.[].tagName'
-          if ($tags -contains "v$version") { throw "v$version is already released. Raise <Version> in Directory.Build.props for the next one." }
           # The notes are this version's section of the changelog, without its heading.
           $lines = Get-Content CHANGELOG.md
           $start = [Array]::IndexOf($lines, "## $version")
