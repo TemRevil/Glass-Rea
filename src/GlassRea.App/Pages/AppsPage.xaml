@@ -34,23 +34,23 @@
                 </Grid>
                 <ListView x:Name="List" Grid.Row="1" SelectionMode="None" IsItemClickEnabled="True" ItemClick="OnOpen" Padding="0,0,0,84">
                     <ListView.ItemTemplate>
-                        <DataTemplate x:DataType="p:AppRow">
-                            <Grid Padding="2,9" ColumnSpacing="12" Opacity="{x:Bind Dim}" ToolTipService.ToolTip="Open its connections">
+                        <DataTemplate x:DataType="p:AppItem">
+                            <Grid Padding="2,9" ColumnSpacing="12" Opacity="{x:Bind Row.Dim, Mode=OneWay}" ToolTipService.ToolTip="Open its connections">
                                 <Grid.ColumnDefinitions><ColumnDefinition Width="40" /><ColumnDefinition Width="*" /><ColumnDefinition Width="110" /><ColumnDefinition Width="110" /><ColumnDefinition Width="110" /></Grid.ColumnDefinitions>
-                                <c:AppIconView AppPath="{x:Bind Path}" AppName="{x:Bind Name}" />
+                                <c:AppIconView AppPath="{x:Bind Row.Path, Mode=OneWay}" AppName="{x:Bind Row.Name, Mode=OneWay}" />
                                 <StackPanel Grid.Column="1" Spacing="3" VerticalAlignment="Center">
                                     <StackPanel Orientation="Horizontal" Spacing="6">
-                                        <TextBlock Text="{x:Bind Name}" />
-                                        <Border Visibility="{x:Bind TunnelTag}" BorderThickness="1" BorderBrush="{StaticResource CardStrokeBrush}" CornerRadius="4" Padding="5,0">
+                                        <TextBlock Text="{x:Bind Row.Name, Mode=OneWay}" />
+                                        <Border Visibility="{x:Bind Row.TunnelTag, Mode=OneWay}" BorderThickness="1" BorderBrush="{StaticResource CardStrokeBrush}" CornerRadius="4" Padding="5,0">
                                             <TextBlock Text="VPN tunnel" FontSize="11" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                                         </Border>
                                     </StackPanel>
-                                    <TextBlock Text="{x:Bind Sub}" Style="{StaticResource Caption}" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" />
-                                    <c:ShareBar Value="{x:Bind Share}" Margin="0,3,0,0" MaxWidth="420" HorizontalAlignment="Stretch" />
+                                    <TextBlock Text="{x:Bind Row.Sub, Mode=OneWay}" Style="{StaticResource Caption}" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" />
+                                    <c:ShareBar Value="{x:Bind Row.Share, Mode=OneWay}" Margin="0,3,0,0" MaxWidth="420" HorizontalAlignment="Stretch" />
                                 </StackPanel>
-                                <TextBlock Grid.Column="2" Text="{x:Bind Down}" HorizontalAlignment="Right" VerticalAlignment="Center" />
-                                <TextBlock Grid.Column="3" Text="{x:Bind Up}" HorizontalAlignment="Right" VerticalAlignment="Center" />
-                                <TextBlock Grid.Column="4" Text="{x:Bind Total}" FontWeight="SemiBold" HorizontalAlignment="Right" VerticalAlignment="Center" />
+                                <TextBlock Grid.Column="2" Text="{x:Bind Row.Down, Mode=OneWay}" HorizontalAlignment="Right" VerticalAlignment="Center" />
+                                <TextBlock Grid.Column="3" Text="{x:Bind Row.Up, Mode=OneWay}" HorizontalAlignment="Right" VerticalAlignment="Center" />
+                                <TextBlock Grid.Column="4" Text="{x:Bind Row.Total, Mode=OneWay}" FontWeight="SemiBold" HorizontalAlignment="Right" VerticalAlignment="Center" />
                             </Grid>
                         </DataTemplate>
                     </ListView.ItemTemplate>

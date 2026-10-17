@@ -124,8 +124,8 @@
                     <Setter.Value>
                         <ControlTemplate TargetType="c:Glass">
                             <Grid CornerRadius="{TemplateBinding CornerRadius}" Shadow="{StaticResource GlassShadow}" Translation="0,0,24">
+                                <!-- The blurred backdrop, its refraction steps and the milky wash (Controls/Glass.cs). -->
                                 <Border x:Name="Backdrop" />
-                                <Border Background="{StaticResource GlassTintBrush}" />
                                 <Canvas x:Name="GlowLayer" IsHitTestVisible="False" />
                                 <!-- Rim light, drawn per pixel from the glass optics (Controls/GlassLens.cs). -->
                                 <Border x:Name="Rim" IsHitTestVisible="False" />

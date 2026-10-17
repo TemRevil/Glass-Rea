@@ -27,16 +27,16 @@
                 <ListView x:Name="Apps" Grid.Row="1" SelectionMode="None" Padding="0,0,0,84">
                     <ListView.ItemsPanel><ItemsPanelTemplate><StackPanel /></ItemsPanelTemplate></ListView.ItemsPanel>
                     <ListView.ItemTemplate>
-                        <DataTemplate x:DataType="p:FirewallRow">
+                        <DataTemplate x:DataType="p:FirewallItem">
                             <Grid Padding="2,8" ColumnSpacing="12">
                                 <Grid.ColumnDefinitions><ColumnDefinition Width="40" /><ColumnDefinition Width="*" /><ColumnDefinition Width="110" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
-                                <c:AppIconView AppPath="{x:Bind Path}" AppName="{x:Bind Name}" />
+                                <c:AppIconView AppPath="{x:Bind Row.Path, Mode=OneWay}" AppName="{x:Bind Row.Name, Mode=OneWay}" />
                                 <StackPanel Grid.Column="1" VerticalAlignment="Center">
-                                    <TextBlock Text="{x:Bind Name}" />
-                                    <TextBlock Text="{x:Bind Sub}" Style="{StaticResource Caption}" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" />
+                                    <TextBlock Text="{x:Bind Row.Name, Mode=OneWay}" />
+                                    <TextBlock Text="{x:Bind Row.Sub, Mode=OneWay}" Style="{StaticResource Caption}" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" />
                                 </StackPanel>
-                                <TextBlock Grid.Column="2" Text="{x:Bind Total}" Style="{StaticResource Caption}" HorizontalAlignment="Right" VerticalAlignment="Center" />
-                                <ToggleSwitch Grid.Column="3" IsOn="{x:Bind Allowed}" IsEnabled="{x:Bind CanBlock}" Tag="{x:Bind}" Toggled="OnToggle"
+                                <TextBlock Grid.Column="2" Text="{x:Bind Row.Total, Mode=OneWay}" Style="{StaticResource Caption}" HorizontalAlignment="Right" VerticalAlignment="Center" />
+                                <ToggleSwitch Grid.Column="3" IsOn="{x:Bind Row.Allowed, Mode=OneWay}" IsEnabled="{x:Bind Row.CanBlock, Mode=OneWay}" Tag="{x:Bind}" Toggled="OnToggle"
                                               OnContent="Online" OffContent="Blocked" MinWidth="0" Margin="12,0,0,0" />
                             </Grid>
                         </DataTemplate>

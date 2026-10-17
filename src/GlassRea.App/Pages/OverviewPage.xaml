@@ -52,20 +52,20 @@
                 </Grid>
                 <ItemsControl x:Name="TopApps" Grid.Row="1">
                     <ItemsControl.ItemTemplate>
-                        <DataTemplate x:DataType="p:AppRow">
-                            <Grid ColumnSpacing="10" Padding="0,7" Opacity="{x:Bind Dim}">
+                        <DataTemplate x:DataType="p:AppItem">
+                            <Grid ColumnSpacing="10" Padding="0,7" Opacity="{x:Bind Row.Dim, Mode=OneWay}">
                                 <Grid.ColumnDefinitions><ColumnDefinition Width="Auto" /><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
-                                <c:AppIconView AppPath="{x:Bind Path}" AppName="{x:Bind Name}" VerticalAlignment="Center" />
+                                <c:AppIconView AppPath="{x:Bind Row.Path, Mode=OneWay}" AppName="{x:Bind Row.Name, Mode=OneWay}" VerticalAlignment="Center" />
                                 <StackPanel Grid.Column="1" Spacing="5" VerticalAlignment="Center">
                                     <StackPanel Orientation="Horizontal" Spacing="6">
-                                        <TextBlock Text="{x:Bind Name}" TextTrimming="CharacterEllipsis" />
-                                        <Border Visibility="{x:Bind TunnelTag}" BorderThickness="1" BorderBrush="{StaticResource CardStrokeBrush}" CornerRadius="4" Padding="5,0">
+                                        <TextBlock Text="{x:Bind Row.Name, Mode=OneWay}" TextTrimming="CharacterEllipsis" />
+                                        <Border Visibility="{x:Bind Row.TunnelTag, Mode=OneWay}" BorderThickness="1" BorderBrush="{StaticResource CardStrokeBrush}" CornerRadius="4" Padding="5,0">
                                             <TextBlock Text="VPN tunnel" FontSize="11" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                                         </Border>
                                     </StackPanel>
-                                    <c:ShareBar Value="{x:Bind Share}" />
+                                    <c:ShareBar Value="{x:Bind Row.Share, Mode=OneWay}" />
                                 </StackPanel>
-                                <TextBlock Grid.Column="2" Text="{x:Bind Total}" Style="{StaticResource Caption}" VerticalAlignment="Center" />
+                                <TextBlock Grid.Column="2" Text="{x:Bind Row.Total, Mode=OneWay}" Style="{StaticResource Caption}" VerticalAlignment="Center" />
                             </Grid>
                         </DataTemplate>
                     </ItemsControl.ItemTemplate>

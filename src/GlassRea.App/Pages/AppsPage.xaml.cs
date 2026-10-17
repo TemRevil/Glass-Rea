@@ -1,5 +1,6 @@
 using GlassRea.App.Controls;
 using GlassRea.App.Support;
+using GlassRea.Core.Look;
 using GlassRea.Core.Protocol;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
@@ -10,11 +11,13 @@ namespace GlassRea.App.Pages;
 public sealed partial class AppsPage : UserControl, IPage
 {
     private readonly PeriodPicker _period = new(Periods.Kind.Month);
+    private readonly LiveList<AppItem, AppRow> _rows = new(r => r.Id);
     private string _shown = "";
 
     public AppsPage()
     {
         InitializeComponent();
+        List.ItemsSource = _rows;
         PickerHost.Content = _period;
         _period.Changed += () => _ = Refresh();
     }
@@ -30,17 +33,17 @@ public sealed partial class AppsPage : UserControl, IPage
         DownText.Text = Fmt.Bytes(r.NetIn);
         UpText.Text = Fmt.Bytes(r.NetOut);
         var rows = AppRow.From(r);
-        // Keep the scroll position on a plain refresh; a new period replaces the list.
+        // A refresh changes only the figures that moved; a new period starts again from the top.
         var key = $"{_period.Kind}:{_period.From}";
-        if (key != _shown || List.ItemsSource is not List<AppRow> old || !old.SequenceEqual(rows))
-            List.ItemsSource = rows;
+        _rows.Sync(rows);
+        if (key != _shown && _rows.Count > 0) List.ScrollIntoView(_rows[0]);
         _shown = key;
         Empty.Visibility = rows.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
     }
 
     private void OnOpen(object sender, ItemClickEventArgs e)
     {
-        if (e.ClickedItem is not AppRow row) return;
+        if (e.ClickedItem is not AppItem { Row: var row }) return;
         ConnectionsPage.PendingAppId = row.Id;
         MainWindow.Instance?.Navigate("connections");
     }

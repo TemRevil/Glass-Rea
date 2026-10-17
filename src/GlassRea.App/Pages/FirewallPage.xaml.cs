@@ -1,4 +1,5 @@
 using GlassRea.App.Support;
+using GlassRea.Core.Look;
 using GlassRea.Core.Protocol;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
@@ -11,9 +12,14 @@ public sealed record FirewallRow(long Id, string Name, string? Path, string Sub,
 public sealed partial class FirewallPage : UserControl, IPage
 {
     private List<FirewallRow> _all = [];
+    private readonly LiveList<FirewallItem, FirewallRow> _rows = new(r => r.Id);
     private bool _busy;
 
-    public FirewallPage() { InitializeComponent(); }
+    public FirewallPage()
+    {
+        InitializeComponent();
+        Apps.ItemsSource = _rows;
+    }
 
     public TimeSpan RefreshEvery => TimeSpan.FromSeconds(30);
 
@@ -37,15 +43,14 @@ public sealed partial class FirewallPage : UserControl, IPage
         var q = Search.Text.Trim();
         var rows = q.Length == 0 ? _all : _all.Where(r =>
             r.Name.Contains(q, StringComparison.OrdinalIgnoreCase) || r.Sub.Contains(q, StringComparison.OrdinalIgnoreCase)).ToList();
-        if (Apps.ItemsSource is List<FirewallRow> old && old.SequenceEqual(rows)) return;
-        _busy = true; // filling the list raises Toggled; ignore those
-        Apps.ItemsSource = rows;
+        _busy = true; // new rows' switches raise Toggled as they're filled in; ignore those
+        _rows.Sync(rows);
         DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () => _busy = false);
     }
 
     private async void OnToggle(object sender, RoutedEventArgs e)
     {
-        if (_busy || sender is not ToggleSwitch { Tag: FirewallRow row } box || box.IsOn == row.Allowed) return;
+        if (_busy || sender is not ToggleSwitch { Tag: FirewallItem { Row: var row } } box || box.IsOn == row.Allowed) return;
         var block = !box.IsOn;
         box.IsEnabled = false;
         try

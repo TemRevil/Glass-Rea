@@ -1,6 +1,7 @@
 using System.Globalization;
 using GlassRea.App.Controls;
 using GlassRea.App.Support;
+using GlassRea.Core.Look;
 using GlassRea.Core.Protocol;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
@@ -10,6 +11,7 @@ namespace GlassRea.App.Pages;
 /// <summary>Answers "where did my data go" first: one sentence, the chart, the top apps, then now / month / alerts.</summary>
 public sealed partial class OverviewPage : UserControl, IPage
 {
+    private readonly LiveList<AppItem, AppRow> _topApps = new(r => r.Id);
     private readonly PeriodPicker _period = new(Periods.Kind.Day);
     private string _shownKey = "";
     private bool _counted;
@@ -63,7 +65,8 @@ public sealed partial class OverviewPage : UserControl, IPage
         TopTitle.Text = _period.Kind switch { Periods.Kind.Day => "Top apps today", Periods.Kind.Week => "Top apps this week", _ => "Top apps this month" };
         if (!IsCurrent()) TopTitle.Text = "Top apps";
         var rows = AppRow.From(r).Take(7).ToList();
-        TopApps.ItemsSource = rows;
+        TopApps.ItemsSource ??= _topApps;
+        _topApps.Sync(rows);
         NoApps.Visibility = rows.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
 
         ShowNow();

@@ -42,22 +42,22 @@
                     <UniformGridLayout MinItemWidth="300" MinItemHeight="128" MinRowSpacing="12" MinColumnSpacing="12" ItemsStretch="Fill" />
                 </ItemsRepeater.Layout>
                 <ItemsRepeater.ItemTemplate>
-                    <DataTemplate x:DataType="p:DeviceRow">
-                        <Border Style="{StaticResource Card}" Padding="16,14" Opacity="{x:Bind Fade}">
+                    <DataTemplate x:DataType="p:DeviceItem">
+                        <Border Style="{StaticResource Card}" Padding="16,14" Opacity="{x:Bind Row.Fade, Mode=OneWay}">
                             <Grid ColumnSpacing="14" RowSpacing="10">
                                 <Grid.ColumnDefinitions><ColumnDefinition Width="Auto" /><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
                                 <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
                                 <Border Width="40" Height="40" CornerRadius="10" Background="{StaticResource AccentSoftBrush}">
-                                    <FontIcon Glyph="{x:Bind Glyph}" FontSize="18" Foreground="{StaticResource AccentBrush}" />
+                                    <FontIcon Glyph="{x:Bind Row.Glyph, Mode=OneWay}" FontSize="18" Foreground="{StaticResource AccentBrush}" />
                                 </Border>
                                 <StackPanel Grid.Column="1" VerticalAlignment="Center">
-                                    <TextBlock Text="{x:Bind Name}" Style="{StaticResource CardTitle}" TextTrimming="CharacterEllipsis" />
-                                    <TextBlock Text="{x:Bind Note}" Style="{StaticResource Caption}" TextTrimming="CharacterEllipsis" />
+                                    <TextBlock Text="{x:Bind Row.Name, Mode=OneWay}" Style="{StaticResource CardTitle}" TextTrimming="CharacterEllipsis" />
+                                    <TextBlock Text="{x:Bind Row.Note, Mode=OneWay}" Style="{StaticResource Caption}" TextTrimming="CharacterEllipsis" />
                                 </StackPanel>
                                 <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="4" VerticalAlignment="Top">
                                     <Border VerticalAlignment="Center" Padding="7,2" CornerRadius="5"
-                                            Background="{ThemeResource SubtleFillColorSecondaryBrush}" Visibility="{x:Bind OsShown}">
-                                        <TextBlock Text="{x:Bind Os}" FontSize="11" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                            Background="{ThemeResource SubtleFillColorSecondaryBrush}" Visibility="{x:Bind Row.OsShown, Mode=OneWay}">
+                                        <TextBlock Text="{x:Bind Row.Os, Mode=OneWay}" FontSize="11" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                                     </Border>
                                     <Button Tag="{x:Bind}" Click="OnRename" Width="30" Height="30" Padding="0" Background="Transparent" BorderThickness="0"
                                             ToolTipService.ToolTip="Rename" AutomationProperties.Name="Rename this device">
@@ -67,12 +67,12 @@
                                 <Grid Grid.Row="1" Grid.ColumnSpan="3" ColumnSpacing="16">
                                     <Grid.ColumnDefinitions><ColumnDefinition /><ColumnDefinition /></Grid.ColumnDefinitions>
                                     <StackPanel>
-                                        <TextBlock Text="{x:Bind Ip}" FontFamily="Cascadia Mono, Consolas" FontSize="12" IsTextSelectionEnabled="True" />
-                                        <TextBlock Text="{x:Bind Mac}" FontFamily="Cascadia Mono, Consolas" FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" IsTextSelectionEnabled="True" />
+                                        <TextBlock Text="{x:Bind Row.Ip, Mode=OneWay}" FontFamily="Cascadia Mono, Consolas" FontSize="12" IsTextSelectionEnabled="True" />
+                                        <TextBlock Text="{x:Bind Row.Mac, Mode=OneWay}" FontFamily="Cascadia Mono, Consolas" FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" IsTextSelectionEnabled="True" />
                                     </StackPanel>
                                     <StackPanel Grid.Column="1">
-                                        <TextBlock Text="{x:Bind First}" Style="{StaticResource Caption}" />
-                                        <TextBlock Text="{x:Bind Last}" Style="{StaticResource Caption}" />
+                                        <TextBlock Text="{x:Bind Row.First, Mode=OneWay}" Style="{StaticResource Caption}" />
+                                        <TextBlock Text="{x:Bind Row.Last, Mode=OneWay}" Style="{StaticResource Caption}" />
                                     </StackPanel>
                                 </Grid>
                             </Grid>

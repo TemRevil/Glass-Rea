@@ -23,17 +23,17 @@
             <Grid>
                 <ListView x:Name="List" SelectionMode="None" Padding="0,0,0,84">
                     <ListView.ItemTemplate>
-                        <DataTemplate x:DataType="p:AlertRow">
+                        <DataTemplate x:DataType="p:AlertItem">
                             <Grid Padding="4,12" ColumnSpacing="14">
                                 <Grid.ColumnDefinitions><ColumnDefinition Width="Auto" /><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
                                 <Border Width="34" Height="34" CornerRadius="9" Background="{StaticResource AccentSoftBrush}" VerticalAlignment="Top">
-                                    <FontIcon Glyph="{x:Bind Glyph}" FontSize="15" Foreground="{StaticResource AccentBrush}" />
+                                    <FontIcon Glyph="{x:Bind Row.Glyph, Mode=OneWay}" FontSize="15" Foreground="{StaticResource AccentBrush}" />
                                 </Border>
                                 <StackPanel Grid.Column="1" Spacing="2">
-                                    <TextBlock Text="{x:Bind Title}" Style="{StaticResource CardTitle}" TextWrapping="Wrap" />
-                                    <TextBlock Text="{x:Bind Body}" Style="{StaticResource Muted}" TextWrapping="Wrap" />
+                                    <TextBlock Text="{x:Bind Row.Title, Mode=OneWay}" Style="{StaticResource CardTitle}" TextWrapping="Wrap" />
+                                    <TextBlock Text="{x:Bind Row.Body, Mode=OneWay}" Style="{StaticResource Muted}" TextWrapping="Wrap" />
                                 </StackPanel>
-                                <TextBlock Grid.Column="2" Text="{x:Bind When}" Style="{StaticResource Caption}" />
+                                <TextBlock Grid.Column="2" Text="{x:Bind Row.When, Mode=OneWay}" Style="{StaticResource Caption}" />
                             </Grid>
                         </DataTemplate>
                     </ListView.ItemTemplate>

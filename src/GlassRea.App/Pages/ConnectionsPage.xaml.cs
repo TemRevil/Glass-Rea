@@ -1,5 +1,6 @@
 using GlassRea.App.Controls;
 using GlassRea.App.Support;
+using GlassRea.Core.Look;
 using GlassRea.Core.Net;
 using GlassRea.Core.Protocol;
 using Microsoft.UI.Xaml;
@@ -17,12 +18,16 @@ public sealed partial class ConnectionsPage : UserControl, IPage
     public static long PendingAppId;
 
     private readonly PeriodPicker _period = new(Periods.Kind.Day);
+    private readonly LiveList<ConnItem, ConnApp> _apps = new(a => a.Id);
+    private readonly LiveList<HostItem, HostRow> _hosts = new(h => h.Ip);
     private long _selected, _periodTotal, _connectionTotal;
     private bool _updating;
 
     public ConnectionsPage()
     {
         InitializeComponent();
+        Apps.ItemsSource = _apps;
+        Hosts.ItemsSource = _hosts;
         PickerHost.Content = _period;
         _period.Changed += () => _ = Refresh();
     }
@@ -42,8 +47,9 @@ public sealed partial class ConnectionsPage : UserControl, IPage
                 a.NetIn, a.NetOut, a.Blocked, a.Path is not null && a.Service?.Contains(',') != true, a.IsTunnel))
             .ToList();
         _updating = true;
-        Apps.ItemsSource = apps;
-        Apps.SelectedItem = apps.FirstOrDefault(a => a.Id == _selected) ?? apps.FirstOrDefault();
+        _apps.Sync(apps);
+        var pick = _apps.FirstOrDefault(i => i.Row.Id == _selected) ?? _apps.FirstOrDefault();
+        if (Apps.SelectedItem != pick) Apps.SelectedItem = pick;
         _updating = false;
         NoApps.Visibility = apps.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
         Detail.Visibility = apps.Count == 0 ? Visibility.Collapsed : Visibility.Visible;
@@ -57,7 +63,7 @@ public sealed partial class ConnectionsPage : UserControl, IPage
 
     private async Task LoadDetail(bool animate)
     {
-        if (Apps.SelectedItem is not ConnApp app) { Hosts.ItemsSource = null; return; }
+        if (Apps.SelectedItem is not ConnItem { Row: var app }) { _hosts.Sync([]); return; }
         var changed = app.Id != _selected;
         _selected = app.Id;
         AppIcon.AppName = app.Name;
@@ -82,18 +88,19 @@ public sealed partial class ConnectionsPage : UserControl, IPage
         var lan = hosts.Any(h => h.Name is null && ScopeOf(h) == Scope.Lan)
             ? (await Service.Call<List<DeviceInfo>>("devices")).GroupBy(d => d.Ip).ToDictionary(g => g.Key, g => DeviceLabel.For(g.MaxBy(d => d.LastSeen)!))
             : [];
-        Hosts.ItemsSource = hosts.Select(h =>
+        if (changed) _hosts.Sync([]); // another app's hosts: start the list afresh rather than morph it
+        _hosts.Sync(hosts.Select(h =>
         {
             var scope = ScopeOf(h);
             var name = h.Name ?? (scope == Scope.Lan ? lan.GetValueOrDefault(h.Ip) ?? "Device on your network" : h.Ip);
             return new HostRow(name, h.Ip, Fmt.Bytes(h.In), Fmt.Bytes(h.Out), Fmt.Ago(h.LastSeen));
-        }).ToList();
+        }).ToList());
         NoHosts.Visibility = hosts.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
     }
 
     private async void OnBlock(object sender, RoutedEventArgs e)
     {
-        if (Apps.SelectedItem is not ConnApp app) return;
+        if (Apps.SelectedItem is not ConnItem { Row: var app }) return;
         var block = !app.Blocked;
         BlockButton.IsEnabled = false;
         try

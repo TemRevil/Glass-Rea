@@ -188,7 +188,8 @@
                 </Grid>
 
                 <!-- Appearance -->
-                <Grid x:Name="AppearanceSection" VerticalAlignment="Top" Visibility="Collapsed">
+                <Grid x:Name="AppearanceSection" VerticalAlignment="Top" RowSpacing="12" Visibility="Collapsed">
+                    <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
                     <Border Style="{StaticResource Card}">
                         <StackPanel Spacing="10">
                             <StackPanel Orientation="Horizontal" Spacing="8"><FontIcon Glyph="&#xE790;" FontSize="15" /><TextBlock Text="Appearance" Style="{StaticResource CardTitle}" /></StackPanel>
@@ -213,25 +214,22 @@
                                     </ItemsRepeater>
                                 </StackPanel>
                             </Border>
-                            <Grid ColumnSpacing="10">
-                                <Grid.ColumnDefinitions><ColumnDefinition /><ColumnDefinition /></Grid.ColumnDefinitions>
-                                <Border Style="{StaticResource Row}">
-                                    <StackPanel Spacing="4">
-                                        <Grid><TextBlock Text="Blur" /><TextBlock x:Name="BlurValue" HorizontalAlignment="Right" FontWeight="SemiBold" /></Grid>
-                                        <TextBlock Text="How much the glass softens what's behind it" Style="{StaticResource Caption}" />
-                                        <Slider x:Name="BlurSlider" Minimum="0" Maximum="100" StepFrequency="1" ValueChanged="OnBlur" AutomationProperties.Name="Blur amount" />
-                                    </StackPanel>
-                                </Border>
-                                <Border Grid.Column="1" Style="{StaticResource Row}">
-                                    <StackPanel Spacing="4">
-                                        <Grid><TextBlock Text="Glass" /><TextBlock x:Name="GlassValue" HorizontalAlignment="Right" FontWeight="SemiBold" /></Grid>
-                                        <TextBlock Text="From solid surfaces to clear glass" Style="{StaticResource Caption}" />
-                                        <Slider x:Name="GlassSlider" Minimum="0" Maximum="100" StepFrequency="1" ValueChanged="OnGlass" AutomationProperties.Name="Glass clarity" />
-                                    </StackPanel>
-                                </Border>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- The glass: the tab bar, the rate chip and the chart readouts. Rows are built in code (SettingsPage.xaml.cs). -->
+                    <Border Grid.Row="1" Style="{StaticResource Card}">
+                        <StackPanel Spacing="10">
+                            <Grid ColumnSpacing="12">
+                                <Grid.ColumnDefinitions><ColumnDefinition /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                                <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center"><FontIcon Glyph="&#xE81E;" FontSize="15" /><TextBlock Text="Glass" Style="{StaticResource CardTitle}" /></StackPanel>
+                                <Button x:Name="ResetGlassButton" Grid.Column="1" Content="Reset glass" Click="OnResetGlass" />
+                            </Grid>
+                            <Grid x:Name="GlassGrid" ColumnSpacing="10" RowSpacing="10">
+                                <Grid.ColumnDefinitions><ColumnDefinition /><ColumnDefinition /><ColumnDefinition /></Grid.ColumnDefinitions>
                             </Grid>
                             <TextBlock x:Name="EffectsNote" Style="{StaticResource Caption}"
-                                       Text="If Transparency effects is off in Windows settings, the app stays solid whatever these say. Windows sets how strongly the window itself blurs the desktop; Blur controls the app's own glass." />
+                                       Text="If Transparency effects is off in Windows settings, the app stays solid whatever these say. Windows sets how strongly the window itself blurs the desktop; Frosting controls the app's own glass." />
                         </StackPanel>
                     </Border>
                 </Grid>

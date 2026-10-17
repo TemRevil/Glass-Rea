@@ -1,15 +1,22 @@
 using GlassRea.App.Support;
+using GlassRea.Core.Look;
 using GlassRea.Core.Protocol;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 
 namespace GlassRea.App.Pages;
 
-public sealed record AlertRow(string Title, string Body, string When, string Glyph);
+public sealed record AlertRow(long Id, string Title, string Body, string When, string Glyph);
 
 public sealed partial class AlertsPage : UserControl, IPage
 {
-    public AlertsPage() { InitializeComponent(); }
+    private readonly LiveList<AlertItem, AlertRow> _rows = new(a => a.Id);
+
+    public AlertsPage()
+    {
+        InitializeComponent();
+        List.ItemsSource = _rows;
+    }
 
     public TimeSpan RefreshEvery => TimeSpan.FromSeconds(10);
 
@@ -30,8 +37,8 @@ public sealed partial class AlertsPage : UserControl, IPage
     public async Task Refresh()
     {
         var alerts = await Service.Call<List<AlertInfo>>("alerts", afterId: 0);
-        var rows = alerts.OrderByDescending(a => a.Time).Select(a => new AlertRow(Title(a), a.Body, Fmt.DateTime(a.Time), Glyph(a.Kind))).ToList();
-        if (List.ItemsSource is not List<AlertRow> old || !old.SequenceEqual(rows)) List.ItemsSource = rows;
+        var rows = alerts.OrderByDescending(a => a.Time).Select(a => new AlertRow(a.Id, Title(a), a.Body, Fmt.DateTime(a.Time), Glyph(a.Kind))).ToList();
+        _rows.Sync(rows);
         CountText.Text = rows.Count.ToString(System.Globalization.CultureInfo.InvariantCulture);
         Empty.Visibility = rows.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
     }

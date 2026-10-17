@@ -1,4 +1,5 @@
 using GlassRea.App.Support;
+using GlassRea.Core.Look;
 using GlassRea.Core.Protocol;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
@@ -13,7 +14,13 @@ public sealed record DeviceRow(string Name, string Note, string Glyph, string Os
 /// <summary>Everything seen on the Wi-Fi: the router, this PC, phones, TVs. A new one raises an alert.</summary>
 public sealed partial class DevicesPage : UserControl, IPage
 {
-    public DevicesPage() { InitializeComponent(); }
+    private readonly LiveList<DeviceItem, DeviceRow> _rows = new(d => (d.Mac, d.Ip));
+
+    public DevicesPage()
+    {
+        InitializeComponent();
+        List.ItemsSource = _rows;
+    }
 
     public TimeSpan RefreshEvery => TimeSpan.FromSeconds(20);
 
@@ -43,7 +50,7 @@ public sealed partial class DevicesPage : UserControl, IPage
                     d.Ip, d.Mac, $"First seen {Fmt.Date(d.FirstSeen)}", $"Last seen {Fmt.Ago(d.LastSeen)}", d.LastSeen < recent ? 0.55 : 1,
                     d.CustomName ?? "", DeviceLabel.For(d with { CustomName = null }));
             }).ToList();
-        List.ItemsSource = rows;
+        _rows.Sync(rows);
     }
 
     /// <summary>Segoe Fluent Icons for each kind of device.</summary>
@@ -71,7 +78,7 @@ public sealed partial class DevicesPage : UserControl, IPage
     /// <summary>Your own name for a device, kept by the service; blank goes back to the name it gives itself.</summary>
     private void OnRename(object sender, RoutedEventArgs e)
     {
-        if (sender is not Button { Tag: DeviceRow row } button) return;
+        if (sender is not Button { Tag: DeviceItem { Row: var row } } button) return;
         var box = new TextBox
         {
             Header = "Name", Text = row.Custom, PlaceholderText = row.Own, MaxLength = DeviceLabel.MaxNameLength, Width = 240,

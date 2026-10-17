@@ -15,12 +15,12 @@
                 <ContentPresenter x:Name="PickerHost" Margin="6,0" HorizontalAlignment="Left" />
                 <ListView x:Name="Apps" Grid.Row="1" SelectionMode="Single" SelectionChanged="OnApp" Padding="0,0,0,84">
                     <ListView.ItemTemplate>
-                        <DataTemplate x:DataType="p:ConnApp">
+                        <DataTemplate x:DataType="p:ConnItem">
                             <Grid ColumnSpacing="10" Padding="0,7">
                                 <Grid.ColumnDefinitions><ColumnDefinition Width="Auto" /><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
-                                <c:AppIconView AppPath="{x:Bind Path}" AppName="{x:Bind Name}" />
-                                <TextBlock Grid.Column="1" Text="{x:Bind Name}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
-                                <TextBlock Grid.Column="2" Text="{x:Bind Total}" Style="{StaticResource Caption}" VerticalAlignment="Center" />
+                                <c:AppIconView AppPath="{x:Bind Row.Path, Mode=OneWay}" AppName="{x:Bind Row.Name, Mode=OneWay}" />
+                                <TextBlock Grid.Column="1" Text="{x:Bind Row.Name, Mode=OneWay}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                                <TextBlock Grid.Column="2" Text="{x:Bind Row.Total, Mode=OneWay}" Style="{StaticResource Caption}" VerticalAlignment="Center" />
                             </Grid>
                         </DataTemplate>
                     </ListView.ItemTemplate>
@@ -60,16 +60,16 @@
                     </Grid>
                     <ListView x:Name="Hosts" Grid.Row="2" SelectionMode="None" Padding="0,0,0,84">
                         <ListView.ItemTemplate>
-                            <DataTemplate x:DataType="p:HostRow">
+                            <DataTemplate x:DataType="p:HostItem">
                                 <Grid Padding="0,6" ColumnSpacing="12">
                                     <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="100" /><ColumnDefinition Width="100" /><ColumnDefinition Width="100" /></Grid.ColumnDefinitions>
                                     <StackPanel>
-                                        <TextBlock Text="{x:Bind Name}" TextTrimming="CharacterEllipsis" IsTextSelectionEnabled="True" />
-                                        <TextBlock Text="{x:Bind Ip}" Style="{StaticResource Caption}" FontFamily="Cascadia Mono, Consolas" IsTextSelectionEnabled="True" />
+                                        <TextBlock Text="{x:Bind Row.Name, Mode=OneWay}" TextTrimming="CharacterEllipsis" IsTextSelectionEnabled="True" />
+                                        <TextBlock Text="{x:Bind Row.Ip, Mode=OneWay}" Style="{StaticResource Caption}" FontFamily="Cascadia Mono, Consolas" IsTextSelectionEnabled="True" />
                                     </StackPanel>
-                                    <TextBlock Grid.Column="1" Text="{x:Bind Down}" HorizontalAlignment="Right" VerticalAlignment="Center" />
-                                    <TextBlock Grid.Column="2" Text="{x:Bind Up}" HorizontalAlignment="Right" VerticalAlignment="Center" />
-                                    <TextBlock Grid.Column="3" Text="{x:Bind Seen}" Style="{StaticResource Caption}" HorizontalAlignment="Right" VerticalAlignment="Center" />
+                                    <TextBlock Grid.Column="1" Text="{x:Bind Row.Down, Mode=OneWay}" HorizontalAlignment="Right" VerticalAlignment="Center" />
+                                    <TextBlock Grid.Column="2" Text="{x:Bind Row.Up, Mode=OneWay}" HorizontalAlignment="Right" VerticalAlignment="Center" />
+                                    <TextBlock Grid.Column="3" Text="{x:Bind Row.Seen, Mode=OneWay}" Style="{StaticResource Caption}" HorizontalAlignment="Right" VerticalAlignment="Center" />
                                 </Grid>
                             </DataTemplate>
                         </ListView.ItemTemplate>

@@ -20,7 +20,10 @@ namespace GlassRea.App.Controls;
 /// sends a glow out from the touch point.
 /// Windows' compositor can't displace pixels, so the refraction is built from <see cref="GlassLens.Levels"/> copies of
 /// the blurred backdrop, each magnified so the edge samples one step further in, and each masked to the part of the
-/// bezel whose computed shift reaches that step; neighbouring steps blend, so the bend reads as continuous.
+/// bezel whose computed shift reaches that step; neighbouring steps blend, so the bend reads as continuous. With
+/// chromatic aberration on, each step is three copies, one per colour, each magnified by its own colour's shift and
+/// added back together, so the rim fringes the way a prism does. Settings > Appearance > Glass sets the optics
+/// (<see cref="Appearance.Optics"/>), the tint, and how round the corners are.
 /// The blur samples a live copy of <see cref="BlurSource"/> (Windows' backdrop brush can't see through to the
 /// window material and renders a pale wash instead). Used only for the navigation layer, never glass on glass.
 /// </summary>
@@ -47,20 +50,34 @@ public sealed class Glass : ContentControl
     private Border? _backdrop, _rimHost;
     private Canvas? _glow;
     private Ellipse? _spot;
+    private Visual? _spotVisual;
     private RadialGradientBrush? _spotBrush;
     private SpriteVisual? _sprite, _rim;
+    private ContainerVisual? _layers;
     private CompositionEffectBrush? _brush;
     private CompositionRoundedRectangleGeometry? _shape;
     private CompositionVisualSurface? _surface, _blurred;
-    private readonly List<(SpriteVisual Sprite, CompositionSurfaceBrush Copy, CompositionMaskBrush Mask)> _bands = [];
-    private (float Radius, float Scale, bool Dark) _lensFor;
-    private bool _capsule;
+    private CompositionMaskBrush? _body, _wash;
+    private CompositionColorBrush? _washColour;
+    private CompositionEffectFactory? _split;
+    private readonly List<Band> _bands = [];
+    private (float Radius, float Scale, bool Dark, Core.Look.LiquidGlass Optics) _lensFor;
+    private bool _capsule, _designKnown;
+    private double _design;
+
+    /// <summary>One refraction step: a copy of the blurred backdrop per colour, and the mask that places the step.</summary>
+    private sealed record Band(SpriteVisual Sprite, CompositionSurfaceBrush Red, CompositionSurfaceBrush Green,
+        CompositionSurfaceBrush Blue, CompositionMaskBrush Mask)
+    {
+        public CompositionEffectBrush? Split { get; set; }
+    }
 
     public Glass()
     {
         Loaded += (_, _) =>
         {
             Build();
+            OnAppearance(); // the look may have changed while this glass was off screen
             Appearance.Changed += OnAppearance;
             GlassLens.Lost += OnLensLost;
             LayoutUpdated += Track;
@@ -73,9 +90,8 @@ public sealed class Glass : ContentControl
             CompositionTarget.Rendering -= OnTweenFrame;
         };
         SizeChanged += (_, _) => Resize();
-        PointerEntered += OnPointerEntered;
-        PointerMoved += OnPointerMoved;
-        PointerExited += (_, _) => { if (_spot is not null) _spot.Opacity = 0; };
+        PointerEntered += (_, _) => FadeSpot(true);
+        PointerExited += (_, _) => FadeSpot(false);
         AddHandler(PointerPressedEvent, new PointerEventHandler(OnPointerPressed), true);
         AddHandler(PointerReleasedEvent, new PointerEventHandler((_, _) => Squeeze(false)), true);
         AddHandler(PointerCaptureLostEvent, new PointerEventHandler((_, _) => Squeeze(false)), true);
@@ -84,6 +100,13 @@ public sealed class Glass : ContentControl
     protected override void OnApplyTemplate()
     {
         base.OnApplyTemplate();
+        if (!_designKnown)
+        {
+            // The radius the layout asked for; Settings' corner radius is a share of it. A huge radius means "capsule".
+            _designKnown = true;
+            _design = CornerRadius.TopLeft;
+            _capsule = _design >= 999;
+        }
         _backdrop = GetTemplateChild("Backdrop") as Border;
         _rimHost = GetTemplateChild("Rim") as Border;
         _glow = GetTemplateChild("GlowLayer") as Canvas;
@@ -102,7 +125,8 @@ public sealed class Glass : ContentControl
             Source = new CompositionEffectSourceParameter("behind"),
         };
         var saturate = new SaturationEffect { Saturation = 1.8f, Source = blur };
-        _brush = c.CreateEffectFactory(saturate, ["Blur.BlurAmount"]).CreateBrush();
+        var tint = new TintEffect { Name = "Tint", Color = Appearance.GlassTint, Source = saturate };
+        _brush = c.CreateEffectFactory(tint, ["Blur.BlurAmount", "Tint.Color"]).CreateBrush();
         _surface = c.CreateVisualSurface();
         _surface.SourceVisual = ElementCompositionPreview.GetElementVisual(BlurSource);
         var copy = c.CreateSurfaceBrush(_surface);
@@ -115,25 +139,27 @@ public sealed class Glass : ContentControl
         _sprite.Brush = _brush;
         _sprite.Clip = c.CreateGeometricClip(_shape);
 
-        // The refraction steps sample the blurred backdrop itself, so the blur runs once, not once per step.
+        // The blurred backdrop is drawn once, off screen, and everything shown samples it: the body through the glass's
+        // outline (which can fade in softly), and each refraction step magnified. So the blur runs once, not once per step.
         _blurred = c.CreateVisualSurface();
         _blurred.SourceVisual = _sprite;
-        var root = c.CreateContainerVisual();
-        root.Children.InsertAtTop(_sprite);
+        _layers = c.CreateContainerVisual();
+        _body = c.CreateMaskBrush();
+        _body.Source = Copy(c);
+        Layer(c, _body);
         for (var level = 1; level <= GlassLens.Levels; level++)
         {
-            var bandCopy = c.CreateSurfaceBrush(_blurred);
-            bandCopy.Stretch = CompositionStretch.None;
-            bandCopy.HorizontalAlignmentRatio = 0;
-            bandCopy.VerticalAlignmentRatio = 0;
             var mask = c.CreateMaskBrush();
-            mask.Source = bandCopy;
-            var band = c.CreateSpriteVisual();
-            band.Brush = mask;
-            root.Children.InsertAtTop(band);
-            _bands.Add((band, bandCopy, mask));
+            var band = new Band(Layer(c, mask), Copy(c), Copy(c), Copy(c), mask);
+            mask.Source = band.Green;
+            _bands.Add(band);
         }
-        ElementCompositionPreview.SetElementChildVisual(_backdrop, root);
+        // The milky wash over the glass, shaped by the same outline.
+        _washColour = c.CreateColorBrush(WashColour());
+        _wash = c.CreateMaskBrush();
+        _wash.Source = _washColour;
+        Layer(c, _wash);
+        ElementCompositionPreview.SetElementChildVisual(_backdrop, _layers);
 
         if (_rimHost is not null)
         {
@@ -142,6 +168,62 @@ public sealed class Glass : ContentControl
         }
         Resize();
         Track(null, null);
+    }
+
+    private SpriteVisual Layer(Compositor c, CompositionBrush brush)
+    {
+        var layer = c.CreateSpriteVisual();
+        layer.Brush = brush;
+        _layers!.Children.InsertAtTop(layer);
+        return layer;
+    }
+
+    /// <summary>A copy of the blurred backdrop, pinned to the top left so magnifying it about the centre lines up.</summary>
+    private CompositionSurfaceBrush Copy(Compositor c)
+    {
+        var copy = c.CreateSurfaceBrush(_blurred);
+        copy.Stretch = CompositionStretch.None;
+        copy.HorizontalAlignmentRatio = 0;
+        copy.VerticalAlignmentRatio = 0;
+        return copy;
+    }
+
+    private static Windows.UI.Color WashColour() =>
+        Application.Current.Resources["GlassTintBrush"] is SolidColorBrush b ? b.Color : Microsoft.UI.Colors.Transparent;
+
+    /// <summary>
+    /// Adds a red-only, a green-only and a blue-only copy back together. The split works on the raw premultiplied
+    /// values (straight alpha mode, so nothing is divided by alpha) and only the red copy keeps the alpha, so the sum
+    /// is the glass's own colour and alpha again.
+    /// </summary>
+    private CompositionEffectBrush SplitBrush(Band band)
+    {
+        var c = band.Sprite.Compositor;
+        _split ??= c.CreateEffectFactory(new ArithmeticCompositeEffect
+        {
+            MultiplyAmount = 0, Source1Amount = 1, Source2Amount = 1, Offset = 0, ClampOutput = true,
+            Source1 = new ArithmeticCompositeEffect
+            {
+                MultiplyAmount = 0, Source1Amount = 1, Source2Amount = 1, Offset = 0, ClampOutput = true,
+                Source1 = Only("r", 0), Source2 = Only("g", 1),
+            },
+            Source2 = Only("b", 2),
+        });
+        var brush = _split.CreateBrush();
+        brush.SetSourceParameter("r", band.Red);
+        brush.SetSourceParameter("g", band.Green);
+        brush.SetSourceParameter("b", band.Blue);
+        return brush;
+
+        static ColorMatrixEffect Only(string source, int channel) => new()
+        {
+            Source = new CompositionEffectSourceParameter(source),
+            AlphaMode = Microsoft.Graphics.Canvas.CanvasAlphaMode.Straight,
+            ColorMatrix = new Matrix5x4
+            {
+                M11 = channel == 0 ? 1 : 0, M22 = channel == 1 ? 1 : 0, M33 = channel == 2 ? 1 : 0, M44 = channel == 0 ? 1 : 0,
+            },
+        };
     }
 
     /// <summary>Keeps the copied region exactly under the glass as things move.</summary>
@@ -155,46 +237,77 @@ public sealed class Glass : ContentControl
 
     private void Resize()
     {
-        // A huge radius means "capsule". WinUI scales oversized radii into an ellipse, so use exactly half the height.
-        if (CornerRadius.TopLeft >= 999 || _capsule)
-        {
-            _capsule = true;
-            var half = ActualHeight / 2;
-            if (half > 0 && CornerRadius.TopLeft != half) CornerRadius = new CornerRadius(half);
-        }
-        if (_sprite is null || _shape is null || _blurred is null || ActualWidth == 0) return;
+        if (ActualWidth == 0 || ActualHeight == 0) return;
         float w = (float)ActualWidth, h = (float)ActualHeight;
+        // Settings' corner radius is a share of the design's; WinUI scales oversized radii into an ellipse, so a capsule
+        // uses exactly half the height. Never under 2, where the glass would have no rim left to draw.
+        var r = (float)Math.Max(2, Core.Look.LiquidGlass.Corner(_design, _capsule, w, h, Appearance.Roundness));
+        if (_designKnown && Math.Abs(CornerRadius.TopLeft - r) > 0.01) CornerRadius = new CornerRadius(r);
+        if (_sprite is null || _shape is null || _blurred is null || _layers is null) return;
         var size = new Vector2(w, h);
         _sprite.Size = size;
         _shape.Size = size;
         _blurred.SourceSize = size;
-        var r = (float)Math.Min(CornerRadius.TopLeft, Math.Min(w, h) / 2);
         _shape.CornerRadius = new Vector2(r, r);
         if (_rim is not null) _rim.Size = size;
-        RefreshLens(r);
+        foreach (var layer in _layers.Children) layer.Size = size;
+        var optics = Appearance.Optics;
+        RefreshLens(r, optics);
 
-        // Each step magnifies the backdrop about the centre so the edge samples its shift further in.
+        // Each step magnifies the backdrop about the centre so the edge samples its shift further in; with chromatic
+        // aberration, each colour by its own shift.
         var centre = size / 2;
+        var split = optics.Dispersion > 0;
         for (var i = 0; i < _bands.Count; i++)
         {
-            var (band, copy, _) = _bands[i];
-            band.Size = size;
-            var shift = GlassLens.StepShift(r, i + 1);
+            var band = _bands[i];
+            var (red, green, blue) = GlassLens.StepShift(optics, r, i + 1);
+            Magnify(band.Green, green);
+            if (split)
+            {
+                Magnify(band.Red, red);
+                Magnify(band.Blue, blue);
+                band.Split ??= SplitBrush(band);
+            }
+            band.Mask.Source = split ? band.Split : band.Green;
+        }
+
+        void Magnify(CompositionSurfaceBrush copy, float shift)
+        {
             copy.CenterPoint = centre;
             copy.Scale = new Vector2(centre.X / Math.Max(1, centre.X - shift), centre.Y / Math.Max(1, centre.Y - shift));
         }
     }
 
-    /// <summary>Hands out the lens images for the current radius, screen scale and theme (drawn once, then shared).</summary>
-    private void RefreshLens(float radius)
+    /// <summary>Hands out the lens images for the current radius, screen scale, theme and optics (drawn once, then shared).</summary>
+    private void RefreshLens(float radius, Core.Look.LiquidGlass optics)
     {
         var scale = (float)(XamlRoot?.RasterizationScale ?? 1);
-        var key = (MathF.Round(radius, 1), scale, Appearance.IsDark);
-        if (key == _lensFor || _sprite is null || radius < 2) return;
+        var key = (MathF.Round(radius, 1), scale, Appearance.IsDark, optics);
+        if (key == _lensFor || _sprite is null) return;
         _lensFor = key;
         var c = _sprite.Compositor;
-        for (var i = 0; i < _bands.Count; i++) _bands[i].Mask.Mask = GlassLens.Mask(c, radius, scale, i + 1);
-        if (_rim is not null) _rim.Brush = GlassLens.Rim(c, radius, scale, Appearance.IsDark);
+        var outline = GlassLens.Body(c, optics, radius, scale);
+        Release(_body?.Mask);
+        if (_body is not null) _body.Mask = outline;
+        if (_wash is not null) _wash.Mask = outline;
+        for (var i = 0; i < _bands.Count; i++)
+        {
+            Release(_bands[i].Mask.Mask);
+            _bands[i].Mask.Mask = GlassLens.Mask(c, optics, radius, scale, i + 1);
+        }
+        if (_rim is not null)
+        {
+            Release(_rim.Brush);
+            _rim.Brush = GlassLens.Rim(c, optics, radius, scale, Appearance.IsDark);
+        }
+
+        // The brushes are this glass's own (the images under them are shared and freed by GlassLens).
+        static void Release(CompositionBrush? brush)
+        {
+            if (brush is CompositionNineGridBrush grid) grid.Source?.Dispose();
+            brush?.Dispose();
+        }
     }
 
     private void OnLensLost() { _lensFor = default; Resize(); }
@@ -202,6 +315,8 @@ public sealed class Glass : ContentControl
     private void OnAppearance()
     {
         _brush?.Properties.InsertScalar("Blur.BlurAmount", Appearance.GlassBlur);
+        _brush?.Properties.InsertColor("Tint.Color", Appearance.GlassTint);
+        if (_washColour is not null) _washColour.Color = WashColour();
         if (_spotBrush is not null) SpotColours(_spotBrush);
         Resize();
     }
@@ -210,19 +325,35 @@ public sealed class Glass : ContentControl
 
     private const double SpotSize = 56;
 
-    /// <summary>A soft light about two cursors wide, trailing the pointer and fading in and out.</summary>
+    /// <summary>
+    /// A soft light about two cursors wide that sits under the pointer and fades in and out. The compositor moves it
+    /// from the pointer's own position, on its own thread, so it keeps up with the mouse however busy the app is.
+    /// </summary>
     private void BuildSpot()
     {
         if (_glow is null || _spot is not null) return;
         _spotBrush = new RadialGradientBrush();
         SpotColours(_spotBrush);
-        _spot = new Ellipse
-        {
-            Width = SpotSize, Height = SpotSize, IsHitTestVisible = false, Opacity = 0, Fill = _spotBrush,
-            OpacityTransition = new ScalarTransition { Duration = TimeSpan.FromMilliseconds(260) },
-            TranslationTransition = new Vector3Transition { Duration = TimeSpan.FromMilliseconds(140) },
-        };
+        _spot = new Ellipse { Width = SpotSize, Height = SpotSize, IsHitTestVisible = false, Fill = _spotBrush };
         _glow.Children.Add(_spot);
+        _spotVisual = ElementCompositionPreview.GetElementVisual(_spot);
+        _spotVisual.Opacity = 0;
+        ElementCompositionPreview.SetIsTranslationEnabled(_spot, true);
+        var follow = _spotVisual.Compositor.CreateExpressionAnimation("Vector3(pointer.Position.X - half, pointer.Position.Y - half, 0)");
+        follow.SetReferenceParameter("pointer", ElementCompositionPreview.GetPointerPositionPropertySet(_glow));
+        follow.SetScalarParameter("half", (float)SpotSize / 2);
+        _spotVisual.StartAnimation("Translation", follow);
+    }
+
+    private void FadeSpot(bool on)
+    {
+        if (_spotVisual is null) return;
+        var c = _spotVisual.Compositor;
+        if (!Motion.Enabled) { _spotVisual.StopAnimation("Opacity"); _spotVisual.Opacity = on ? 1 : 0; return; }
+        var a = c.CreateScalarKeyFrameAnimation();
+        a.InsertKeyFrame(1, on ? 1 : 0);
+        a.Duration = TimeSpan.FromMilliseconds(on ? 200 : 320);
+        _spotVisual.StartAnimation("Opacity", a);
     }
 
     private static void SpotColours(RadialGradientBrush b)
@@ -234,29 +365,6 @@ public sealed class Glass : ContentControl
         b.GradientStops.Add(new GradientStop { Offset = 1, Color = Appearance.WithAlpha(Microsoft.UI.Colors.White, 0) });
     }
 
-    private Vector3 SpotAt(PointerRoutedEventArgs e)
-    {
-        var p = e.GetCurrentPoint(_glow).Position;
-        return new Vector3((float)(p.X - SpotSize / 2), (float)(p.Y - SpotSize / 2), 0);
-    }
-
-    private void OnPointerEntered(object sender, PointerRoutedEventArgs e)
-    {
-        if (_spot is null) return;
-        // Appear where the pointer came in, not slide over from where it last left.
-        var move = _spot.TranslationTransition;
-        _spot.TranslationTransition = null;
-        _spot.Translation = SpotAt(e);
-        _spot.TranslationTransition = move;
-        _spot.Opacity = 1;
-    }
-
-    private void OnPointerMoved(object sender, PointerRoutedEventArgs e)
-    {
-        if (_spot is null) return;
-        if (!Motion.Enabled) _spot.TranslationTransition = null;
-        _spot.Translation = SpotAt(e);
-    }
 
     private void OnPointerPressed(object sender, PointerRoutedEventArgs e)
     {

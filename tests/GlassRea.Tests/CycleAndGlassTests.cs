@@ -88,6 +88,8 @@ public class CycleTests
 
 public class LiquidGlassTests
 {
+    private static readonly LiquidGlass G = LiquidGlass.Default;
+
     [Fact]
     public void SquircleProfileRisesSteeplyAndFlattens()
     {
@@ -103,21 +105,21 @@ public class LiquidGlassTests
     public void SnellsLawWithCrownGlass()
     {
         // sin(θt) = sin(θi) / 1.5
-        Assert.Equal(Math.Asin(Math.Sin(0.7) / 1.5), LiquidGlass.Refracted(0.7), 12);
-        Assert.Equal(0.04, LiquidGlass.F0, 6);
-        Assert.Equal(0.04, LiquidGlass.Fresnel(1), 6);  // straight on
-        Assert.Equal(1, LiquidGlass.Fresnel(0), 6);     // grazing
+        Assert.Equal(Math.Asin(Math.Sin(0.7) / 1.5), G.Refracted(0.7), 12);
+        Assert.Equal(0.04, G.F0, 6);
+        Assert.Equal(0.04, G.Fresnel(1), 6);  // straight on
+        Assert.Equal(1, G.Fresnel(0), 6);     // grazing
     }
 
     [Fact]
     public void RefractionShiftMatchesTheWorkedNumbers()
     {
         // B = T = 12, slab 6 (see the summary on LiquidGlass).
-        Assert.Equal(7.34, LiquidGlass.Shift(1, 12), 2);
-        Assert.Equal(4.69, LiquidGlass.Shift(2, 12), 2);
-        Assert.Equal(1.27, LiquidGlass.Shift(5, 12), 2);
-        Assert.True(LiquidGlass.Shift(9, 12) < 0.1);
-        Assert.Equal(0, LiquidGlass.Shift(12, 12));
+        Assert.Equal(7.34, G.Shift(1, 12), 2);
+        Assert.Equal(4.69, G.Shift(2, 12), 2);
+        Assert.Equal(1.27, G.Shift(5, 12), 2);
+        Assert.True(G.Shift(9, 12) < 0.1);
+        Assert.Equal(0, G.Shift(12, 12));
     }
 
     [Fact]
@@ -126,7 +128,7 @@ public class LiquidGlassTests
         var last = double.MaxValue;
         for (var d = 0.5; d <= 12; d += 0.5)
         {
-            var s = LiquidGlass.Shift(d, 12);
+            var s = G.Shift(d, 12);
             Assert.True(s <= last, $"shift grew at d={d}");
             last = s;
         }
@@ -135,12 +137,78 @@ public class LiquidGlassTests
     [Fact]
     public void RimIsBrightTopLeftWithAWeakerGlintBottomRight()
     {
-        double Peak(double nx, double ny) => Enumerable.Range(1, 40).Max(i => LiquidGlass.Rim(nx, ny, i * 0.1, 12, 1));
+        double Peak(double nx, double ny) => Enumerable.Range(1, 40).Max(i => G.Rim(nx, ny, i * 0.1, 12, 1));
         var top = Peak(0, -1);
         var bottom = Peak(0, 1);
         var left = Peak(-1, 0);
         Assert.True(top > bottom && bottom > 0, $"top {top}, bottom {bottom}");
         Assert.True(top > left, $"top {top}, left {left}");
-        Assert.Equal(0, LiquidGlass.Rim(0, -1, 12, 12, 1)); // flat glass reflects nothing extra
+        Assert.Equal(0, G.Rim(0, -1, 12, 12, 1)); // flat glass reflects nothing extra
+    }
+
+    [Fact]
+    public void DenserGlassBendsFurtherAndReflectsMore()
+    {
+        var diamondish = G with { Ior = 2.0 };
+        Assert.True(diamondish.Shift(1, 12) > G.Shift(1, 12) * 1.3, $"{diamondish.Shift(1, 12)} vs {G.Shift(1, 12)}");
+        Assert.Equal(1.0 / 9, diamondish.F0, 6); // ((2 - 1) / (2 + 1))^2
+    }
+
+    [Fact]
+    public void ThickerGlassBendsFurther()
+    {
+        Assert.True((G with { Thickness = 2 }).Shift(1, 12) > G.Shift(1, 12) * 1.5);
+        Assert.True((G with { Thickness = 0.3 }).Shift(1, 12) < G.Shift(1, 12) * 0.5);
+    }
+
+    [Fact]
+    public void ColoursOnlySplitWithDispersion()
+    {
+        var (r, g, b) = G.ChannelShifts(12, 8, 8);
+        Assert.Equal(g, r);
+        Assert.Equal(g, b);
+        Assert.Equal(G.MaxShift(12), g, 9);
+
+        var prism = G with { Dispersion = 1 };
+        for (var level = 1; level <= 8; level++)
+        {
+            (r, g, b) = prism.ChannelShifts(12, level, 8);
+            Assert.Equal(G.MaxShift(12) / 8 * level, g, 9);
+            Assert.True(r < g * 0.8 && b > g * 1.2, $"level {level}: r {r}, g {g}, b {b}"); // blue bends most
+        }
+        Assert.True(prism.IorFor(0.45) > prism.Ior && prism.IorFor(0.65) < prism.Ior);
+        Assert.True((G with { Ior = 1.1, Dispersion = 1 }).IorFor(0.65) >= 1.01); // never thinner than air
+    }
+
+    [Fact]
+    public void LightStrengthAndShininessShapeTheRim()
+    {
+        // Partway round the top-left, off the highlight's peak.
+        double At(LiquidGlass g) => g.Rim(-0.5, -0.87, 2, 12, 0.5);
+        Assert.Equal(0, (G with { LightStrength = 0 }).Rim(0, -1, 1, 12, 1));
+        Assert.Equal(At(G) * 2, At(G with { LightStrength = 2 }), 9);
+        Assert.True(At(G with { Shininess = 100 }) < At(G), "a sharper highlight falls off sooner");
+    }
+
+    [Fact]
+    public void SoftEdgesFadeInFromTheRim()
+    {
+        Assert.Equal(1, G.Coverage(-1, 20));
+        Assert.Equal(0.5, G.Coverage(0, 20));
+        Assert.Equal(0, G.Coverage(1, 20));
+        var soft = G with { Softness = 0.5 };
+        Assert.Equal(0.5, soft.Coverage(-5, 20), 9); // halfway through the 10 px fade
+        Assert.Equal(1, soft.Coverage(-10, 20));
+        Assert.True(soft.Coverage(-2, 20) < 0.2);
+    }
+
+    [Fact]
+    public void CornerRadiusIsAShareOfTheDesignsOwn()
+    {
+        Assert.Equal(23, LiquidGlass.Corner(999, true, 300, 46, 1));
+        Assert.Equal(11.5, LiquidGlass.Corner(999, true, 300, 46, 0.5));
+        Assert.Equal(8, LiquidGlass.Corner(16, false, 120, 40, 0.5));
+        Assert.Equal(10, LiquidGlass.Corner(16, false, 120, 20, 1)); // never more than half the shorter side
+        Assert.Equal(0, LiquidGlass.Corner(16, false, 120, 40, 0));
     }
 }

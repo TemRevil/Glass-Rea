@@ -38,6 +38,7 @@
     <!-- Same look as the app: its palettes, theme handling, window glass and logo. -->
     <Compile Include="..\GlassRea.App\Support\Appearance.cs" Link="Shared\Appearance.cs" />
     <Compile Include="..\GlassRea.App\Controls\LogoMark.cs" Link="Shared\LogoMark.cs" />
+    <Compile Include="..\GlassRea.Core\Look\LiquidGlass.cs" Link="Shared\LiquidGlass.cs" />
     <Content Include="..\GlassRea.App\Assets\app.ico" Link="Assets\app.ico" CopyToOutputDirectory="PreserveNewest" />
     <EmbeddedResource Include="$(PayloadZip)" LogicalName="payload.zip" Condition="Exists('$(PayloadZip)')" />
   </ItemGroup>

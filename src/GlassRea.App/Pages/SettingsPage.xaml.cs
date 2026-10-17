@@ -44,6 +44,7 @@ public sealed partial class SettingsPage : UserControl, IPage
         ThemePick.SetItems("System", "Light", "Dark");
         ThemePick.SelectionChanged += i => Appearance.Update(s => s.Theme = (ThemeChoice)i);
         Swatches.ItemsSource = Appearance.Palettes.Select(Swatch).ToList();
+        BuildGlassControls();
         ShowAppearance();
         Unloaded += (_, _) => Appearance.Changed -= ShowAppearance;
         Loaded += (_, _) => { ShowAppearance(); Appearance.Changed += ShowAppearance; };
@@ -262,10 +263,16 @@ public sealed partial class SettingsPage : UserControl, IPage
             b.BorderBrush = on ? (Brush)Application.Current.Resources["AccentBrush"] : (Brush)Application.Current.Resources["CardStrokeBrush"];
         }
         Swatches.Opacity = s.FollowWindowsAccent ? 0.45 : 1;
-        if ((int)BlurSlider.Value != s.Blur) BlurSlider.Value = s.Blur;
-        if ((int)GlassSlider.Value != s.Glass) GlassSlider.Value = s.Glass;
-        BlurValue.Text = s.Blur.ToString(CultureInfo.InvariantCulture);
-        GlassValue.Text = s.Glass.ToString(CultureInfo.InvariantCulture);
+        foreach (var (def, slider, value) in _glassRows)
+        {
+            var v = def.Get(s);
+            if ((int)Math.Round(slider.Value) != v) slider.Value = v;
+            value.Text = def.Show(v);
+        }
+        var tint = Appearance.ParseTint(s.TintColor) ?? Microsoft.UI.Colors.White;
+        _tintSwatch!.Fill = new SolidColorBrush(tint);
+        _tintHex!.Text = s.TintColor;
+        if (_tintPicker!.Color != tint) _tintPicker.Color = tint;
         EffectsNote.Opacity = Appearance.EffectsEnabled ? 0.8 : 1;
         _loading = false;
     }
@@ -275,15 +282,109 @@ public sealed partial class SettingsPage : UserControl, IPage
         if (!_loading) Appearance.Update(s => s.FollowWindowsAccent = FollowBox.IsOn);
     }
 
-    private void OnBlur(object sender, RangeBaseValueChangedEventArgs e)
+    /// <summary>One glass slider: what it's called, what it does, its range, and how it reads and writes the setting.</summary>
+    private sealed record GlassSetting(string Label, string Caption, int Min, int Max,
+        Func<AppearanceState, int> Get, Action<AppearanceState, int> Set, Func<int, string> Show);
+
+    private readonly List<(GlassSetting Def, Slider Slider, TextBlock Value)> _glassRows = [];
+    private Rectangle? _tintSwatch;
+    private TextBlock? _tintHex;
+    private ColorPicker? _tintPicker;
+
+    private static string Number(int v) => v.ToString(CultureInfo.InvariantCulture);
+    private static string Percent(int v) => $"{Number(v)}%";
+
+    /// <summary>The same controls as RealGlass's, in its order (Frosting is Blur, Glass opacity the inverse of Glass).</summary>
+    private static readonly GlassSetting[] GlassSettings =
+    [
+        new("Chromatic aberration", "Splits light into its colours at the edge, like a prism", 0, 100,
+            s => s.Aberration, (s, v) => s.Aberration = v, Number),
+        new("Frosting", "How much the glass softens what's behind it", 0, 100, s => s.Blur, (s, v) => s.Blur = v, Number),
+        new("Glass opacity", "How solid the glass and the cards are", 0, 100,
+            s => 100 - s.Glass, (s, v) => s.Glass = 100 - v, Percent),
+        new("Light strength", "How brightly the edge catches the light", 0, 300, s => s.Light, (s, v) => s.Light = v, Percent),
+        new("Edge smoothness", "How softly the glass fades in at its edge", 0, 100, s => s.Softness, (s, v) => s.Softness = v, Percent),
+        new("Refraction index", "How strongly the edge bends what's behind it. Glass is 1.50, diamond 2.42", 110, 250,
+            s => s.Ior, (s, v) => s.Ior = v, v => (v / 100.0).ToString("0.00", CultureInfo.InvariantCulture)),
+        new("Corner radius", "How round the corners are, as a share of each shape's own", 0, 100,
+            s => s.Corners, (s, v) => s.Corners = v, Percent),
+        new("Specular shininess", "Higher makes the highlight smaller and sharper", 1, 100,
+            s => s.Shininess, (s, v) => s.Shininess = v, Number),
+        new("Thickness", "How tall the edge stands. Thicker glass bends light further", 10, 300,
+            s => s.Thickness, (s, v) => s.Thickness = v, Percent),
+        new("Tint strength", "How much the tint colour shows", 0, 100, s => s.Tint, (s, v) => s.Tint = v, Percent),
+    ];
+
+    private void BuildGlassControls()
     {
-        if (!_loading) Appearance.Update(s => s.Blur = (int)Math.Round(e.NewValue));
+        var cells = GlassSettings.Select(GlassRow).ToList();
+        cells.Insert(cells.Count - 1, TintColourRow()); // the colour sits just before its strength
+        for (var i = 0; i < cells.Count; i++)
+        {
+            if (i % 3 == 0) GlassGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+            Grid.SetRow(cells[i], i / 3);
+            Grid.SetColumn(cells[i], i % 3);
+            GlassGrid.Children.Add(cells[i]);
+        }
     }
 
-    private void OnGlass(object sender, RangeBaseValueChangedEventArgs e)
+    private Border GlassRow(GlassSetting def)
     {
-        if (!_loading) Appearance.Update(s => s.Glass = (int)Math.Round(e.NewValue));
+        var value = new TextBlock { HorizontalAlignment = HorizontalAlignment.Right, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold };
+        var slider = new Slider { Minimum = def.Min, Maximum = def.Max, StepFrequency = 1 };
+        AutomationProperties.SetName(slider, def.Label);
+        slider.ValueChanged += (_, e) =>
+        {
+            if (!_loading) Appearance.Update(s => def.Set(s, (int)Math.Round(e.NewValue)));
+        };
+        _glassRows.Add((def, slider, value));
+        return Cell(def.Label, def.Caption, value, slider);
     }
+
+    private Border TintColourRow()
+    {
+        _tintSwatch = new Rectangle
+        {
+            Width = 18, Height = 18, RadiusX = 9, RadiusY = 9, StrokeThickness = 1,
+            Stroke = new SolidColorBrush(Appearance.WithAlpha(Microsoft.UI.Colors.Gray, 0.35)),
+        };
+        _tintHex = new TextBlock { VerticalAlignment = VerticalAlignment.Center };
+        _tintPicker = new ColorPicker
+        {
+            IsAlphaEnabled = false, IsMoreButtonVisible = false, IsColorSliderVisible = true,
+            IsColorChannelTextInputVisible = false, IsHexInputVisible = true, ColorSpectrumShape = ColorSpectrumShape.Ring,
+        };
+        _tintPicker.ColorChanged += (_, e) =>
+        {
+            if (!_loading) Appearance.Update(s => s.TintColor = Appearance.ToHex(e.NewColor));
+        };
+        var pick = new Button
+        {
+            Content = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, Children = { _tintSwatch, _tintHex } },
+            Flyout = new Flyout { Content = _tintPicker },
+            HorizontalAlignment = HorizontalAlignment.Stretch,
+            HorizontalContentAlignment = HorizontalAlignment.Left,
+        };
+        AutomationProperties.SetName(pick, "Tint colour");
+        return Cell("Tint colour", "What the glass is tinted with", null, pick);
+    }
+
+    private static Border Cell(string label, string caption, TextBlock? value, FrameworkElement control)
+    {
+        var title = new Grid { Children = { new TextBlock { Text = label } } };
+        if (value is not null) title.Children.Add(value);
+        return new Border
+        {
+            Style = (Style)Application.Current.Resources["Row"],
+            Child = new StackPanel
+            {
+                Spacing = 4,
+                Children = { title, new TextBlock { Text = caption, Style = (Style)Application.Current.Resources["Caption"] }, control },
+            },
+        };
+    }
+
+    private void OnResetGlass(object sender, RoutedEventArgs e) => Appearance.Update(s => s.ResetGlass());
 
     // ---------- service settings (saved to the service as you change them) ----------
 

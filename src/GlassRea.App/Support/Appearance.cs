@@ -1,4 +1,6 @@
+using System.Globalization;
 using System.Text.Json;
+using GlassRea.Core.Look;
 using Microsoft.UI;
 using Microsoft.UI.Composition.SystemBackdrops;
 using Microsoft.UI.Xaml;
@@ -15,14 +17,41 @@ public sealed record PaletteDef(string Key, string Name,
     Color LightAccent, Color LightUp, Color DarkAccent, Color DarkUp,
     Color LightHueA, Color LightHueB, Color DarkHueA, Color DarkHueB);
 
-/// <summary>What Settings > Appearance stores. Blur and Glass run 0..100.</summary>
+/// <summary>What Settings > Appearance stores. The defaults are the look the app ships with.</summary>
 public sealed class AppearanceState
 {
     public ThemeChoice Theme { get; set; } = ThemeChoice.System;
     public bool FollowWindowsAccent { get; set; }
     public string Palette { get; set; } = "blue";
+    /// <summary>0..100, shown as Frosting.</summary>
     public int Blur { get; set; } = 60;
+    /// <summary>0..100, how clear the glass and cards are; shown inverted, as Glass opacity.</summary>
     public int Glass { get; set; } = 65;
+    /// <summary>0..100: how far the colours split at the rim.</summary>
+    public int Aberration { get; set; }
+    /// <summary>Percent of the rim's usual light, 0..300.</summary>
+    public int Light { get; set; } = 100;
+    /// <summary>Highlight exponent, 1..100.</summary>
+    public int Shininess { get; set; } = 28;
+    /// <summary>Refractive index in hundredths, 110..250.</summary>
+    public int Ior { get; set; } = 150;
+    /// <summary>Percent of the rim's usual height, 10..300.</summary>
+    public int Thickness { get; set; } = 100;
+    /// <summary>0..100: how far in from the edge the glass fades in, as a share of its corner radius.</summary>
+    public int Softness { get; set; }
+    /// <summary>Percent of each glass's own corner radius, 0..100.</summary>
+    public int Corners { get; set; } = 100;
+    public string TintColor { get; set; } = "#FFFFFF";
+    /// <summary>0..100.</summary>
+    public int Tint { get; set; }
+
+    /// <summary>Puts every glass setting back as shipped; theme and accent stay.</summary>
+    public void ResetGlass()
+    {
+        var d = new AppearanceState();
+        (Blur, Glass, Aberration, Light, Shininess, Ior, Thickness, Softness, Corners, TintColor, Tint) =
+            (d.Blur, d.Glass, d.Aberration, d.Light, d.Shininess, d.Ior, d.Thickness, d.Softness, d.Corners, d.TintColor, d.Tint);
+    }
 }
 
 /// <summary>
@@ -53,6 +82,18 @@ public static class Appearance
     /// <summary>Blur radius for the app's own glass (the tab bar, the rate chip, the chart tooltips).</summary>
     public static float GlassBlur => EffectsEnabled ? State.Blur * 0.3f : 0f;
 
+    /// <summary>The glass's optics, from the settings.</summary>
+    public static LiquidGlass Optics => new(
+        Ior: State.Ior / 100.0, Thickness: State.Thickness / 100.0, LightStrength: State.Light / 100.0,
+        Shininess: State.Shininess, Dispersion: State.Aberration / 100.0, Softness: State.Softness / 100.0);
+    /// <summary>Share of each glass's own corner radius to draw, 0..1.</summary>
+    public static double Roundness => State.Corners / 100.0;
+    /// <summary>
+    /// What the glass multiplies the backdrop by: white mixed towards the tint colour by the tint strength
+    /// (white changes nothing).
+    /// </summary>
+    public static Color GlassTint => Mix(Colors.White, ParseTint(State.TintColor) ?? Colors.White, State.Tint / 100.0);
+
     /// <summary>Raised after the look changed, on the UI thread.</summary>
     public static event Action? Changed;
 
@@ -69,6 +110,15 @@ public static class Appearance
         catch { State = new(); }
         State.Blur = Math.Clamp(State.Blur, 0, 100);
         State.Glass = Math.Clamp(State.Glass, 0, 100);
+        State.Aberration = Math.Clamp(State.Aberration, 0, 100);
+        State.Light = Math.Clamp(State.Light, 0, 300);
+        State.Shininess = Math.Clamp(State.Shininess, 1, 100);
+        State.Ior = Math.Clamp(State.Ior, 110, 250);
+        State.Thickness = Math.Clamp(State.Thickness, 10, 300);
+        State.Softness = Math.Clamp(State.Softness, 0, 100);
+        State.Corners = Math.Clamp(State.Corners, 0, 100);
+        State.Tint = Math.Clamp(State.Tint, 0, 100);
+        if (ParseTint(State.TintColor) is null) State.TintColor = "#FFFFFF";
         if (Palettes.All(p => p.Key != State.Palette)) State.Palette = "blue";
     }
 
@@ -169,9 +219,8 @@ public static class Appearance
             : WithAlpha(Colors.White, solid ? 1 : 0.88 - glass * 0.45));
         Set(res, "CardStrokeBrush", IsDark ? WithAlpha(Colors.White, 0.07) : WithAlpha(Colors.Black, 0.06));
         Set(res, "RowBrush", IsDark ? WithAlpha(Colors.White, 0.04) : WithAlpha(Colors.White, 0.55));
-        Set(res, "GlassTintBrush", IsDark
-            ? WithAlpha(Hex("#3A3A40"), solid ? 1 : 0.72 - glass * 0.55)
-            : WithAlpha(Colors.White, solid ? 1 : 0.72 - glass * 0.55));
+        var tint = GlassTint;
+        Set(res, "GlassTintBrush", WithAlpha(Multiply(IsDark ? Hex("#3A3A40") : Colors.White, tint), solid ? 1 : 0.72 - glass * 0.55));
         Set(res, "TextBrush", IsDark ? Colors.White : WithAlpha(Colors.Black, 0.894));
         Set(res, "TextSecondaryBrush", IsDark ? WithAlpha(Colors.White, 0.786) : WithAlpha(Colors.Black, 0.62));
         Set(res, "SelectedFillBrush", IsDark ? WithAlpha(Colors.White, 0.08) : WithAlpha(Colors.White, 0.85));
@@ -269,6 +318,16 @@ public static class Appearance
     {
         if (res[key] is SolidColorBrush b) b.Color = c;
     }
+
+    /// <summary>A "#RRGGBB" colour, or null when it isn't one.</summary>
+    public static Color? ParseTint(string? hex) =>
+        hex is { Length: 7 } && hex[0] == '#' && uint.TryParse(hex.AsSpan(1), NumberStyles.AllowHexSpecifier, CultureInfo.InvariantCulture, out var v)
+            ? Color.FromArgb(255, (byte)(v >> 16), (byte)(v >> 8), (byte)v)
+            : null;
+
+    public static string ToHex(Color c) => $"#{c.R:X2}{c.G:X2}{c.B:X2}";
+
+    private static Color Multiply(Color a, Color b) => Color.FromArgb(a.A, (byte)(a.R * b.R / 255), (byte)(a.G * b.G / 255), (byte)(a.B * b.B / 255));
 
     public static Color Hex(string hex)
     {
