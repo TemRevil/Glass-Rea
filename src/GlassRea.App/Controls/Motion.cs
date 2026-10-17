@@ -114,6 +114,24 @@ public static class Motion
         return done.Task;
     }
 
+    /// <summary>
+    /// Waits until the next frame has been drawn, so what just changed is on screen; at most a tenth of a second, as a
+    /// window that isn't showing draws no frames.
+    /// </summary>
+    public static Task NextFrame()
+    {
+        var drawn = new TaskCompletionSource();
+        var frames = 0;
+        void OnFrame(object? s, object e)
+        {
+            if (++frames < 2) return; // the frame being drawn when this is called may already be under way
+            Microsoft.UI.Xaml.Media.CompositionTarget.Rendering -= OnFrame;
+            drawn.TrySetResult();
+        }
+        Microsoft.UI.Xaml.Media.CompositionTarget.Rendering += OnFrame;
+        return Task.WhenAny(drawn.Task, Task.Delay(100));
+    }
+
     /// <summary>Waits until the element has been laid out and drawn once.</summary>
     public static async Task Rendered(UIElement e)
     {

@@ -23,9 +23,9 @@
             <Grid>
                 <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="*" /></Grid.RowDefinitions>
                 <InfoBar x:Name="ErrorBar" Severity="Error" IsOpen="False" IsClosable="True" Margin="6,4,6,8" />
-                <!-- Not virtualized: recycled rows would fire their switches with another app's state. -->
+                <!-- Virtualized: only the rows on screen are built. A recycled row's switch flips to its new app's state,
+                     which OnToggle tells apart from a click by reading the row the switch now shows. -->
                 <ListView x:Name="Apps" Grid.Row="1" SelectionMode="None" Padding="0,0,0,84">
-                    <ListView.ItemsPanel><ItemsPanelTemplate><StackPanel /></ItemsPanelTemplate></ListView.ItemsPanel>
                     <ListView.ItemTemplate>
                         <DataTemplate x:DataType="p:FirewallItem">
                             <Grid Padding="2,8" ColumnSpacing="12">
@@ -41,7 +41,7 @@
                                     <TextBlock Text="{x:Bind Row.Sub, Mode=OneWay}" Style="{StaticResource Caption}" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" />
                                 </StackPanel>
                                 <TextBlock Grid.Column="2" Text="{x:Bind Row.Total, Mode=OneWay}" Style="{StaticResource Caption}" HorizontalAlignment="Right" VerticalAlignment="Center" />
-                                <ToggleSwitch Grid.Column="3" IsOn="{x:Bind Row.Allowed, Mode=OneWay}" IsEnabled="{x:Bind Row.CanBlock, Mode=OneWay}" Tag="{x:Bind}" Toggled="OnToggle"
+                                <ToggleSwitch Grid.Column="3" IsOn="{x:Bind Row.Allowed, Mode=OneWay}" IsEnabled="{x:Bind Row.CanBlock, Mode=OneWay}" Toggled="OnToggle"
                                               OnContent="Online" OffContent="Blocked" MinWidth="0" Margin="12,0,0,0" />
                             </Grid>
                         </DataTemplate>

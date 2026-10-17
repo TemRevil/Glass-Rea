@@ -15,7 +15,7 @@ namespace GlassRea.Service;
 /// the very first scan, when everything is new). With presence alerts on, a device missing for
 /// <see cref="AwayAfter"/> seconds raises a "left" alert and its return a "back" one.
 /// </summary>
-public sealed class DeviceScanner(Database db, ServiceState state, ILogger<DeviceScanner> log) : BackgroundService
+public sealed partial class DeviceScanner(Database db, ServiceState state, ILogger<DeviceScanner> log) : BackgroundService
 {
     private static readonly string[] SkipAdapters = ["cloudflare", "warp", "vpn", "virtual", "hyper-v", "vmware", "virtualbox", "tap-", "wintun", "wireguard", "loopback", "bluetooth"];
     private readonly SemaphoreSlim _scanNow = new(0, 1);
@@ -84,6 +84,7 @@ public sealed class DeviceScanner(Database db, ServiceState state, ILogger<Devic
         var hints = db.DeviceHints();
         var network = seen.Where(d => d.Address.Equals(gateway)).Select(d => MacText(d.Mac)).FirstOrDefault();
         var presence = state.Flag(SettingKeys.AlertDevicePresence);
+        var here = seen.Select(d => MacText(d.Mac)).ToHashSet();
 
         foreach (var d in seen)
         {
@@ -99,6 +100,11 @@ public sealed class DeviceScanner(Database db, ServiceState state, ILogger<Devic
             var id = DeviceClassifier.Classify(e);
             var device = new DeviceInfo(mac, d.Address.ToString(), e.IsThisPc ? Environment.MachineName : id.Name, e.Randomized, e.IsGateway,
                 e.IsThisPc, now, now, e.Vendor, id.Model, id.Kind, id.Os, Network: network);
+            if (Previous(device, before.Values, here) is { } was)
+            {
+                db.MergeDevice(was.Mac, mac);
+                before.Remove(was.Mac); // it didn't leave: it's here under its new address
+            }
             if (db.SaveDevice(device) && !firstScan && state.Flag(SettingKeys.AlertNewDevice))
             {
                 var (title, body) = AlertText.NewDevice(DeviceLabel.For(device), device.Ip, mac);
@@ -145,6 +151,34 @@ public sealed class DeviceScanner(Database db, ServiceState state, ILogger<Devic
         }
         return changes;
     }
+
+    /// <summary>
+    /// What a device was before it took a new private address: a device that gave itself the same name, also on a
+    /// private address, on the same network, and missing from this scan. Phones change their private address now and
+    /// then and would otherwise be listed twice. Two devices that are both here are never taken for one, and neither
+    /// are two that only carry their maker's default name ("iPhone"), which many share.
+    /// </summary>
+    /// <param name="present">The hardware addresses this scan found.</param>
+    public static DeviceInfo? Previous(DeviceInfo incoming, IEnumerable<DeviceInfo> known, IReadOnlySet<string> present)
+    {
+        var name = incoming.Name?.Trim();
+        if (!incoming.Randomized || incoming.IsThisPc || string.IsNullOrEmpty(name) || IsDefaultName(name, incoming)) return null;
+        return known
+            .Where(k => k.Mac != incoming.Mac && k.Randomized && !present.Contains(k.Mac)
+                && string.Equals(k.Name?.Trim(), name, StringComparison.OrdinalIgnoreCase)
+                && (k.Network is null || incoming.Network is null || k.Network == incoming.Network))
+            .OrderByDescending(k => k.LastSeen)
+            .FirstOrDefault();
+    }
+
+    /// <summary>A name a device comes with rather than one someone gave it: "iPhone", "Galaxy S23", or what it is.</summary>
+    private static bool IsDefaultName(string name, DeviceInfo d) =>
+        string.Equals(name, DeviceLabel.What(d with { Name = null, CustomName = null }), StringComparison.OrdinalIgnoreCase)
+        || DefaultNames().IsMatch(name);
+
+    [System.Text.RegularExpressions.GeneratedRegex(@"^(iphone|ipad|ipod|apple ?watch|macbook( (air|pro))?|imac|android|galaxy[- ]?\w{0,6}|pixel[- ]?\w{0,4}|redmi[- ]?\w{0,8}|phone|tablet)$",
+        System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.CultureInvariant)]
+    private static partial System.Text.RegularExpressions.Regex DefaultNames();
 
     private static string MacText(byte[] mac) => string.Join(":", mac.Select(b => b.ToString("X2")));
 

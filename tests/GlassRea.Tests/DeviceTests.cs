@@ -280,6 +280,21 @@ public class DeviceClassifierTests
     }
 
     [Fact]
+    public void ASamsungTvIsntTakenForAPhone()
+    {
+        // Samsung makes phones too, so the maker alone says phone; what the TV calls itself has to win.
+        static (string, string?) Tv(Action<DeviceEvidence> fill) => Of(e => { e.Vendor = "Samsung"; e.Ttl = 64; fill(e); }) is var d ? (d.Kind, d.Os) : default;
+        Assert.Equal((DeviceKinds.Tv, null), Tv(e => e.Upnp = new UpnpDescription("urn:samsung.com:device:RemoteControlReceiver:1", "Samsung 7 Series (43)", "Samsung Electronics", null, null)));
+        Assert.Equal((DeviceKinds.Tv, null), Tv(e => e.InstanceNames.Add("Samsung 7 Series (43)")));
+        Assert.Equal((DeviceKinds.Tv, null), Tv(e => e.Txt["fn"] = "[TV] Living Room"));
+        Assert.Equal((DeviceKinds.Tv, null), Tv(e => e.Upnp = new UpnpDescription("urn:samsung.com:device:IPControlServer:1", null, "Samsung Electronics", "UE43RU7100", null)));
+        Assert.Equal((DeviceKinds.Tv, null), Tv(e => e.Txt["md"] = "QN55Q60TAFXZA"));
+        Assert.Equal("Samsung 7 Series", Of(e => e.InstanceNames.Add("Samsung 7 Series (43)")).Name);
+        Assert.Equal(DeviceKinds.Console, Of(e => e.HostNames.Add("Xbox-Series-X.local")).Kind);
+        Assert.Equal((DeviceKinds.Phone, DeviceOs.Android), Tv(e => e.Txt["md"] = "SM-S911B"));
+    }
+
+    [Fact]
     public void MakerAndTtlAreTheLastResort()
     {
         Assert.Equal(DeviceKinds.Router, Of(e => { e.IsGateway = true; e.Vendor = "Greenpacket"; }).Kind);

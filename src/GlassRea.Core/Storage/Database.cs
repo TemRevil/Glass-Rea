@@ -36,6 +36,7 @@ public sealed class Database : IDisposable
               mac TEXT PRIMARY KEY, ip TEXT NOT NULL, name TEXT, randomized INTEGER NOT NULL,
               is_gateway INTEGER NOT NULL, is_this_pc INTEGER NOT NULL, first_seen INTEGER NOT NULL, last_seen INTEGER NOT NULL,
               vendor TEXT, model TEXT, kind TEXT, os TEXT, custom_name TEXT, away INTEGER NOT NULL DEFAULT 0, network TEXT);
+            CREATE TABLE IF NOT EXISTS forgotten_devices(mac TEXT PRIMARY KEY, at INTEGER NOT NULL) WITHOUT ROWID;
             CREATE TABLE IF NOT EXISTS device_hints(
               mac TEXT NOT NULL, key TEXT NOT NULL, value TEXT NOT NULL, seen INTEGER NOT NULL,
               PRIMARY KEY(mac, key)) WITHOUT ROWID;
@@ -286,20 +287,27 @@ public sealed class Database : IDisposable
 
     // ---------- devices ----------
 
-    /// <summary>Upserts a device; returns true when the MAC address was never seen before.</summary>
+    /// <summary>
+    /// Upserts a device; returns true when the MAC address was never seen before. One you told it to forget comes back
+    /// into the list when it's seen again, but doesn't count as new. When a scan finds it's another kind of device than
+    /// it was taken for (a TV, not a phone), the system it was said to run goes too.
+    /// </summary>
     public bool SaveDevice(DeviceInfo d)
     {
         lock (_gate)
         {
-            using var find = Cmd("SELECT 1 FROM devices WHERE mac=$m", ("$m", d.Mac));
+            using var find = Cmd("SELECT 1 FROM devices WHERE mac=$m UNION ALL SELECT 1 FROM forgotten_devices WHERE mac=$m", ("$m", d.Mac));
             var isNew = find.ExecuteScalar() is null;
+            using var back = Cmd("DELETE FROM forgotten_devices WHERE mac=$m", ("$m", d.Mac));
+            back.ExecuteNonQuery();
             using var c = Cmd("""
                 INSERT INTO devices(mac,ip,name,randomized,is_gateway,is_this_pc,first_seen,last_seen,vendor,model,kind,os,network)
                 VALUES($m,$ip,$n,$r,$g,$p,$f,$l,$v,$md,$k,$o,$net)
                 ON CONFLICT(mac) DO UPDATE SET ip=$ip, name=coalesce($n,name), randomized=$r, is_gateway=$g, is_this_pc=$p, last_seen=$l,
                   network=coalesce($net,network),
                   vendor=coalesce($v,vendor), model=coalesce($md,model),
-                  kind=CASE WHEN $k IS NULL OR $k='unknown' THEN coalesce(kind,$k) ELSE $k END, os=coalesce($o,os)
+                  kind=CASE WHEN $k IS NULL OR $k='unknown' THEN coalesce(kind,$k) ELSE $k END,
+                  os=CASE WHEN $k IS NOT NULL AND $k<>'unknown' AND $k IS NOT kind THEN $o ELSE coalesce($o,os) END
                 """, ("$m", d.Mac), ("$ip", d.Ip), ("$n", d.Name), ("$r", d.Randomized ? 1 : 0), ("$g", d.IsGateway ? 1 : 0),
                 ("$p", d.IsThisPc ? 1 : 0), ("$f", d.FirstSeen), ("$l", d.LastSeen), ("$v", d.Vendor), ("$md", d.Model), ("$k", d.Kind), ("$o", d.Os),
                 ("$net", d.Network));
@@ -324,10 +332,6 @@ public sealed class Database : IDisposable
         }
     }
 
-    /// <summary>
-    /// Remembers what a device said about itself when it joined or announced itself (its DHCP name, Bonjour names
-    /// and services), so a scan minutes later still knows. A device can store at most 64 facts.
-    /// </summary>
     /// <summary>Your own name for a device; null or blank goes back to what it calls itself. False when the device is unknown.</summary>
     public bool RenameDevice(string mac, string? name)
     {
@@ -338,6 +342,53 @@ public sealed class Database : IDisposable
         }
     }
 
+    /// <summary>
+    /// Takes a device off the list. It comes back, under its own name, the next time a scan finds it on the network.
+    /// False when it wasn't on the list.
+    /// </summary>
+    public bool ForgetDevice(string mac, long now)
+    {
+        lock (_gate)
+        {
+            using var tx = _db.BeginTransaction();
+            using var delete = Cmd("DELETE FROM devices WHERE mac=$m", ("$m", mac));
+            var gone = delete.ExecuteNonQuery() > 0;
+            if (gone)
+            {
+                using var remember = Cmd("INSERT OR REPLACE INTO forgotten_devices(mac,at) VALUES($m,$t)", ("$m", mac), ("$t", now));
+                remember.ExecuteNonQuery();
+            }
+            tx.Commit();
+            return gone;
+        }
+    }
+
+    /// <summary>
+    /// Folds the device at <paramref name="oldMac"/> into the one at <paramref name="newMac"/>: the same phone after it
+    /// changed its private address. Your name for it and when it was first seen carry over.
+    /// </summary>
+    public void MergeDevice(string oldMac, string newMac)
+    {
+        lock (_gate)
+        {
+            using var tx = _db.BeginTransaction();
+            using var move = Cmd("UPDATE devices SET mac=$new WHERE mac=$old AND NOT EXISTS (SELECT 1 FROM devices WHERE mac=$new)", ("$old", oldMac), ("$new", newMac));
+            if (move.ExecuteNonQuery() == 0)
+            {
+                using var carry = Cmd("""
+                    UPDATE devices SET
+                      custom_name=coalesce(custom_name, (SELECT custom_name FROM devices WHERE mac=$old)),
+                      first_seen=min(first_seen, coalesce((SELECT first_seen FROM devices WHERE mac=$old), first_seen))
+                    WHERE mac=$new
+                    """, ("$old", oldMac), ("$new", newMac));
+                carry.ExecuteNonQuery();
+                using var drop = Cmd("DELETE FROM devices WHERE mac=$old", ("$old", oldMac));
+                drop.ExecuteNonQuery();
+            }
+            tx.Commit();
+        }
+    }
+
     public void SetAway(string mac, bool away)
     {
         lock (_gate) { using var c = Cmd("UPDATE devices SET away=$a WHERE mac=$m", ("$m", mac), ("$a", away ? 1 : 0)); c.ExecuteNonQuery(); }
@@ -345,6 +396,10 @@ public sealed class Database : IDisposable
 
     public const int MaxHints = 5000;
 
+    /// <summary>
+    /// Remembers what a device said about itself when it joined or announced itself (its DHCP name, Bonjour names
+    /// and services), so a scan minutes later still knows. A device can store at most 64 facts.
+    /// </summary>
     public void SaveDeviceHints(string mac, IEnumerable<(string Key, string Value)> hints, long now)
     {
         lock (_gate)
@@ -388,7 +443,10 @@ public sealed class Database : IDisposable
         }
     }
 
-    /// <summary>Forgets hints for hardware that never showed up as a device within a day, and anything a month old.</summary>
+    /// <summary>
+    /// Forgets hints for hardware that never showed up as a device within a day, and anything a month old. A device you
+    /// took off the list a month ago and that hasn't been back counts as new if it ever is.
+    /// </summary>
     public void PruneDeviceHints(long now)
     {
         lock (_gate)
@@ -398,6 +456,8 @@ public sealed class Database : IDisposable
                    OR (seen < $day AND mac NOT IN (SELECT mac FROM devices))
                 """, ("$month", now - 30 * 86400), ("$day", now - 86400));
             c.ExecuteNonQuery();
+            using var forgotten = Cmd("DELETE FROM forgotten_devices WHERE at < $month", ("$month", now - 30 * 86400));
+            forgotten.ExecuteNonQuery();
         }
     }
 

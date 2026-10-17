@@ -48,16 +48,27 @@ if ($Step -ne 'Pack') {
         if ($LASTEXITCODE -ne 0) { throw "Build of $($p.Out) failed." }
     }
 
+    # The uninstaller: setup without the program files, so the install folder doesn't hold a second copy of them.
+    Write-Host 'Building the uninstaller...'
+    $uninstallOut = Join-Path $publish 'uninstaller'
+    & dotnet publish (Join-Path $root 'src\GlassRea.Setup\GlassRea.Setup.csproj') -c Release -r win-x64 `
+        -p:PublishSingleFile=true -p:Uninstaller=true -o $uninstallOut --nologo -v quiet
+    if ($LASTEXITCODE -ne 0) { throw 'Build of the uninstaller failed.' }
+    Move-Item (Join-Path $uninstallOut 'GlassRea.Setup.exe') (Join-Path $stage 'Uninstall Glass-Rea.exe') -Force
+    Remove-Item $uninstallOut -Recurse -Force
+
     # Glass-Rea's own files; everything else in the folders is Microsoft's, already signed by Microsoft.
-    # (.signpath/artifact-configurations/payload.xml lists the same five.)
+    # (.signpath/artifact-configurations/payload.xml lists the same six.)
     Sign @(
         (Join-Path $stage 'App\GlassRea.exe'), (Join-Path $stage 'App\GlassRea.dll'), (Join-Path $stage 'App\GlassRea.Core.dll'),
-        (Join-Path $stage 'Service\GlassRea.Service.dll'), (Join-Path $stage 'Service\GlassRea.Core.dll'))
+        (Join-Path $stage 'Service\GlassRea.Service.dll'), (Join-Path $stage 'Service\GlassRea.Core.dll'),
+        (Join-Path $stage 'Uninstall Glass-Rea.exe'))
     if ($Step -eq 'Stage') { Write-Host "Done: $stage"; return }
 }
 
 # The app can't start without its compiled XAML; never pack a build that lost it.
 if (-not (Test-Path (Join-Path $stage 'App\GlassRea.pri'))) { throw "$stage has no App\GlassRea.pri; the installed app would crash on start." }
+if (-not (Test-Path (Join-Path $stage 'Uninstall Glass-Rea.exe'))) { throw "$stage has no Uninstall Glass-Rea.exe; Glass-Rea couldn't be removed." }
 New-Item -ItemType Directory -Force $publish | Out-Null
 Write-Host 'Packing...'
 Add-Type -AssemblyName System.IO.Compression.FileSystem

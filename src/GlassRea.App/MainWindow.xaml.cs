@@ -177,6 +177,9 @@ public sealed partial class MainWindow : Window
         if (!_pages.TryGetValue(key, out var page))
         {
             fresh = true;
+            // The loader goes up first and reaches the screen before the page is built, which can take a moment.
+            ShowLoading(true);
+            await Motion.NextFrame();
             _pages[key] = page = _tabs.First(t => t.Key == key).Create();
             // Give a new page a moment to fetch its data, so it arrives filled rather than filling in afterwards.
             if (page is IPage p)
@@ -188,13 +191,45 @@ public sealed partial class MainWindow : Window
                     if (t.Exception is { } ex && !Service.IsOffline(ex.InnerException!)) Log.Error("Window", $"The {key} page couldn't load its data", ex.InnerException);
                     else Log.IfSlow("Window", $"Filling the {key} page the first time", System.Diagnostics.Stopwatch.GetElapsedTime(started));
                 }, TaskScheduler.Default);
-                try { await Task.WhenAny(filling, Task.Delay(450)); } catch { /* shown by the next tick */ }
+                try { await Task.WhenAny(filling, Task.Delay(1200)); } catch { /* shown by the next tick */ }
+                _ = HideLoadingAfter(filling);
             }
+            else ShowLoading(false);
+            if (key != _current) return; // another tab was picked meanwhile; this page waits for its turn
         }
         await Motion.SwapPage(PageHost, Ghost, page, arrived: () => { if (StaggerTarget(page) is { } panel) Motion.Stagger(panel); });
         Log.IfSlow("Window", $"Opening the {key} page{(fresh ? " the first time" : "")}", System.Diagnostics.Stopwatch.GetElapsedTime(opening));
         _lastRefresh = DateTime.MinValue;
         await Tick();
+    }
+
+    private int _loads;
+
+    /// <summary>The loader, counted, since a second page can start loading before the first has finished.</summary>
+    private void ShowLoading(bool on)
+    {
+        _loads = Math.Max(0, _loads + (on ? 1 : -1));
+        if (_loads > 0)
+        {
+            Loading.Visibility = Visibility.Visible;
+            Loading.Opacity = 1;
+            return;
+        }
+        Loading.Opacity = 0;
+        _ = CollapseLoading();
+    }
+
+    /// <summary>Collapsed once faded out: a running loader keeps the compositor drawing every frame even when unseen.</summary>
+    private async Task CollapseLoading()
+    {
+        await Task.Delay(300);
+        if (_loads == 0) Loading.Visibility = Visibility.Collapsed;
+    }
+
+    private async Task HideLoadingAfter(Task filling)
+    {
+        try { await filling; } catch { /* reported where it was started */ }
+        ShowLoading(false);
     }
 
     /// <summary>The panel whose children arrive one by one: a page's top grid, inside its scroller if it has one.</summary>
@@ -322,7 +357,8 @@ public sealed partial class MainWindow : Window
 
     private async Task Tick()
     {
-        if (_refreshing || !AppWindow.IsVisible) return;
+        // Nothing to show while hidden in the tray or minimized; the first tick after it comes back catches up.
+        if (_refreshing || !AppWindow.IsVisible || AppWindow.Presenter is OverlappedPresenter { State: OverlappedPresenterState.Minimized }) return;
         _refreshing = true;
         try
         {

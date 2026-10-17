@@ -8,8 +8,9 @@ namespace GlassRea.App.Pages;
 
 /// <param name="Custom">The name you gave it, or "".</param>
 /// <param name="Own">What it would be called without your name.</param>
+/// <param name="ForgetShown">This PC and the router are always there, so they can't be taken off the list.</param>
 public sealed record DeviceRow(string Name, string Note, string Glyph, string Os, Visibility OsShown, string Ip, string Mac, string First, string Last, double Fade,
-    string Custom, string Own);
+    string Custom, string Own, Visibility ForgetShown);
 
 /// <summary>Everything seen on the Wi-Fi: the router, this PC, phones, TVs. A new one raises an alert.</summary>
 public sealed partial class DevicesPage : UserControl, IPage
@@ -48,7 +49,8 @@ public sealed partial class DevicesPage : UserControl, IPage
                 var os = DeviceOs.Display(d.Os) ?? "";
                 return new DeviceRow(name, string.Join(", ", notes), Glyph(d), os, os.Length == 0 ? Visibility.Collapsed : Visibility.Visible,
                     d.Ip, d.Mac, $"First seen {Fmt.Date(d.FirstSeen)}", $"Last seen {Fmt.Ago(d.LastSeen)}", d.LastSeen < recent ? 0.55 : 1,
-                    d.CustomName ?? "", DeviceLabel.For(d with { CustomName = null }));
+                    d.CustomName ?? "", DeviceLabel.For(d with { CustomName = null }),
+                    d.IsThisPc || d.IsGateway ? Visibility.Collapsed : Visibility.Visible);
             }).ToList();
         _rows.Sync(rows);
     }
@@ -118,6 +120,51 @@ public sealed partial class DevicesPage : UserControl, IPage
         flyout.ShowAt(button);
     }
 
+    /// <summary>Takes a device off the list, after asking. It comes back by itself if it's still on the network.</summary>
+    private void OnForget(object sender, RoutedEventArgs e)
+    {
+        if (sender is not Button { Tag: DeviceItem { Row: var row } } button) return;
+        var error = new TextBlock { Style = (Style)Application.Current.Resources["Caption"], TextWrapping = TextWrapping.Wrap, Visibility = Visibility.Collapsed };
+        var forget = new Button { Content = "Forget", Style = (Style)Application.Current.Resources["AccentButtonStyle"] };
+        var flyout = new Flyout
+        {
+            Content = new StackPanel
+            {
+                Spacing = 12, Width = 260,
+                Children =
+                {
+                    new TextBlock { Text = $"Forget {row.Name}?", Style = (Style)Application.Current.Resources["CardTitle"], TextWrapping = TextWrapping.Wrap },
+                    new TextBlock
+                    {
+                        Text = row.Custom.Length > 0
+                            ? "It comes back by itself the next time a scan finds it on your network, under its own name rather than the one you gave it."
+                            : "It comes back by itself the next time a scan finds it on your network.",
+                        Style = (Style)Application.Current.Resources["Caption"], TextWrapping = TextWrapping.Wrap,
+                    },
+                    error, forget,
+                },
+            },
+        };
+        forget.Click += async (_, _) =>
+        {
+            forget.IsEnabled = false;
+            try
+            {
+                await Service.Do("device.forget", settings: new() { ["mac"] = row.Mac });
+                flyout.Hide();
+                await Refresh();
+            }
+            catch (Exception ex) when (Service.IsOffline(ex) || ex is ServiceException)
+            {
+                error.Text = ex is ServiceException ? ex.Message : "The Glass-Rea service isn't answering. Try again in a moment.";
+                error.Visibility = Visibility.Visible;
+                forget.IsEnabled = true;
+            }
+        };
+        flyout.ShowAt(button);
+    }
+
+    /// <summary>Scans now and shows the list as soon as the scan has finished (it takes a few seconds).</summary>
     private async void OnScan(object sender, RoutedEventArgs e)
     {
         ScanButton.IsEnabled = false;
@@ -126,8 +173,14 @@ public sealed partial class DevicesPage : UserControl, IPage
         ScanText.Text = "Scanning";
         try
         {
+            var before = (await Service.Call<ServiceStatus>("status")).LastDeviceScan;
             await Service.Do("scan");
-            await Task.Delay(TimeSpan.FromSeconds(12));
+            // A scan pings the whole network and asks each device what it is; on a big network it can take a minute.
+            for (var waited = 0; waited < 90; waited += 2)
+            {
+                await Task.Delay(TimeSpan.FromSeconds(2));
+                if ((await Service.Call<ServiceStatus>("status")).LastDeviceScan != before) break;
+            }
             await Refresh();
         }
         catch (Exception ex) when (Service.IsOffline(ex) || ex is ServiceException) { /* the window shows service problems */ }

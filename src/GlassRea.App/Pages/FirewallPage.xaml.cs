@@ -65,7 +65,9 @@ public sealed partial class FirewallPage : UserControl, IPage
 
     private async void OnToggle(object sender, RoutedEventArgs e)
     {
-        if (_busy || sender is not ToggleSwitch { Tag: FirewallItem { Row: var row } } box || box.IsOn == row.Allowed) return;
+        // The switch's own row, as it is now: a recycled or refreshed row sets the switch to that row's state first,
+        // so only a click leaves the two different.
+        if (_busy || sender is not ToggleSwitch { DataContext: FirewallItem { Row: var row } } box || box.IsOn == row.Allowed) return;
         var block = !box.IsOn;
         box.IsEnabled = false;
         try

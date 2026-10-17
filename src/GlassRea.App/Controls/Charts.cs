@@ -7,6 +7,7 @@ using Microsoft.Graphics.Canvas.Text;
 using Microsoft.Graphics.Canvas.UI.Xaml;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Hosting;
 using Microsoft.UI.Xaml.Media;
 using Windows.UI;
 
@@ -60,9 +61,9 @@ public sealed class BarChart : Grid
             _canvas.Invalidate();
         };
         PointerExited += (_, _) => { _hover = -1; _tip.Hide(); _canvas.Invalidate(); };
-        Loaded += (_, _) => Appearance.Changed += Redraw;
+        Loaded += (_, _) => { Appearance.Changed += Redraw; if (_grow < GrowEnd) Grow(true); };
         // Pages are kept and shown again, so the canvas must survive being unloaded (no RemoveFromVisualTree here).
-        Unloaded += (_, _) => Appearance.Changed -= Redraw;
+        Unloaded += (_, _) => { Appearance.Changed -= Redraw; Grow(false); };
         ActualThemeChanged += (_, _) => _canvas.Invalidate();
     }
 
@@ -75,13 +76,40 @@ public sealed class BarChart : Grid
         if (animate && Motion.Enabled)
         {
             _grow = 0;
-            Motion.Run(DispatcherQueue, TimeSpan.FromMilliseconds(900 + _bars.Count * 22), p =>
-            {
-                _grow = p * (900 + _bars.Count * 22) / 900.0;
-                _canvas.Invalidate();
-            });
+            if (IsLoaded) Grow(true);
         }
+        else if (!Motion.Enabled) _grow = GrowEnd;
         _canvas.Invalidate();
+    }
+
+    // ---------- growing in ----------
+
+    /// <summary>Where the growth ends: the last bar starts 22 ms after the one before it and takes 700 ms.</summary>
+    private double GrowEnd => (900 + _bars.Count * 22) / 900.0;
+    private bool _growing;
+    private long _lastFrame;
+
+    private void Grow(bool on)
+    {
+        if (on == _growing) return;
+        _growing = on;
+        _lastFrame = 0;
+        if (on) CompositionTarget.Rendering += OnGrowFrame;
+        else CompositionTarget.Rendering -= OnGrowFrame;
+    }
+
+    /// <summary>
+    /// The growth advances by the time between frames the chart is actually drawn in, at most two frames' worth, so it
+    /// only starts once the chart is on screen, and a busy moment pauses it rather than skipping to full bars.
+    /// </summary>
+    private void OnGrowFrame(object? sender, object e)
+    {
+        if (XamlRoot is null || ActualWidth == 0) { _lastFrame = 0; return; }
+        var now = Environment.TickCount64;
+        if (_lastFrame != 0) _grow = Math.Min(GrowEnd, _grow + Math.Min(34, now - _lastFrame) / 900.0);
+        _lastFrame = now;
+        _canvas.Invalidate();
+        if (_grow >= GrowEnd) Grow(false);
     }
 
     private void OnDraw(CanvasControl sender, CanvasDrawEventArgs args)
@@ -124,86 +152,137 @@ public sealed class BarChart : Grid
 /// The live strip: download as a filled line, upload as a thinner line, the last two minutes, scrolling smoothly
 /// between the once-a-second samples. Hovering shows a guide line, the two values where it crosses, and a glass
 /// readout of that second.
+/// The graph is drawn once per sample, one step wider than the strip, and the compositor slides it left by that step
+/// over the second, on its own thread. Redrawing it every frame kept a third of a CPU core busy.
 /// </summary>
 public sealed class LiveGraph : Grid
 {
+    private readonly Canvas _track = new();
     private readonly CanvasControl _canvas = new();
+    private readonly Microsoft.UI.Composition.Visual _slide;
     private readonly GlassTip _tip;
+    private readonly RectangleGeometry _clip = new();
+    private CanvasStrokeStyle? _round;
     private long[] _in = [], _out = [];
     private long _sampleAt, _lastSecond;
     private double _max = 1024;
     private double? _hoverX;
+    private bool _newSample;
 
     /// <summary>Something floating over the right of the strip (the rate chip) that the readout should keep left of.</summary>
     public FrameworkElement? TipAvoid { get; set; }
 
     public LiveGraph()
     {
-        Children.Add(_canvas);
-        _tip = new GlassTip(_canvas, inline: true);
+        // A Canvas, so layout doesn't cut the wider graph to the strip's width; the strip's own clip trims it instead.
+        _track.Children.Add(_canvas);
+        Children.Add(_track);
+        _tip = new GlassTip(_track, inline: true);
         Children.Add(_tip.Layer);
+        Clip = _clip;
         _canvas.Draw += OnDraw;
+        ElementCompositionPreview.SetIsTranslationEnabled(_canvas, true);
+        _slide = ElementCompositionPreview.GetElementVisual(_canvas);
         Background = new SolidColorBrush(Microsoft.UI.Colors.Transparent);
-        PointerMoved += (_, e) => _hoverX = e.GetCurrentPoint(_canvas).Position.X;
-        PointerExited += (_, _) => { _hoverX = null; _tip.Hide(); };
-        Loaded += (_, _) => CompositionTarget.Rendering += OnFrame;
-        Unloaded += (_, _) => CompositionTarget.Rendering -= OnFrame;
+        PointerMoved += (_, e) => { _hoverX = e.GetCurrentPoint(this).Position.X; _canvas.Invalidate(); };
+        PointerExited += (_, _) => { _hoverX = null; _tip.Hide(); _canvas.Invalidate(); };
+        SizeChanged += (_, _) => { _clip.Rect = new Windows.Foundation.Rect(0, 0, ActualWidth, ActualHeight); Fit(); };
+        ActualThemeChanged += (_, _) => _canvas.Invalidate();
+        Loaded += (_, _) => Appearance.Changed += Redraw;
+        Unloaded += (_, _) => Appearance.Changed -= Redraw;
+    }
+
+    private void Redraw() => _canvas.Invalidate();
+
+    /// <summary>One second's width. The newest second is still filling, so it waits just past the right edge.</summary>
+    private float Step => _in.Length > 2 ? (float)ActualWidth / (_in.Length - 2) : 0;
+
+    private void Fit()
+    {
+        var width = ActualWidth + Step;
+        if (double.IsNaN(_canvas.Width) || Math.Abs(_canvas.Width - width) > 0.5) _canvas.Width = width;
+        if (double.IsNaN(_canvas.Height) || Math.Abs(_canvas.Height - ActualHeight) > 0.5) _canvas.Height = ActualHeight;
+        _canvas.Invalidate();
     }
 
     /// <param name="lastSecond">Unix second of the newest sample.</param>
     public void SetData(long[] inbound, long[] outbound, long lastSecond)
     {
+        var resized = inbound.Length != _in.Length;
         _in = inbound;
         _out = outbound;
         _lastSecond = lastSecond;
-        _sampleAt = Environment.TickCount64;
         var peak = Math.Max(1024, Math.Max(inbound.DefaultIfEmpty().Max(), outbound.DefaultIfEmpty().Max())) * 1.2;
         _max = peak > _max ? peak : _max + (peak - _max) * 0.25; // the scale eases instead of jumping
+        _newSample = true;
+        if (resized) Fit();
+        else _canvas.Invalidate();
     }
 
-    private void OnFrame(object? sender, object e)
+    /// <summary>How far the graph has slid since its sample landed, 0 to one step.</summary>
+    private float Shift(float dx) => Motion.Enabled && _sampleAt > 0 ? (float)Math.Min(1, (Environment.TickCount64 - _sampleAt) / 1000.0) * dx : 0;
+
+    /// <summary>
+    /// Slides the freshly drawn graph one step left over the next second. Started from the draw itself, so the new
+    /// picture and the jump back to the start reach the screen in the same frame.
+    /// </summary>
+    private void Slide(float dx)
     {
-        if (Visibility == Visibility.Visible && XamlRoot is not null) _canvas.Invalidate();
+        _sampleAt = Environment.TickCount64;
+        _slide.StopAnimation("Translation");
+        _slide.Properties.InsertVector3("Translation", Vector3.Zero);
+        if (!Motion.Enabled) return;
+        var c = _slide.Compositor;
+        var a = c.CreateVector3KeyFrameAnimation();
+        a.InsertKeyFrame(0, Vector3.Zero);
+        // Whole screen pixels at a time: the graph moves about ten a second, and gliding through fractions of a pixel
+        // only made the compositor draw every frame (a quarter of a core) for a change nobody can see.
+        var steps = c.CreateStepEasingFunction(Math.Max(1, (int)Math.Round(dx * (XamlRoot?.RasterizationScale ?? 1))));
+        steps.IsFinalStepSingleFrame = false;
+        a.InsertKeyFrame(1, new Vector3(-dx, 0, 0), steps);
+        a.Duration = TimeSpan.FromSeconds(1);
+        _slide.StartAnimation("Translation", a);
     }
 
     private void OnDraw(CanvasControl sender, CanvasDrawEventArgs args)
     {
         if (_in.Length < 2) return;
         var ds = args.DrawingSession;
-        float w = (float)sender.ActualWidth, h = (float)sender.ActualHeight;
-        var n = _in.Length;
-        var dx = w / (n - 2);
-        // Shift left continuously over the second until the next sample lands.
-        var shift = Motion.Enabled ? (float)Math.Min(1, (Environment.TickCount64 - _sampleAt) / 1000.0) * dx : 0;
+        float h = (float)sender.ActualHeight;
+        var dx = Step;
         var accent = Ink.Brush("AccentBrush");
         var up = Ink.Brush("UpBrush");
+        _round ??= new CanvasStrokeStyle { LineJoin = CanvasLineJoin.Round };
 
-        using var area = Path(sender, _in, dx, shift, h, close: true);
+        using var area = Path(sender, _in, dx, h, close: true);
         using var fill = new CanvasLinearGradientBrush(sender, Appearance.WithAlpha(accent, 0.35), Appearance.WithAlpha(accent, 0))
         { StartPoint = new Vector2(0, 0), EndPoint = new Vector2(0, h) };
         ds.FillGeometry(area, fill);
-        using var line = Path(sender, _in, dx, shift, h, close: false);
-        var style = new CanvasStrokeStyle { LineJoin = CanvasLineJoin.Round };
-        ds.DrawGeometry(line, accent, 1.6f, style);
-        using var upLine = Path(sender, _out, dx, shift, h, close: false);
-        ds.DrawGeometry(upLine, up, 1.4f, style);
-        if (_hoverX is { } hx) DrawHover(ds, (float)hx, dx, shift, h, accent, up);
+        using var line = Path(sender, _in, dx, h, close: false);
+        ds.DrawGeometry(line, accent, 1.6f, _round);
+        using var upLine = Path(sender, _out, dx, h, close: false);
+        ds.DrawGeometry(upLine, up, 1.4f, _round);
+        if (_newSample) { _newSample = false; Slide(dx); }
+        if (_hoverX is { } hx) DrawHover(ds, (float)hx, dx, Shift(dx), h, accent, up);
     }
 
+    /// <param name="x">The pointer, across the strip.</param>
+    /// <param name="shift">How far the graph has slid, so the pointer is over the graph at <paramref name="x"/> plus this.</param>
     private void DrawHover(CanvasDrawingSession ds, float x, float dx, float shift, float h, Color accent, Color up)
     {
         var n = _in.Length;
-        var fi = Math.Clamp((x + shift) / dx, 0, n - 1);
+        var gx = x + shift;
+        var fi = Math.Clamp(gx / dx, 0, n - 1);
         var i0 = (int)Math.Floor(fi);
         var i1 = Math.Min(n - 1, i0 + 1);
         var f = fi - i0;
         float Y(long[] data) => h - (float)(h * 0.86 * (data[i0] + (data[i1] - data[i0]) * f) / _max) - 1;
-        ds.DrawLine(x, 0, x, h, Ink.Text(this, 0.22), 1);
+        ds.DrawLine(gx, 0, gx, h, Ink.Text(this, 0.22), 1);
         var ring = Ink.Text(this, 0.85);
         foreach (var (y, c) in new[] { (Y(_in), accent), (Y(_out), up) })
         {
-            ds.FillCircle(x, y, 4.5f, ring);
-            ds.FillCircle(x, y, 3f, c);
+            ds.FillCircle(gx, y, 4.5f, ring);
+            ds.FillCircle(gx, y, 3f, c);
         }
 
         // The readout names the second under the pointer.
@@ -218,14 +297,14 @@ public sealed class LiveGraph : Grid
         _tip.Show(new Windows.Foundation.Point(Math.Max(4, left), 6));
     }
 
-    private CanvasGeometry Path(ICanvasResourceCreator rc, long[] data, float dx, float shift, float h, bool close)
+    private CanvasGeometry Path(ICanvasResourceCreator rc, long[] data, float dx, float h, bool close)
     {
         using var pb = new CanvasPathBuilder(rc);
         float Y(int i) => h - (float)(h * 0.86 * data[i] / _max) - 1;
-        pb.BeginFigure(-shift, close ? h : Y(0));
-        if (close) pb.AddLine(-shift, Y(0));
-        for (var i = 1; i < data.Length; i++) pb.AddLine(i * dx - shift, Y(i));
-        if (close) { pb.AddLine((data.Length - 1) * dx - shift, h); pb.EndFigure(CanvasFigureLoop.Closed); }
+        pb.BeginFigure(0, close ? h : Y(0));
+        if (close) pb.AddLine(0, Y(0));
+        for (var i = 1; i < data.Length; i++) pb.AddLine(i * dx, Y(i));
+        if (close) { pb.AddLine((data.Length - 1) * dx, h); pb.EndFigure(CanvasFigureLoop.Closed); }
         else pb.EndFigure(CanvasFigureLoop.Open);
         return CanvasGeometry.CreatePath(pb);
     }

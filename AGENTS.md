@@ -9,7 +9,7 @@ A personal network monitor for Windows by Tem Revil: per-app internet use, live 
 | `src/GlassRea.Service` | Windows service, runs as SYSTEM, hosted by Microsoft's signed `dotnet.exe`. ETW capture, SRUM import, SQLite at `C:\ProgramData\Glass-Rea\data.db`, firewall rules (group "Glass-Rea"), network scan, limit and alert workers, named pipe `GlassRea`. |
 | `src/GlassRea.App` | WinUI 3 app (`GlassRea.exe`), unpackaged, single instance, tray icon. Only talks to the service through the pipe. Per-user files in `%LocalAppData%\Glass-Rea\`. |
 | `src/GlassRea.Core` | Shared: database, protocol (`Messages.cs`, `SettingKeys`, `Priority`), alert text, address and number handling. |
-| `src/GlassRea.Setup` | Elevated single-file installer and uninstaller with the app and service embedded as `payload.zip`. |
+| `src/GlassRea.Setup` | Elevated single-file installer with the app, the service and `Uninstall Glass-Rea.exe` embedded as `payload.zip`. The uninstaller is this project built with `-p:Uninstaller=true` (no payload), so the install folder holds one copy of the app, not two; `build-setup.ps1` builds it into the stage. |
 | `tests/GlassRea.Tests` | xUnit tests for Core and the service's pure logic. |
 
 The lists show one row per app: `Core/Usage/AppKinds.cs` tells apps, Store apps, services, Windows, VPN tunnels and unknown programs apart and adds an app's rows together (each version, Windows' history rows, each sign-in's copy of a service); `App/Support/AppFaces.cs` gives each its name, icon and kind label from Windows (services from the registry, packages from `PackageManager`); `App/Support/AppIcons.cs` draws icons one at a time on its own thread, because the shell answers "pending" to several at once.
@@ -24,6 +24,8 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts\release.ps1        #
 ```
 
 Releases live on GitHub. The app's updater (`App/Support/Updater.cs`, `Core/Updates/Releases.cs`) installs only a setup whose SHA-256 matches GitHub's record and whose signer `Releases.AcceptsSigner` accepts: SignPath Foundation with a chain Windows trusts on a file whose ProductName is `Releases.Product` (SignPath signs many projects), or the pinned Tem Revil certificate (`Releases.SignerThumbprint`). Releases are made by `.github/workflows/release.yml`, which has SignPath sign Glass-Rea's own files and then the setup built around them; `.signpath/artifact-configurations/` mirrors the configurations kept in SignPath, and README's "Code signing policy" must stay true (a SignPath condition). `scripts/release.ps1` is the fallback from the owner's PC, signed as Tem Revil. Moving to any other signer means first shipping a release, signed by one the installed updater accepts, that accepts the new one. Any new network call the user didn't ask for goes in `PRIVACY.md` and must be possible to turn off (also a SignPath condition).
+
+Only the Windows App SDK parts in use are referenced (WinUI, Foundation, InteractiveExperiences), not the whole SDK, and `Directory.Build.targets` keeps WinUI's text to English. `.signpath/artifact-configurations/payload.xml` lists the uninstaller too; SignPath's own copy must match before a release.
 
 A change isn't done until the build has no warnings and the tests pass. A new test must be seen failing (revert the fix, watch it go red) before it counts.
 
@@ -45,6 +47,16 @@ One line each: `time zone LEVEL source: message`, an exception's lines indented 
 - **Setup runs elevated.** Anything it opens for the user (the app, temrevil.com) goes through `explorer.exe` so it runs unelevated. WinUI's FolderPicker doesn't work elevated; use `FolderDialog`.
 - **Uninstall leaves nothing blocked:** every firewall rule in the "Glass-Rea" group is removed.
 - **Delete what isn't used**, after searching for every reference.
+
+## Performance
+
+The app has to stay light on low-end PCs. Most of its processor time is Windows' compositor thread inside the app, so:
+
+- No animation that runs forever. A glass with refraction bands (`Glass.Refracts`, on by default) re-renders its blur once per band each frame its backdrop changes; glass over something that changes every second (the rate chip, the hover readouts) sets `Refracts = false`.
+- The live graph (`LiveGraph` in `Controls/Charts.cs`) is drawn once per sample, one step wider than the strip; the compositor slides it one device pixel at a time (step easing). Don't redraw it per frame.
+- Animations that must start when seen (the usage chart's grow) count on the frame clock while the control is on screen, not on wall time.
+- Lists that can be long use a virtualized `ListView` (no `StackPanel` items panel); a recycled row's handlers read the row from `DataContext`.
+- The window does no work while minimised. Measure (CPU over 20 s after 20 s settling, or `dotnet-trace`) before and after; don't guess.
 
 ## Checking the UI
 

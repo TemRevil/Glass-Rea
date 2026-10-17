@@ -32,7 +32,7 @@
                     <Ellipse x:Name="LiveDot" Width="6" Height="6" Fill="{StaticResource AccentBrush}" VerticalAlignment="Center" />
                     <TextBlock Text="Live, last 2 minutes" Style="{StaticResource Caption}" />
                 </StackPanel>
-                <c:Glass x:Name="RatesGlass" HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,12,0" CornerRadius="16" Padding="16,8"
+                <c:Glass x:Name="RatesGlass" Refracts="False" HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,12,0" CornerRadius="16" Padding="16,8"
                          SmoothWidth="True" HorizontalContentAlignment="Center">
                     <StackPanel Orientation="Horizontal" Spacing="22">
                         <Grid ColumnSpacing="8" RowSpacing="0">
@@ -57,6 +57,11 @@
         <Grid Grid.Row="2">
             <Grid x:Name="PageHost" Margin="14,12,14,0" />
             <Grid x:Name="Ghost" IsHitTestVisible="False" />
+            <!-- Runs in the gap above the page while a page gets ready the first time. -->
+            <ProgressBar x:Name="Loading" IsIndeterminate="True" Visibility="Collapsed" Opacity="0" IsHitTestVisible="False"
+                         VerticalAlignment="Top" Margin="34,4,34,0" AutomationProperties.Name="Loading the page">
+                <ProgressBar.OpacityTransition><ScalarTransition Duration="0:0:0.25" /></ProgressBar.OpacityTransition>
+            </ProgressBar>
 
             <InfoBar x:Name="Offline" IsOpen="False" IsClosable="False" Severity="Warning" Margin="14,12,14,0" VerticalAlignment="Top"
                      Title="The Glass-Rea service isn't running"

@@ -9,8 +9,9 @@ namespace GlassRea.Setup;
 public enum SetupMode { Install, Uninstall }
 
 /// <summary>
-/// "Glass-Rea Setup.exe" installs or updates; "--uninstall" (what Installed apps runs) removes. The uninstaller
-/// lives inside the folder it deletes, so it first hands over to a copy of itself in the temp folder.
+/// "Glass-Rea Setup.exe" installs or updates; "--uninstall" (what Installed apps runs) removes. The uninstaller is
+/// the same program built without the files to install, and lives inside the folder it deletes, so it first hands
+/// over to a copy of itself in the temp folder.
 /// </summary>
 public static class Program
 {
@@ -24,7 +25,9 @@ public static class Program
         CultureInfo.CurrentCulture = CultureInfo.InvariantCulture;
         CultureInfo.CurrentUICulture = CultureInfo.InvariantCulture;
 
-        var mode = args.Contains("--uninstall") ? SetupMode.Uninstall : SetupMode.Install;
+        // Opened straight from the install folder, the uninstaller has nothing to install, so it uninstalls.
+        var mode = args.Contains("--uninstall") || (!Engine.HasPayload && Paths.IsInsideInstallDir(Environment.ProcessPath))
+            ? SetupMode.Uninstall : SetupMode.Install;
         if (mode == SetupMode.Uninstall && Paths.IsInsideInstallDir(Environment.ProcessPath) && HandOverToTempCopy()) return;
 
         _single = new Mutex(true, "GlassRea-Setup", out var first);

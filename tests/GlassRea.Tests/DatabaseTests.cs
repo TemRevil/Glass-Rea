@@ -109,6 +109,57 @@ public class DatabaseTests
     }
 
     [Fact]
+    public void ADeviceTakenForSomethingElseLosesTheWrongSystem()
+    {
+        using var db = Database.InMemory();
+        var d = new DeviceInfo("AA:00:00:00:00:02", "192.168.1.50", "Samsung 7 Series", false, false, false, 1, 1, "Samsung", Kind: DeviceKinds.Phone, Os: DeviceOs.Android);
+        db.SaveDevice(d);
+        db.SaveDevice(d with { Kind = DeviceKinds.Tv, Os = null, LastSeen = 2 });
+        var tv = Assert.Single(db.Devices());
+        Assert.Equal((DeviceKinds.Tv, null), (tv.Kind, tv.Os)); // a TV, not an Android TV
+
+        var phone = d with { Mac = "AA:00:00:00:00:01", Os = DeviceOs.Ios };
+        db.SaveDevice(phone);
+        db.SaveDevice(phone with { Os = null, LastSeen = 2 }); // a scan that heard less still knows it's an iPhone
+        Assert.Equal(DeviceOs.Ios, db.Devices().Single(x => x.Mac == phone.Mac).Os);
+    }
+
+    [Fact]
+    public void AForgottenDeviceComesBackWhenSeenButNotAsNew()
+    {
+        using var db = Database.InMemory();
+        var d = new DeviceInfo("AA:BB:CC:DD:EE:FF", "192.168.1.9", "Tems-iPhone", true, false, false, 1, 1);
+        Assert.True(db.SaveDevice(d));
+        db.RenameDevice(d.Mac, "Mum's phone");
+        Assert.True(db.ForgetDevice(d.Mac, 10));
+        Assert.Empty(db.Devices());
+        Assert.False(db.ForgetDevice(d.Mac, 11)); // already gone
+
+        Assert.False(db.SaveDevice(d with { LastSeen = 20 })); // back on the next scan, without a "new device" alert
+        var back = Assert.Single(db.Devices());
+        Assert.Null(back.CustomName); // under its own name again
+        db.ForgetDevice(d.Mac, 30);
+        db.PruneDeviceHints(30 + 31 * 86400); // a month later it's forgotten for good
+        Assert.True(db.SaveDevice(d));
+    }
+
+    [Fact]
+    public void MergingKeepsYourNameAndWhenItWasFirstSeen()
+    {
+        using var db = Database.InMemory();
+        db.SaveDevice(new DeviceInfo("AA:00:00:00:00:01", "192.168.1.9", "Tems-iPhone", true, false, false, 100, 200));
+        db.RenameDevice("AA:00:00:00:00:01", "Tem's phone");
+        db.MergeDevice("AA:00:00:00:00:01", "AA:00:00:00:00:02"); // the new address isn't listed yet: the row moves
+        var moved = Assert.Single(db.Devices());
+        Assert.Equal(("AA:00:00:00:00:02", "Tem's phone", 100L), (moved.Mac, moved.CustomName, moved.FirstSeen));
+
+        db.SaveDevice(new DeviceInfo("AA:00:00:00:00:03", "192.168.1.10", "Tems-iPhone", true, false, false, 300, 300));
+        db.MergeDevice("AA:00:00:00:00:02", "AA:00:00:00:00:03"); // both listed: the old one folds into the new
+        var merged = Assert.Single(db.Devices());
+        Assert.Equal(("AA:00:00:00:00:03", "Tem's phone", 100L), (merged.Mac, merged.CustomName, merged.FirstSeen));
+    }
+
+    [Fact]
     public void AlertsAreNewestFirstAfterId()
     {
         using var db = Database.InMemory();

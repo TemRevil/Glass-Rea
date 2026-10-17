@@ -108,6 +108,10 @@ public sealed class PipeServer(Database db, UsageAccumulator usage, ProcessResol
                     throw new InvalidOperationException($"A device name can be up to {DeviceLabel.MaxNameLength} characters, with no line breaks.");
                 if (!db.RenameDevice(mac, name)) throw new InvalidOperationException("That device isn't in the list any more.");
                 return null;
+            case "device.forget":
+                var gone = r.Settings?.GetValueOrDefault("mac") ?? throw new InvalidOperationException("Which device?");
+                if (!db.ForgetDevice(gone, DateTimeOffset.UtcNow.ToUnixTimeSeconds())) throw new InvalidOperationException("That device isn't in the list any more.");
+                return null;
             case "scan":
                 devices.RequestScan();
                 return null;

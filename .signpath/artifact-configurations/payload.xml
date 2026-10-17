@@ -10,6 +10,9 @@
     <parameter name="version" required="true" />
   </parameters>
   <zip-file>
+    <pe-file path="Uninstall Glass-Rea.exe" product-name="Glass-Rea" product-version="${version}">
+      <authenticode-sign />
+    </pe-file>
     <directory path="App">
       <pe-file path="GlassRea.exe" product-name="Glass-Rea" product-version="${version}">
         <authenticode-sign />

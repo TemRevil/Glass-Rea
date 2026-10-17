@@ -93,6 +93,8 @@ public static class Appearance
     /// (white changes nothing).
     /// </summary>
     public static Color GlassTint => Mix(Colors.White, ParseTint(State.TintColor) ?? Colors.White, State.Tint / 100.0);
+    /// <summary>The window material's own colour, which shows wherever the page is see-through.</summary>
+    public static Color WindowTint => IsDark ? Hex("#1C1C1E") : Hex("#F3F3F3");
 
     /// <summary>Raised after the look changed, on the UI thread.</summary>
     public static event Action? Changed;
@@ -386,7 +388,7 @@ public sealed class GlassBackdrop : SystemBackdrop
         var (dark, blur, glass) = _last;
         _config.Theme = dark ? SystemBackdropTheme.Dark : SystemBackdropTheme.Light;
         if (_controller is null) return;
-        var tint = dark ? Appearance.Hex("#1C1C1E") : Appearance.Hex("#F3F3F3");
+        var tint = Appearance.WindowTint;
         _controller.Kind = blur < 50 ? DesktopAcrylicKind.Thin : DesktopAcrylicKind.Base;
         _controller.TintColor = tint;
         _controller.FallbackColor = tint;

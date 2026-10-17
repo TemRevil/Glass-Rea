@@ -47,6 +47,13 @@ public sealed class Glass : ContentControl
     /// <summary>The element this glass floats over; what's under the glass is copied from it and blurred.</summary>
     public UIElement? BlurSource { get; set; }
 
+    /// <summary>
+    /// Bends the backdrop at the rim. Each refraction step blurs its own copy of what's behind, so it's for the tab
+    /// bar, whose backdrop rarely moves; small glass over moving content (the rate chip over the live strip, the chart
+    /// readouts) would redraw them all every frame for an edge too small to see. Set before the glass is shown.
+    /// </summary>
+    public bool Refracts { get; set; } = true;
+
     private Border? _backdrop, _rimHost;
     private Canvas? _glow;
     private Ellipse? _spot;
@@ -124,9 +131,12 @@ public sealed class Glass : ContentControl
             Name = "Blur", BlurAmount = Appearance.GlassBlur, BorderMode = EffectBorderMode.Hard,
             Source = new CompositionEffectSourceParameter("behind"),
         };
-        var saturate = new SaturationEffect { Saturation = 1.8f, Source = blur };
+        // The page is see-through (cards over the window material), so its blurred copy is too, and the sharp page
+        // under the glass would show straight through it. The copy sits on the window material's colour instead.
+        var based = new CompositeEffect { Mode = Microsoft.Graphics.Canvas.CanvasComposite.SourceOver, Sources = { new ColorSourceEffect { Name = "Base", Color = Appearance.WindowTint }, blur } };
+        var saturate = new SaturationEffect { Saturation = 1.8f, Source = based };
         var tint = new TintEffect { Name = "Tint", Color = Appearance.GlassTint, Source = saturate };
-        _brush = c.CreateEffectFactory(tint, ["Blur.BlurAmount", "Tint.Color"]).CreateBrush();
+        _brush = c.CreateEffectFactory(tint, ["Blur.BlurAmount", "Tint.Color", "Base.Color"]).CreateBrush();
         _surface = c.CreateVisualSurface();
         _surface.SourceVisual = ElementCompositionPreview.GetElementVisual(BlurSource);
         var copy = c.CreateSurfaceBrush(_surface);
@@ -147,7 +157,7 @@ public sealed class Glass : ContentControl
         _body = c.CreateMaskBrush();
         _body.Source = Copy(c);
         Layer(c, _body);
-        for (var level = 1; level <= GlassLens.Levels; level++)
+        for (var level = 1; level <= (Refracts ? GlassLens.Levels : 0); level++)
         {
             var mask = c.CreateMaskBrush();
             var band = new Band(Layer(c, mask), Copy(c), Copy(c), Copy(c), mask);
@@ -261,6 +271,8 @@ public sealed class Glass : ContentControl
         for (var i = 0; i < _bands.Count; i++)
         {
             var band = _bands[i];
+            // With Windows' transparency effects off the glass is solid, and steps nobody can see still cost a blur each.
+            band.Sprite.IsVisible = Appearance.EffectsEnabled;
             var (red, green, blue) = GlassLens.StepShift(optics, r, i + 1);
             Magnify(band.Green, green);
             if (split)
@@ -316,6 +328,7 @@ public sealed class Glass : ContentControl
     {
         _brush?.Properties.InsertScalar("Blur.BlurAmount", Appearance.GlassBlur);
         _brush?.Properties.InsertColor("Tint.Color", Appearance.GlassTint);
+        _brush?.Properties.InsertColor("Base.Color", Appearance.WindowTint);
         if (_washColour is not null) _washColour.Color = WashColour();
         if (_spotBrush is not null) SpotColours(_spotBrush);
         Resize();

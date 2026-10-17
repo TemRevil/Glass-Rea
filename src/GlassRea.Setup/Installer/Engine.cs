@@ -55,9 +55,7 @@ public static class Engine
         })));
         steps.Add(new("Adding to Start and Installed apps", (status, _) => Task.Run(() =>
         {
-            var self = Environment.ProcessPath!;
-            if (!string.Equals(Path.GetFullPath(self), Paths.Uninstaller, StringComparison.OrdinalIgnoreCase))
-                File.Copy(self, Paths.Uninstaller, overwrite: true);
+            if (!File.Exists(Paths.Uninstaller)) throw new SetupException("The program files inside setup have no uninstaller. Build it with scripts\\build-setup.ps1.");
             Integration.CreateStartMenuShortcut();
             Integration.SetStartWithWindows(startWithWindows);
             Integration.WriteUninstallEntry(Folders.Size(Paths.InstallDir));

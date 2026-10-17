@@ -192,8 +192,10 @@ public static partial class DeviceClassifier
         if (e.Services.Contains("_raop._tcp") && !e.Services.Contains("_airplay._tcp")) return (DeviceKinds.Speaker, null);
         if (e.Services.Contains("_hap._tcp") || e.Services.Contains("_homekit._tcp") || e.Services.Contains("_matter._tcp")) return (DeviceKinds.SmartHome, null);
 
-        // 2. What it calls itself.
-        var names = string.Join(' ', e.HostNames.Append(e.DhcpName ?? "").Append(e.NetBiosName ?? "").Append(e.ReverseDns ?? "").Concat(e.InstanceNames)).ToLowerInvariant();
+        // 2. What it calls itself, and the model it says it is: "Samsung 7 Series (43)" is a TV, though Samsung makes phones too.
+        var names = string.Join(' ', e.HostNames.Append(e.DhcpName ?? "").Append(e.NetBiosName ?? "").Append(e.ReverseDns ?? "").Concat(e.InstanceNames)
+            .Append(e.Txt.GetValueOrDefault("fn") ?? "").Append(e.Txt.GetValueOrDefault("md") ?? "")
+            .Append(e.Upnp?.FriendlyName ?? "").Append(e.Upnp?.ModelName ?? "")).ToLowerInvariant();
         if (Name(names, "iphone")) return (DeviceKinds.Phone, DeviceOs.Ios);
         if (Name(names, "ipad")) return (DeviceKinds.Tablet, DeviceOs.IpadOs);
         if (Name(names, "macbook", "imac", "mac-mini", "macmini", "mac-studio")) return (DeviceKinds.Computer, DeviceOs.MacOs);
@@ -202,7 +204,8 @@ public static partial class DeviceClassifier
             || AndroidModel().IsMatch(names)) return (DeviceKinds.Phone, DeviceOs.Android);
         if (Name(names, "printer", "epson", "brother", "canon", "laserjet", "deskjet", "officejet", "envy") || HpPrinter().IsMatch(names)) return (DeviceKinds.Printer, null);
         if (Name(names, "xbox", "playstation", "ps4", "ps5", "nintendo")) return (DeviceKinds.Console, null);
-        if (Name(names, "tv", "bravia", "roku", "firetv", "fire-tv", "chromecast", "shield", "webos", "tizen")) return (DeviceKinds.Tv, null);
+        if (Name(names, "tv", "bravia", "roku", "firetv", "fire-tv", "chromecast", "shield", "webos", "tizen", "qled", "oled") || SamsungTv().IsMatch(names))
+            return (DeviceKinds.Tv, null);
         if (Name(names, "echo", "alexa", "homepod", "sonos", "nest-mini", "nest-audio", "speaker")) return (DeviceKinds.Speaker, null);
         if (Name(names, "cam", "camera", "ipcam", "doorbell")) return (DeviceKinds.Camera, null);
         if (Name(names, "nas", "synology", "diskstation", "qnap", "truenas")) return (DeviceKinds.Storage, DeviceOs.Linux);
@@ -256,6 +259,9 @@ public static partial class DeviceClassifier
 
     [GeneratedRegex(@"(^|[^a-z])(sm-[a-z]\d{3}|cph\d{4}|rmx\d{4}|m\d{4}[a-z]\d+[a-z]?|v\d{4})", RegexOptions.IgnoreCase)]
     private static partial Regex AndroidModel(); // Samsung SM-S911B, OPPO CPH2xxx, realme RMX3xxx, Xiaomi 2201117TG-style, vivo V2xxx
+
+    [GeneratedRegex(@"(^|[^a-z0-9])((ue|un|ua|qe|qn|qa|gq|gu)\d{2}[a-z]{1,3}\d{2,4}|\d{1,2} series([^a-z]|$))", RegexOptions.IgnoreCase)]
+    private static partial Regex SamsungTv(); // Samsung TV models (UE43RU7100, QN55Q60T) and the names they come with ("Samsung 7 Series")
 
     [GeneratedRegex(@"(^|[^a-z])hp[0-9a-f]{6}([^a-z0-9]|$)", RegexOptions.IgnoreCase)]
     private static partial Regex HpPrinter(); // HP printers call themselves HPxxxxxx after their MAC

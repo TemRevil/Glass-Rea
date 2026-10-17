@@ -63,6 +63,11 @@
                                             ToolTipService.ToolTip="Rename" AutomationProperties.Name="Rename this device">
                                         <FontIcon Glyph="&#xE70F;" FontSize="13" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                                     </Button>
+                                    <Button Tag="{x:Bind}" Click="OnForget" Width="30" Height="30" Padding="0" Background="Transparent" BorderThickness="0"
+                                            Visibility="{x:Bind Row.ForgetShown, Mode=OneWay}"
+                                            ToolTipService.ToolTip="Forget" AutomationProperties.Name="Forget this device">
+                                        <FontIcon Glyph="&#xE74D;" FontSize="13" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                    </Button>
                                 </StackPanel>
                                 <Grid Grid.Row="1" Grid.ColumnSpan="3" ColumnSpacing="16">
                                     <Grid.ColumnDefinitions><ColumnDefinition /><ColumnDefinition /></Grid.ColumnDefinitions>

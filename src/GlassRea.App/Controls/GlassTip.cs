@@ -33,7 +33,7 @@ internal sealed class GlassTip
         _title.VerticalAlignment = VerticalAlignment.Center;
         _glass = new Glass
         {
-            BlurSource = blurSource, CornerRadius = new CornerRadius(inline ? 13 : 12),
+            BlurSource = blurSource, Refracts = false, CornerRadius = new CornerRadius(inline ? 13 : 12),
             Padding = inline ? new Thickness(12, 5, 12, 5) : new Thickness(12, 8, 14, 9),
             IsHitTestVisible = false, Opacity = 0, Content = panel, SmoothWidth = true,
             HorizontalContentAlignment = HorizontalAlignment.Center,

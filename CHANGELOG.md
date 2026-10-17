@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.2.3
+
+- Lighter on the PC: the app uses about a third of the processor it did while open (16% of one core instead of 47% on the Overview, on the PC this was measured on) and much less memory. The live graph is drawn once a second and Windows' compositor slides it in between; the glass bends light only where it doesn't change every second; nothing is drawn while the window is minimised.
+- The usage chart grows in once it's on screen, instead of showing the bars first and then animating them.
+- The bottom bar is properly frosted: the page no longer shows through it sharply.
+- Firewall opens at once, even with hundreds of apps: only the rows on screen are made. Pages that take a moment to open show a thin loading line until they are ready.
+- Devices: Forget takes a device off the list; if it's still on your network, the next scan brings it back. Scan now waits for the scan to finish and then shows what it found. A phone that switches to a new private address is kept as one device, with your name for it, instead of being listed twice. A Samsung TV is no longer taken for a Samsung phone.
+- A tidier install: about 170 MB instead of 320 MB. The uninstaller no longer carries a second copy of the app, WinUI's text ships in English only (the app is in English), and only the parts of the Windows App SDK in use are installed.
+
 ## 1.2.2
 
 - Real app icons everywhere: programs show the icon Explorer shows, Store apps the one in Start, and a program that has since updated into a new folder shows its current icon. What has no icon of its own gets a symbol for its kind, never a letter. Several icons asked for at once used to come back empty from Windows; they're now drawn one at a time.

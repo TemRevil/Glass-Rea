@@ -1,0 +1,12 @@
+<Project>
+  <!-- Glass-Rea is in English, so WinUI's built-in control text (context menus, the colour picker) only ships in English
+       too, instead of a folder for each of 87 languages. Windows falls back to it whatever the display language. -->
+  <Target Name="KeepEnglishWinUIText" Condition="'$(UseWinUI)' == 'true'"
+          BeforeTargets="AddMicrosoftWindowsAppSDKPayloadFilesFromComponents" DependsOnTargets="GetWindowsAppSDKNativePlatform">
+    <ItemGroup>
+      <_WinUIText Include="%(WindowsAppSdkComponentPackages.Identity)runtimes-framework\win-$(NativePlatform)\native\**\*.mui" />
+      <MicrosoftWindowsAppSDKFilesExcluded Include="@(_WinUIText)"
+          Condition="!$([System.String]::Copy('%(_WinUIText.RecursiveDir)').StartsWith('en-us', System.StringComparison.OrdinalIgnoreCase))" />
+    </ItemGroup>
+  </Target>
+</Project>
