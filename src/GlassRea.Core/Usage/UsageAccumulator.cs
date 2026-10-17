@@ -3,7 +3,8 @@ using GlassRea.Core.Net;
 
 namespace GlassRea.Core.Usage;
 
-public readonly record struct UsageDelta(string AppKey, long Hour, long NetIn, long NetOut, long LanIn, long LanOut);
+/// <param name="TunIn">Of NetIn, the bytes that came through a VPN (its adapter or its local proxy) rather than straight over the connection.</param>
+public readonly record struct UsageDelta(string AppKey, long Hour, long NetIn, long NetOut, long LanIn, long LanOut, long TunIn = 0, long TunOut = 0);
 public readonly record struct HostDelta(string AppKey, int Day, string Ip, long In, long Out, long LastSeen);
 public sealed record AppRate(string AppKey, long InPerSec, long OutPerSec);
 
@@ -21,11 +22,12 @@ public sealed class UsageAccumulator(int liveSeconds = 300)
     private readonly Dictionary<string, (long Second, long In, long Out)>[] _liveApps = Enumerable.Range(0, 5).Select(_ => new Dictionary<string, (long, long, long)>()).ToArray();
     private long _liveSecond = -1;
 
-    public void Add(AppIdentity app, DateTimeOffset time, long bytes, bool outbound, IPAddress remote)
+    /// <param name="viaTunnel">The app's end of the traffic was a VPN adapter, so the VPN carries it over the connection.</param>
+    public void Add(AppIdentity app, DateTimeOffset time, long bytes, bool outbound, IPAddress remote, bool viaTunnel = false)
     {
         var scope = AddressScope.Classify(remote);
         if (scope == Scope.Loopback) return;
-        Count(app, time, bytes, outbound, scope, remote.IsIPv4MappedToIPv6 ? remote.MapToIPv4().ToString() : remote.ToString());
+        Count(app, time, bytes, outbound, scope, remote.IsIPv4MappedToIPv6 ? remote.MapToIPv4().ToString() : remote.ToString(), viaTunnel);
     }
 
     /// <summary>
@@ -33,18 +35,19 @@ public sealed class UsageAccumulator(int liveSeconds = 300)
     /// hidden inside the VPN, so no host is recorded.
     /// </summary>
     public void AddThroughTunnel(AppIdentity app, DateTimeOffset time, long bytes, bool outbound) =>
-        Count(app, time, bytes, outbound, Scope.Internet, null);
+        Count(app, time, bytes, outbound, Scope.Internet, null, viaTunnel: true);
 
-    private void Count(AppIdentity app, DateTimeOffset time, long bytes, bool outbound, Scope scope, string? ip)
+    private void Count(AppIdentity app, DateTimeOffset time, long bytes, bool outbound, Scope scope, string? ip, bool viaTunnel)
     {
         if (bytes <= 0) return;
         var unix = time.ToUnixTimeSeconds();
         var hour = unix / 3600;
         lock (_gate)
         {
-            var h = Bucket(_hours, (app.Key, hour), 4);
+            var h = Bucket(_hours, (app.Key, hour), 6);
             var slot = (scope == Scope.Internet ? 0 : 2) + (outbound ? 1 : 0);
             h[slot] += bytes;
+            if (viaTunnel && scope == Scope.Internet) h[4 + (outbound ? 1 : 0)] += bytes;
 
             if (ip is not null)
             {
@@ -100,7 +103,7 @@ public sealed class UsageAccumulator(int liveSeconds = 300)
     {
         lock (_gate)
         {
-            var usage = _hours.Select(kv => new UsageDelta(kv.Key.Item1, kv.Key.Item2, kv.Value[0], kv.Value[1], kv.Value[2], kv.Value[3])).ToList();
+            var usage = _hours.Select(kv => new UsageDelta(kv.Key.Item1, kv.Key.Item2, kv.Value[0], kv.Value[1], kv.Value[2], kv.Value[3], kv.Value[4], kv.Value[5])).ToList();
             var hosts = _hosts.Select(kv => new HostDelta(kv.Key.Item1, kv.Key.Item2, kv.Key.Item3, kv.Value[0], kv.Value[1], kv.Value[2])).ToList();
             _hours.Clear();
             _hosts.Clear();

@@ -68,20 +68,27 @@ public sealed class DeviceListener(Database db, DeviceScanner scanner, FirewallM
                 catch (SocketException) { continue; }
                 if (r.RemoteEndPoint is not IPEndPoint from || from.Address.Equals(pick.Ip)) continue;
                 if (r.ReceivedBytes < 12 || (buffer[2] & 0x80) == 0) continue; // a question, not an answer
-                Heard(from.Address.MapToIPv4(), DnsWire.Parse(buffer.AsSpan(0, r.ReceivedBytes)), pick.Ip);
+                Heard(from.Address.MapToIPv4(), DnsWire.Parse(buffer.AsSpan(0, r.ReceivedBytes)));
             }
         }
     }
 
-    private void Heard(IPAddress sender, List<DnsRecord> records, IPAddress self)
+    private void Heard(IPAddress sender, List<DnsRecord> records)
     {
         if (records.Count == 0) return;
-        var found = new Dictionary<IPAddress, DeviceEvidence> { [sender] = new() };
-        foreach (var rec in records)
-            if (rec.Type == DnsWire.A && IPAddress.TryParse(rec.Data, out var a) && !a.Equals(self)) found.TryAdd(a, new DeviceEvidence());
-        DeviceProbe.MergeMdns(found, [(sender, records)]);
-        foreach (var (ip, heard) in found)
+        foreach (var (ip, heard) in Announced(sender, records))
             if (MacOf(ip) is { } mac) Save(mac, heard);
+    }
+
+    /// <summary>
+    /// The devices an announcement tells us about, which is only ever the one that sent it. Anything about another
+    /// address is dropped: it could be one device trying to rename another.
+    /// </summary>
+    public static Dictionary<IPAddress, DeviceEvidence> Announced(IPAddress sender, List<DnsRecord> records)
+    {
+        var found = new Dictionary<IPAddress, DeviceEvidence> { [sender] = new() };
+        DeviceProbe.MergeMdns(found, [(sender, records)]);
+        return found;
     }
 
     private void Save(string mac, DeviceEvidence heard)

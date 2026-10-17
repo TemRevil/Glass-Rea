@@ -17,6 +17,25 @@ public static class AlertText
         string.IsNullOrWhiteSpace(name) ? "A new device joined your network" : $"{name.Trim()} joined your network",
         $"Seen for the first time at {ip}, hardware address {mac}. If it isn't yours, someone else may be using your network.");
 
+    public static (string Title, string Body) DeviceLeft(string name, string ip, long goneSeconds) => (
+        $"{name.Trim()} left your network",
+        $"Not seen for {Span(goneSeconds)}. It was at {ip}. You'll be told when it comes back.");
+
+    public static (string Title, string Body) DeviceBack(string name, string ip, long awaySeconds) => (
+        $"{name.Trim()} is back on your network",
+        $"Away for {Span(awaySeconds)}, now at {ip}.");
+
+    /// <summary>A length of time in words, to the minute under a day and to the hour above: "1 hour 5 minutes", "2 days 3 hours".</summary>
+    public static string Span(long seconds)
+    {
+        static string Unit(long n, string word) => n == 1 ? $"1 {word}" : $"{n} {word}s";
+        var minutes = Math.Max(1, seconds / 60);
+        if (minutes < 60) return Unit(minutes, "minute");
+        var hours = minutes / 60;
+        if (hours < 24) return minutes % 60 == 0 ? Unit(hours, "hour") : $"{Unit(hours, "hour")} {Unit(minutes % 60, "minute")}";
+        return hours % 24 == 0 ? Unit(hours / 24, "day") : $"{Unit(hours / 24, "day")} {Unit(hours % 24, "hour")}";
+    }
+
     /// <param name="period">"Daily" or "Monthly".</param>
     /// <param name="monthDay">The day of the month the monthly count starts again (Settings > Data).</param>
     public static (string Title, string Body) Limit(string period, int percent, long used, long limit, int monthDay = 1)

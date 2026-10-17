@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.NetworkInformation;
 using System.Net.Sockets;
+using System.Management;
 using GlassRea.Core.Alerts;
 using GlassRea.Core.Protocol;
 using GlassRea.Core.Storage;
@@ -11,12 +12,16 @@ namespace GlassRea.Service;
 /// <summary>
 /// Every few minutes, pings the local subnet so every device answers ARP, records each MAC address seen, and asks the
 /// devices what they are (see <see cref="DeviceProbe"/>). A device seen for the first time raises an alert (except on
-/// the very first scan, when everything is new).
+/// the very first scan, when everything is new). With presence alerts on, a device missing for
+/// <see cref="AwayAfter"/> seconds raises a "left" alert and its return a "back" one.
 /// </summary>
 public sealed class DeviceScanner(Database db, ServiceState state, ILogger<DeviceScanner> log) : BackgroundService
 {
     private static readonly string[] SkipAdapters = ["cloudflare", "warp", "vpn", "virtual", "hyper-v", "vmware", "virtualbox", "tap-", "wintun", "wireguard", "loopback", "bluetooth"];
     private readonly SemaphoreSlim _scanNow = new(0, 1);
+
+    /// <summary>Three missed scans: a phone asleep on Wi-Fi still answers ARP, so this means it has really gone.</summary>
+    public const long AwayAfter = 15 * 60;
 
     public void RequestScan() { if (_scanNow.CurrentCount == 0) _scanNow.Release(); }
 
@@ -37,7 +42,8 @@ public sealed class DeviceScanner(Database db, ServiceState state, ILogger<Devic
     {
         if (PickInterface() is not { } pick) return;
         var (nic, ip, mask, gateway) = pick;
-        var firstScan = db.Devices().Count == 0;
+        var before = db.Devices().ToDictionary(d => d.Mac);
+        var firstScan = before.Count == 0;
         var hosts = SubnetHosts(ip, mask).ToList();
 
         // The ping makes every device answer ARP; its reply's TTL hints at the system (128 Windows, 64 phones and Macs).
@@ -57,6 +63,7 @@ public sealed class DeviceScanner(Database db, ServiceState state, ILogger<Devic
         }));
 
         var index = nic.GetIPProperties().GetIPv4Properties()?.Index ?? -1;
+        state.NetworkPublic = IsPublic(index) == true;
         var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
         var subnet = hosts.ToHashSet();
         var seen = Native.ArpTable()
@@ -75,10 +82,12 @@ public sealed class DeviceScanner(Database db, ServiceState state, ILogger<Devic
         });
         var evidence = await probe;
         var hints = db.DeviceHints();
+        var network = seen.Where(d => d.Address.Equals(gateway)).Select(d => MacText(d.Mac)).FirstOrDefault();
+        var presence = state.Flag(SettingKeys.AlertDevicePresence);
 
         foreach (var d in seen)
         {
-            var mac = string.Join(":", d.Mac.Select(b => b.ToString("X2")));
+            var mac = MacText(d.Mac);
             var e = evidence.GetValueOrDefault(d.Address) ?? new DeviceEvidence();
             if (hints.TryGetValue(mac, out var heard)) e.AddHints(heard);
             e.ReverseDns = reverse.GetValueOrDefault(d.Address);
@@ -89,15 +98,71 @@ public sealed class DeviceScanner(Database db, ServiceState state, ILogger<Devic
             e.IsThisPc = d.Address.Equals(ip);
             var id = DeviceClassifier.Classify(e);
             var device = new DeviceInfo(mac, d.Address.ToString(), e.IsThisPc ? Environment.MachineName : id.Name, e.Randomized, e.IsGateway,
-                e.IsThisPc, now, now, e.Vendor, id.Model, id.Kind, id.Os);
+                e.IsThisPc, now, now, e.Vendor, id.Model, id.Kind, id.Os, Network: network);
             if (db.SaveDevice(device) && !firstScan && state.Flag(SettingKeys.AlertNewDevice))
             {
                 var (title, body) = AlertText.NewDevice(DeviceLabel.For(device), device.Ip, mac);
                 db.AddAlert("new_device", title, body, now);
             }
         }
+
+        var present = seen.ToDictionary(d => MacText(d.Mac), d => d.Address.ToString());
+        foreach (var change in Presence(before, present, network, now))
+        {
+            db.SetAway(change.Device.Mac, !change.Back);
+            if (!presence || !change.Alert) continue;
+            var name = DeviceLabel.For(change.Device);
+            var (title, body) = change.Back
+                ? AlertText.DeviceBack(name, present[change.Device.Mac], now - change.Device.LastSeen)
+                : AlertText.DeviceLeft(name, change.Device.Ip, now - change.Device.LastSeen);
+            db.AddAlert(change.Back ? "device_back" : "device_left", title, body, now);
+        }
         db.PruneDeviceHints(now);
         Interlocked.Exchange(ref state.LastDeviceScan, now);
+    }
+
+    /// <summary>
+    /// Which devices have just gone missing and which have come back. Only devices of the network this PC is on now
+    /// (<paramref name="network"/>, its router's hardware address) can go missing, never this PC or the router. A device
+    /// missing for much longer than <see cref="AwayAfter"/> (this PC was asleep or off) is marked without an alert,
+    /// as is one coming back on a different network.
+    /// </summary>
+    /// <param name="present">This scan's devices: hardware address to IP address.</param>
+    public static List<(DeviceInfo Device, bool Back, bool Alert)> Presence(IReadOnlyDictionary<string, DeviceInfo> before,
+        IReadOnlyDictionary<string, string> present, string? network, long now)
+    {
+        var changes = new List<(DeviceInfo, bool, bool)>();
+        foreach (var was in before.Values)
+        {
+            if (present.ContainsKey(was.Mac))
+            {
+                if (was.Away) changes.Add((was, true, network is not null && was.Network == network));
+                continue;
+            }
+            if (network is null || was.Away || was.IsThisPc || was.IsGateway || was.Network != network) continue;
+            var gone = now - was.LastSeen;
+            if (gone >= AwayAfter) changes.Add((was, false, gone < AwayAfter + 3600));
+        }
+        return changes;
+    }
+
+    private static string MacText(byte[] mac) => string.Join(":", mac.Select(b => b.ToString("X2")));
+
+    /// <summary>Whether Windows has the network on this adapter marked Public (0), rather than Private (1) or Domain (2).</summary>
+    private bool? IsPublic(int interfaceIndex)
+    {
+        try
+        {
+            using var searcher = new ManagementObjectSearcher(@"root\StandardCimv2",
+                $"SELECT NetworkCategory FROM MSFT_NetConnectionProfile WHERE InterfaceIndex = {interfaceIndex}");
+            foreach (var o in searcher.Get())
+                using (o) return Convert.ToInt32(o["NetworkCategory"], System.Globalization.CultureInfo.InvariantCulture) == 0;
+        }
+        catch (Exception ex) when (ex is ManagementException or System.Runtime.InteropServices.COMException)
+        {
+            log.LogDebug(ex, "Couldn't read the network category");
+        }
+        return null;
     }
 
     /// <summary>Systems start at 64, 128 or 255 and each router hop takes one off; a LAN reply is usually untouched.</summary>

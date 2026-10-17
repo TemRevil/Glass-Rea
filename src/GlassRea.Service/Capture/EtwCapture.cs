@@ -25,7 +25,8 @@ public sealed class EtwCapture(UsageAccumulator usage, ProcessResolver resolver,
     private const string KernelProcess = "Microsoft-Windows-Kernel-Process";
     private const string DnsClient = "Microsoft-Windows-DNS-Client";
 
-    private volatile HashSet<IPAddress> _localAddresses = LocalAddresses();
+    private volatile HashSet<IPAddress> _localAddresses = LocalAddresses(tunnelsOnly: false);
+    private volatile HashSet<IPAddress> _tunnelAddresses = LocalAddresses(tunnelsOnly: true);
     private volatile TunnelPorts _tunnelPorts = TunnelPorts.None;
     private long _tunnelPortsAt = long.MinValue;
     private bool? _portsSwapped;
@@ -39,7 +40,12 @@ public sealed class EtwCapture(UsageAccumulator usage, ProcessResolver resolver,
 
     private void Run(CancellationToken ct)
     {
-        NetworkChange.NetworkAddressChanged += (_, _) => { _localAddresses = LocalAddresses(); resolver.RefreshDrives(); };
+        NetworkChange.NetworkAddressChanged += (_, _) =>
+        {
+            _localAddresses = LocalAddresses(tunnelsOnly: false);
+            _tunnelAddresses = LocalAddresses(tunnelsOnly: true);
+            resolver.RefreshDrives();
+        };
         while (!ct.IsCancellationRequested)
         {
             try
@@ -54,6 +60,9 @@ public sealed class EtwCapture(UsageAccumulator usage, ProcessResolver resolver,
 
                 if (state.FirstLiveHour == 0)
                     db.SetSetting(SettingKeys.FirstEtwHour, (DateTimeOffset.UtcNow.ToUnixTimeSeconds() / 3600).ToString());
+                // The hour this build started in may hold bytes an older build counted without marking VPN traffic.
+                if (db.GetSetting(SettingKeys.TunnelMarkedFrom) is null)
+                    db.SetSetting(SettingKeys.TunnelMarkedFrom, (DateTimeOffset.UtcNow.ToUnixTimeSeconds() / 3600 + 1).ToString());
                 state.Capturing = true;
                 state.CaptureError = null;
                 log.LogInformation("Traffic capture started");
@@ -103,7 +112,8 @@ public sealed class EtwCapture(UsageAccumulator usage, ProcessResolver resolver,
             OnLoopback(e, app, time, size, outbound);
             return;
         }
-        usage.Add(app, time, size, outbound, remote);
+        var mine = ReferenceEquals(remote, saddr) ? daddr : saddr;
+        usage.Add(app, time, size, outbound, remote, _tunnelAddresses.Contains(Plain(mine)));
     }
 
     /// <summary>
@@ -136,14 +146,18 @@ public sealed class EtwCapture(UsageAccumulator usage, ProcessResolver resolver,
 
     private static int Int(TraceEvent e, string field) => Convert.ToInt32(e.PayloadByName(field));
 
-    private static HashSet<IPAddress> LocalAddresses()
+    /// <summary>This PC's addresses; with tunnelsOnly, just those of VPN adapters.</summary>
+    private static HashSet<IPAddress> LocalAddresses(bool tunnelsOnly)
     {
         var set = new HashSet<IPAddress>();
         try
         {
             foreach (var nic in NetworkInterface.GetAllNetworkInterfaces())
+            {
+                if (tunnelsOnly && !TunnelAdapters.IsTunnel(nic.Name, nic.Description, (int)nic.NetworkInterfaceType)) continue;
                 foreach (var a in nic.GetIPProperties().UnicastAddresses)
                     set.Add(a.Address);
+            }
         }
         catch { /* keep the empty set; the destination fallback still works */ }
         return set;

@@ -18,6 +18,8 @@ public sealed partial class AlertsPage : UserControl, IPage
         "limit" => "",       // gauge
         "new_device" => "",  // wifi
         "new_app" => "",     // apps
+        "device_left" => "\uE711",  // cross
+        "device_back" => "\uE73E",  // check mark
         _ => "",             // bell
     };
 

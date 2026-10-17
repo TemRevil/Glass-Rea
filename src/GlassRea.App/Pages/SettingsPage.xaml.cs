@@ -200,6 +200,7 @@ public sealed partial class SettingsPage : UserControl, IPage
         MonthlyBox.Text = ToGb(s.GetValueOrDefault(SettingKeys.MonthlyLimit));
         NewAppBox.IsOn = s.GetValueOrDefault(SettingKeys.AlertNewApp) == "true";
         NewDeviceBox.IsOn = s.GetValueOrDefault(SettingKeys.AlertNewDevice) == "true";
+        PresenceBox.IsOn = s.GetValueOrDefault(SettingKeys.AlertDevicePresence) == "true";
         TunnelBox.Text = s.GetValueOrDefault(SettingKeys.TunnelProcesses, "");
         PriorityPick.SelectedIndex = Math.Max(0, Array.IndexOf(PriorityValues, s.GetValueOrDefault(SettingKeys.Priority)));
         var day = Cycle.ParseMonthDay(s.GetValueOrDefault(SettingKeys.MonthStartDay));
@@ -246,7 +247,7 @@ public sealed partial class SettingsPage : UserControl, IPage
         DailyBox.Text = ToGb(daily);
         MonthlyBox.Text = ToGb(monthly);
         LimitsNote.Text = await Save(new() { [SettingKeys.DailyLimit] = daily!, [SettingKeys.MonthlyLimit] = monthly! })
-            ?? "Saved. Counts internet traffic only; leave empty for no limit.";
+            ?? "Saved. Counted as your internet provider counts it, a VPN's overhead included; leave empty for no limit.";
     }
 
     private async void OnAlerts(object sender, RoutedEventArgs e)
@@ -256,6 +257,7 @@ public sealed partial class SettingsPage : UserControl, IPage
         {
             [SettingKeys.AlertNewApp] = NewAppBox.IsOn ? "true" : "false",
             [SettingKeys.AlertNewDevice] = NewDeviceBox.IsOn ? "true" : "false",
+            [SettingKeys.AlertDevicePresence] = PresenceBox.IsOn ? "true" : "false",
         });
     }
 

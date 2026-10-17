@@ -94,6 +94,13 @@
                                     <ToggleSwitch x:Name="NewDeviceBox" Grid.Column="1" MinWidth="0" OnContent="" OffContent="" Toggled="OnAlerts" AutomationProperties.Name="Alert when a new device joins" />
                                 </Grid>
                             </Border>
+                            <Border Style="{StaticResource Row}">
+                                <Grid ColumnSpacing="12">
+                                    <Grid.ColumnDefinitions><ColumnDefinition /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                                    <StackPanel VerticalAlignment="Center"><TextBlock Text="A device leaves or comes back" /><TextBlock Text="Missing for 15 minutes, then back again" Style="{StaticResource Caption}" /></StackPanel>
+                                    <ToggleSwitch x:Name="PresenceBox" Grid.Column="1" MinWidth="0" OnContent="" OffContent="" Toggled="OnAlerts" AutomationProperties.Name="Alert when a device leaves or comes back" />
+                                </Grid>
+                            </Border>
                             <TextBlock Text="Data limit warnings are always on once a limit is set, at 80% and at 100%." Style="{StaticResource Caption}" />
                         </StackPanel>
                     </Border>

@@ -22,6 +22,12 @@ internal static unsafe partial class Native
     private static partial uint QueryDosDevice(string device, char* buffer, uint max);
 
     [LibraryImport("iphlpapi.dll")]
+    private static partial uint ConvertInterfaceLuidToIndex(in long luid, out uint index);
+
+    /// <summary>The interface index of a network adapter's LUID, or -1 when the adapter no longer exists.</summary>
+    public static int InterfaceIndex(long luid) => ConvertInterfaceLuidToIndex(luid, out var index) == 0 ? (int)index : -1;
+
+    [LibraryImport("iphlpapi.dll")]
     private static partial uint GetIpNetTable(nint table, ref int size, [MarshalAs(UnmanagedType.Bool)] bool order);
 
     [LibraryImport("iphlpapi.dll")]

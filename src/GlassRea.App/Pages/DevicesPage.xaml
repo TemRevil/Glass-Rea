@@ -5,7 +5,7 @@
     xmlns:p="using:GlassRea.App.Pages">
 
     <Grid RowSpacing="12">
-        <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="*" /></Grid.RowDefinitions>
+        <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /><RowDefinition Height="*" /></Grid.RowDefinitions>
 
         <Border Style="{StaticResource Card}" Padding="20,16">
             <Grid ColumnSpacing="20">
@@ -23,7 +23,20 @@
             </Grid>
         </Border>
 
-        <ScrollViewer Grid.Row="1" Padding="0,0,0,84">
+        <Border x:Name="PublicHint" Grid.Row="1" Style="{StaticResource Card}" Padding="20,14" Visibility="Collapsed">
+            <Grid ColumnSpacing="16">
+                <Grid.ColumnDefinitions><ColumnDefinition Width="Auto" /><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                <FontIcon Glyph="&#xE946;" FontSize="16" Foreground="{StaticResource AccentBrush}" VerticalAlignment="Center" />
+                <StackPanel Grid.Column="1" Spacing="2" VerticalAlignment="Center">
+                    <TextBlock Text="Windows treats this network as public" Style="{StaticResource CardTitle}" />
+                    <TextBlock Style="{StaticResource Caption}" TextWrapping="Wrap"
+                               Text="On a public network Glass-Rea doesn't listen for devices announcing their names, so fewer of them are named. If this is your home or work network, set it to Private in Windows settings." />
+                </StackPanel>
+                <Button Grid.Column="2" Content="Open network settings" Click="OnOpenNetworkSettings" VerticalAlignment="Center" />
+            </Grid>
+        </Border>
+
+        <ScrollViewer Grid.Row="2" Padding="0,0,0,84">
             <ItemsRepeater x:Name="List">
                 <ItemsRepeater.Layout>
                     <UniformGridLayout MinItemWidth="300" MinItemHeight="128" MinRowSpacing="12" MinColumnSpacing="12" ItemsStretch="Fill" />
@@ -41,10 +54,16 @@
                                     <TextBlock Text="{x:Bind Name}" Style="{StaticResource CardTitle}" TextTrimming="CharacterEllipsis" />
                                     <TextBlock Text="{x:Bind Note}" Style="{StaticResource Caption}" TextTrimming="CharacterEllipsis" />
                                 </StackPanel>
-                                <Border Grid.Column="2" VerticalAlignment="Top" Margin="0,2,0,0" Padding="7,2" CornerRadius="5"
-                                        Background="{ThemeResource SubtleFillColorSecondaryBrush}" Visibility="{x:Bind OsShown}">
-                                    <TextBlock Text="{x:Bind Os}" FontSize="11" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                                </Border>
+                                <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="4" VerticalAlignment="Top">
+                                    <Border VerticalAlignment="Center" Padding="7,2" CornerRadius="5"
+                                            Background="{ThemeResource SubtleFillColorSecondaryBrush}" Visibility="{x:Bind OsShown}">
+                                        <TextBlock Text="{x:Bind Os}" FontSize="11" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                    </Border>
+                                    <Button Tag="{x:Bind}" Click="OnRename" Width="30" Height="30" Padding="0" Background="Transparent" BorderThickness="0"
+                                            ToolTipService.ToolTip="Rename" AutomationProperties.Name="Rename this device">
+                                        <FontIcon Glyph="&#xE70F;" FontSize="13" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                    </Button>
+                                </StackPanel>
                                 <Grid Grid.Row="1" Grid.ColumnSpan="3" ColumnSpacing="16">
                                     <Grid.ColumnDefinitions><ColumnDefinition /><ColumnDefinition /></Grid.ColumnDefinitions>
                                     <StackPanel>

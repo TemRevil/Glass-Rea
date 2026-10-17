@@ -10,6 +10,8 @@ public sealed class ServiceState(Database db)
     public volatile bool Capturing;
     public volatile string? CaptureError;
     public long LastDeviceScan;
+    /// <summary>Windows has the scanned network marked Public, where the discovery firewall rule doesn't apply.</summary>
+    public volatile bool NetworkPublic;
 
     public static readonly string DataDirectory =
         Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "Glass-Rea");
@@ -20,6 +22,7 @@ public sealed class ServiceState(Database db)
         [SettingKeys.MonthlyLimit] = "0",
         [SettingKeys.AlertNewApp] = "true",
         [SettingKeys.AlertNewDevice] = "true",
+        [SettingKeys.AlertDevicePresence] = "false",
         [SettingKeys.TunnelProcesses] = string.Join(",", TunnelProcesses.Defaults),
         [SettingKeys.Priority] = Priority.Normal,
         [SettingKeys.MonthStartDay] = Cycle.DefaultMonthDay.ToString(System.Globalization.CultureInfo.InvariantCulture),
@@ -41,5 +44,5 @@ public sealed class ServiceState(Database db)
     public ServiceStatus Snapshot() => new(
         typeof(ServiceState).Assembly.GetName().Version?.ToString(3) ?? "1.0.0",
         Capturing, CaptureError, db.GetSetting(SettingKeys.SrumState) ?? "pending",
-        FirstLiveHour * 3600, Interlocked.Read(ref LastDeviceScan));
+        FirstLiveHour * 3600, Interlocked.Read(ref LastDeviceScan), NetworkPublic);
 }

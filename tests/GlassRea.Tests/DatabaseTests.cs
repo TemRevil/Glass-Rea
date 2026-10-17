@@ -38,7 +38,7 @@ public class DatabaseTests
         Assert.Equal(1100, r.TunnelIn);
         Assert.Contains(r.Apps, a => a.IsTunnel && a.Name == "WARP");
         Assert.Equal(1000, Assert.Single(r.Hours).NetIn);
-        Assert.Equal(1100, db.InternetTotal(Hour * 3600, (Hour + 1) * 3600));
+        Assert.Equal(1100, db.ConnectionTotal(Hour * 3600, (Hour + 1) * 3600));
     }
 
     [Fact]
@@ -77,7 +77,7 @@ public class DatabaseTests
     }
 
     [Fact]
-    public void LanOnlyAppsStillListedButNotInInternetTotal()
+    public void LanOnlyAppsStillListedButNotInInternetTotals()
     {
         using var db = Database.InMemory();
         var chrome = db.EnsureApp(Chrome, 0, out _);

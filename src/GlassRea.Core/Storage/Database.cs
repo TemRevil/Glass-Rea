@@ -24,6 +24,7 @@ public sealed class Database : IDisposable
               app_id INTEGER NOT NULL REFERENCES apps(id), hour INTEGER NOT NULL, source INTEGER NOT NULL,
               net_in INTEGER NOT NULL DEFAULT 0, net_out INTEGER NOT NULL DEFAULT 0,
               lan_in INTEGER NOT NULL DEFAULT 0, lan_out INTEGER NOT NULL DEFAULT 0,
+              tun_in INTEGER NOT NULL DEFAULT 0, tun_out INTEGER NOT NULL DEFAULT 0,
               PRIMARY KEY(app_id, hour, source)) WITHOUT ROWID;
             CREATE INDEX IF NOT EXISTS usage_by_hour ON usage(hour);
             CREATE TABLE IF NOT EXISTS hosts(
@@ -34,7 +35,7 @@ public sealed class Database : IDisposable
             CREATE TABLE IF NOT EXISTS devices(
               mac TEXT PRIMARY KEY, ip TEXT NOT NULL, name TEXT, randomized INTEGER NOT NULL,
               is_gateway INTEGER NOT NULL, is_this_pc INTEGER NOT NULL, first_seen INTEGER NOT NULL, last_seen INTEGER NOT NULL,
-              vendor TEXT, model TEXT, kind TEXT, os TEXT);
+              vendor TEXT, model TEXT, kind TEXT, os TEXT, custom_name TEXT, away INTEGER NOT NULL DEFAULT 0, network TEXT);
             CREATE TABLE IF NOT EXISTS device_hints(
               mac TEXT NOT NULL, key TEXT NOT NULL, value TEXT NOT NULL, seen INTEGER NOT NULL,
               PRIMARY KEY(mac, key)) WITHOUT ROWID;
@@ -42,13 +43,20 @@ public sealed class Database : IDisposable
               id INTEGER PRIMARY KEY AUTOINCREMENT, time INTEGER NOT NULL, kind TEXT NOT NULL, title TEXT NOT NULL, body TEXT NOT NULL);
             CREATE TABLE IF NOT EXISTS settings(key TEXT PRIMARY KEY, value TEXT NOT NULL);
             """);
-        // Older databases predate what a device says about itself.
+        // Older databases predate these columns.
+        AddMissing("devices", ("vendor", "TEXT"), ("model", "TEXT"), ("kind", "TEXT"), ("os", "TEXT"), ("custom_name", "TEXT"),
+            ("away", "INTEGER NOT NULL DEFAULT 0"), ("network", "TEXT"));
+        AddMissing("usage", ("tun_in", "INTEGER NOT NULL DEFAULT 0"), ("tun_out", "INTEGER NOT NULL DEFAULT 0"));
+    }
+
+    private void AddMissing(string table, params (string Name, string Type)[] wanted)
+    {
         var columns = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        using (var info = Cmd("PRAGMA table_info(devices)"))
+        using (var info = Cmd($"PRAGMA table_info({table})"))
         using (var r = info.ExecuteReader())
             while (r.Read()) columns.Add(r.GetString(1));
-        foreach (var column in new[] { "vendor", "model", "kind", "os" })
-            if (!columns.Contains(column)) Exec($"ALTER TABLE devices ADD COLUMN {column} TEXT");
+        foreach (var (name, type) in wanted)
+            if (!columns.Contains(name)) Exec($"ALTER TABLE {table} ADD COLUMN {name} {type}");
     }
 
     public static Database OpenFile(string path)
@@ -104,14 +112,33 @@ public sealed class Database : IDisposable
         {
             using var tx = _db.BeginTransaction();
             using var c = Cmd("""
-                INSERT INTO usage(app_id,hour,source,net_in,net_out,lan_in,lan_out) VALUES($a,$h,$s,$ni,$no,$li,$lo)
-                ON CONFLICT(app_id,hour,source) DO UPDATE SET net_in=net_in+$ni, net_out=net_out+$no, lan_in=lan_in+$li, lan_out=lan_out+$lo
-                """, ("$a", 0L), ("$h", 0L), ("$s", (long)source), ("$ni", 0L), ("$no", 0L), ("$li", 0L), ("$lo", 0L));
+                INSERT INTO usage(app_id,hour,source,net_in,net_out,lan_in,lan_out,tun_in,tun_out) VALUES($a,$h,$s,$ni,$no,$li,$lo,$ti,$to)
+                ON CONFLICT(app_id,hour,source) DO UPDATE SET net_in=net_in+$ni, net_out=net_out+$no, lan_in=lan_in+$li, lan_out=lan_out+$lo,
+                  tun_in=tun_in+$ti, tun_out=tun_out+$to
+                """, ("$a", 0L), ("$h", 0L), ("$s", (long)source), ("$ni", 0L), ("$no", 0L), ("$li", 0L), ("$lo", 0L), ("$ti", 0L), ("$to", 0L));
             foreach (var (appId, d) in rows)
             {
                 c["$a"] = appId; c["$h"] = d.Hour;
                 c["$ni"] = d.NetIn; c["$no"] = d.NetOut;
                 c["$li"] = d.LanIn; c["$lo"] = d.LanOut;
+                c["$ti"] = d.TunIn; c["$to"] = d.TunOut;
+                c.ExecuteNonQuery();
+            }
+            tx.Commit();
+        }
+    }
+
+    /// <summary>Sets how much of already imported Windows history went through a VPN adapter (a one-time pass).</summary>
+    public void SetImportedTunnel(IEnumerable<(long AppId, long Hour, long TunIn, long TunOut)> rows)
+    {
+        lock (_gate)
+        {
+            using var tx = _db.BeginTransaction();
+            using var c = Cmd("UPDATE usage SET tun_in=min($ti,net_in), tun_out=min($to,net_out) WHERE app_id=$a AND hour=$h AND source=$s",
+                ("$a", 0L), ("$h", 0L), ("$s", (long)UsageSource.WindowsHistory), ("$ti", 0L), ("$to", 0L));
+            foreach (var (appId, hour, tunIn, tunOut) in rows)
+            {
+                c["$a"] = appId; c["$h"] = hour; c["$ti"] = tunIn; c["$to"] = tunOut;
                 c.ExecuteNonQuery();
             }
             tx.Commit();
@@ -161,22 +188,35 @@ public sealed class Database : IDisposable
         var normal = apps.Where(a => !a.IsTunnel).ToList();
         var tunnel = apps.Where(a => a.IsTunnel).ToList();
         var firstLive = long.TryParse(GetSetting(SettingKeys.FirstEtwHour), out var fh) ? fh * 3600 : 0;
+        var (connIn, connOut) = Connection(from, to);
         return new UsageReport(apps.Where(a => a.NetIn + a.NetOut + a.LanIn + a.LanOut > 0).ToList(), days, hours,
-            normal.Sum(a => a.NetIn), normal.Sum(a => a.NetOut), tunnel.Sum(a => a.NetIn), tunnel.Sum(a => a.NetOut), firstLive);
+            normal.Sum(a => a.NetIn), normal.Sum(a => a.NetOut), tunnel.Sum(a => a.NetIn), tunnel.Sum(a => a.NetOut), firstLive, connIn, connOut);
     }
 
-    /// <summary>Internet bytes (in+out, tunnels excluded) used in [from, to).</summary>
-    public long InternetTotal(long from, long to)
+    /// <summary>
+    /// What crossed the internet connection in [from, to): every app's internet bytes, the VPN's included, minus what
+    /// apps sent through the VPN (the VPN's own bytes already carry those, wrapped). What an internet provider counts,
+    /// and what limits are checked against. Hours recorded before VPN traffic was marked fall back to counting the
+    /// apps only, so nothing is counted twice.
+    /// </summary>
+    public (long In, long Out) Connection(long from, long to)
     {
+        var markedFrom = long.TryParse(GetSetting(SettingKeys.TunnelMarkedFrom), out var m) ? m : long.MaxValue;
+        var historySplit = GetSetting(SettingKeys.SrumTunnelSplit) == "done" ? 1L : 0L;
         lock (_gate)
         {
             using var c = Cmd("""
-                SELECT coalesce(sum(u.net_in+u.net_out),0) FROM usage u JOIN apps a ON a.id=u.app_id
-                WHERE a.is_tunnel=0 AND u.hour>=$f AND u.hour<$t
-                """, ("$f", from / 3600), ("$t", HourCeil(to)));
-            return (long)c.ExecuteScalar()!;
+                SELECT coalesce(sum(u.net_in-u.tun_in),0), coalesce(sum(u.net_out-u.tun_out),0)
+                FROM usage u JOIN apps a ON a.id=u.app_id
+                WHERE u.hour>=$f AND u.hour<$t
+                  AND NOT (a.is_tunnel=1 AND ((u.source=0 AND u.hour<$marked) OR (u.source=1 AND $split=0)))
+                """, ("$f", from / 3600), ("$t", HourCeil(to)), ("$marked", markedFrom), ("$split", historySplit));
+            using var r = c.ExecuteReader();
+            return r.Read() ? (r.GetInt64(0), r.GetInt64(1)) : (0, 0);
         }
     }
+
+    public long ConnectionTotal(long from, long to) { var (i, o) = Connection(from, to); return i + o; }
 
     private static long HourCeil(long unix) => (unix + 3599) / 3600;
 
@@ -244,13 +284,15 @@ public sealed class Database : IDisposable
             using var find = Cmd("SELECT 1 FROM devices WHERE mac=$m", ("$m", d.Mac));
             var isNew = find.ExecuteScalar() is null;
             using var c = Cmd("""
-                INSERT INTO devices(mac,ip,name,randomized,is_gateway,is_this_pc,first_seen,last_seen,vendor,model,kind,os)
-                VALUES($m,$ip,$n,$r,$g,$p,$f,$l,$v,$md,$k,$o)
+                INSERT INTO devices(mac,ip,name,randomized,is_gateway,is_this_pc,first_seen,last_seen,vendor,model,kind,os,network)
+                VALUES($m,$ip,$n,$r,$g,$p,$f,$l,$v,$md,$k,$o,$net)
                 ON CONFLICT(mac) DO UPDATE SET ip=$ip, name=coalesce($n,name), randomized=$r, is_gateway=$g, is_this_pc=$p, last_seen=$l,
+                  network=coalesce($net,network),
                   vendor=coalesce($v,vendor), model=coalesce($md,model),
                   kind=CASE WHEN $k IS NULL OR $k='unknown' THEN coalesce(kind,$k) ELSE $k END, os=coalesce($o,os)
                 """, ("$m", d.Mac), ("$ip", d.Ip), ("$n", d.Name), ("$r", d.Randomized ? 1 : 0), ("$g", d.IsGateway ? 1 : 0),
-                ("$p", d.IsThisPc ? 1 : 0), ("$f", d.FirstSeen), ("$l", d.LastSeen), ("$v", d.Vendor), ("$md", d.Model), ("$k", d.Kind), ("$o", d.Os));
+                ("$p", d.IsThisPc ? 1 : 0), ("$f", d.FirstSeen), ("$l", d.LastSeen), ("$v", d.Vendor), ("$md", d.Model), ("$k", d.Kind), ("$o", d.Os),
+                ("$net", d.Network));
             c.ExecuteNonQuery();
             return isNew;
         }
@@ -260,13 +302,14 @@ public sealed class Database : IDisposable
     {
         lock (_gate)
         {
-            using var c = Cmd("SELECT mac,ip,name,randomized,is_gateway,is_this_pc,first_seen,last_seen,vendor,model,kind,os FROM devices ORDER BY last_seen DESC, ip");
+            using var c = Cmd("SELECT mac,ip,name,randomized,is_gateway,is_this_pc,first_seen,last_seen,vendor,model,kind,os,custom_name,away,network FROM devices ORDER BY last_seen DESC, ip");
             using var r = c.ExecuteReader();
             var list = new List<DeviceInfo>();
             while (r.Read())
                 list.Add(new DeviceInfo(r.GetString(0), r.GetString(1), r.IsDBNull(2) ? null : r.GetString(2), r.GetInt64(3) == 1,
                     r.GetInt64(4) == 1, r.GetInt64(5) == 1, r.GetInt64(6), r.GetInt64(7),
-                    r.IsDBNull(8) ? null : r.GetString(8), r.IsDBNull(9) ? null : r.GetString(9), r.IsDBNull(10) ? null : r.GetString(10), r.IsDBNull(11) ? null : r.GetString(11)));
+                    r.IsDBNull(8) ? null : r.GetString(8), r.IsDBNull(9) ? null : r.GetString(9), r.IsDBNull(10) ? null : r.GetString(10), r.IsDBNull(11) ? null : r.GetString(11),
+                    r.IsDBNull(12) ? null : r.GetString(12), r.GetInt64(13) == 1, r.IsDBNull(14) ? null : r.GetString(14)));
             return list;
         }
     }
@@ -275,6 +318,23 @@ public sealed class Database : IDisposable
     /// Remembers what a device said about itself when it joined or announced itself (its DHCP name, Bonjour names
     /// and services), so a scan minutes later still knows. A device can store at most 64 facts.
     /// </summary>
+    /// <summary>Your own name for a device; null or blank goes back to what it calls itself. False when the device is unknown.</summary>
+    public bool RenameDevice(string mac, string? name)
+    {
+        lock (_gate)
+        {
+            using var c = Cmd("UPDATE devices SET custom_name=$n WHERE mac=$m", ("$m", mac), ("$n", string.IsNullOrWhiteSpace(name) ? null : name.Trim()));
+            return c.ExecuteNonQuery() > 0;
+        }
+    }
+
+    public void SetAway(string mac, bool away)
+    {
+        lock (_gate) { using var c = Cmd("UPDATE devices SET away=$a WHERE mac=$m", ("$m", mac), ("$a", away ? 1 : 0)); c.ExecuteNonQuery(); }
+    }
+
+    public const int MaxHints = 5000;
+
     public void SaveDeviceHints(string mac, IEnumerable<(string Key, string Value)> hints, long now)
     {
         lock (_gate)
@@ -292,6 +352,12 @@ public sealed class Database : IDisposable
                 insert["$k"] = key; insert["$v"] = value;
                 room -= insert.ExecuteNonQuery();
             }
+            // However many hardware addresses something on the network makes up, the table stays small.
+            using var trim = Cmd("""
+                DELETE FROM device_hints WHERE (mac, key) IN (
+                  SELECT mac, key FROM device_hints ORDER BY seen LIMIT max(0, (SELECT count(*) FROM device_hints) - $max))
+                """, ("$max", MaxHints));
+            trim.ExecuteNonQuery();
             tx.Commit();
         }
     }

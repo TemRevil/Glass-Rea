@@ -24,8 +24,10 @@ public sealed record AppUsage(long AppId, string Name, string? Path, string? Ser
 public sealed record DayTotal(int Day, long NetIn, long NetOut);
 public sealed record HourTotal(long Hour, long NetIn, long NetOut);
 
+/// <param name="ConnectionIn">What crossed the internet connection itself: the apps' traffic outside any VPN plus the
+/// VPN's wrapped copy of the rest. This is the number an internet provider counts.</param>
 public sealed record UsageReport(List<AppUsage> Apps, List<DayTotal> Days, List<HourTotal> Hours,
-    long NetIn, long NetOut, long TunnelIn, long TunnelOut, long ImportedBefore);
+    long NetIn, long NetOut, long TunnelIn, long TunnelOut, long ImportedBefore, long ConnectionIn = 0, long ConnectionOut = 0);
 
 public sealed record LiveApp(long AppId, string Name, string? Path, long InPerSec, long OutPerSec);
 public sealed record LiveSnapshot(long Now, long[] In, long[] Out, List<LiveApp> Top);
@@ -37,13 +39,19 @@ public sealed record HostUsage(string Ip, string? Name, long In, long Out, long 
 /// <param name="Model">A model the device announced ("iPhone", "SM-S911B", "Bravia KD-55X80K").</param>
 /// <param name="Kind">One of <see cref="DeviceKinds"/>.</param>
 /// <param name="Os">One of <see cref="DeviceOs"/>, when it could be told.</param>
+/// <param name="CustomName">The name you gave it on the Devices page; shown instead of anything else.</param>
+/// <param name="Away">It has been missing from scans for a while (see <c>AlertText.DeviceLeft</c>).</param>
+/// <param name="Network">The hardware address of the router it was last seen behind, so devices of one network are never
+/// reported missing while this PC is on another.</param>
 public sealed record DeviceInfo(string Mac, string Ip, string? Name, bool Randomized, bool IsGateway, bool IsThisPc,
-    long FirstSeen, long LastSeen, string? Vendor = null, string? Model = null, string? Kind = null, string? Os = null);
+    long FirstSeen, long LastSeen, string? Vendor = null, string? Model = null, string? Kind = null, string? Os = null,
+    string? CustomName = null, bool Away = false, string? Network = null);
 
 public sealed record AlertInfo(long Id, long Time, string Kind, string Title, string Body);
 
+/// <param name="NetworkPublic">Windows has the scanned network marked Public, so devices can't be heard saying their names.</param>
 public sealed record ServiceStatus(string Version, bool Capturing, string? CaptureError, string HistoryImport,
-    long TrackingSince, long LastDeviceScan);
+    long TrackingSince, long LastDeviceScan, bool NetworkPublic = false);
 
 public static class SettingKeys
 {
@@ -51,10 +59,14 @@ public static class SettingKeys
     public const string MonthlyLimit = "monthly_limit_bytes";
     public const string AlertNewApp = "alert_new_app";
     public const string AlertNewDevice = "alert_new_device";
+    public const string AlertDevicePresence = "alert_device_presence";
     public const string TunnelProcesses = "tunnel_processes";
     public const string Priority = "priority";
     public const string MonthStartDay = "month_start_day";
     public const string WeekStart = "week_start";
     public const string FirstEtwHour = "first_etw_hour";
     public const string SrumState = "srum_state";
+    public const string SrumTunnelSplit = "srum_tunnel_split";
+    /// <summary>The first hour live capture marked what went through a VPN; earlier live hours predate the marking.</summary>
+    public const string TunnelMarkedFrom = "tunnel_marked_from";
 }

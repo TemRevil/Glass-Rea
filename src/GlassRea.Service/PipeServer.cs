@@ -15,7 +15,8 @@ public sealed class PipeServer(Database db, UsageAccumulator usage, ProcessResol
     DeviceScanner devices, ServiceState state, ILogger<PipeServer> log) : BackgroundService
 {
     private static readonly HashSet<string> EditableSettings =
-        [SettingKeys.DailyLimit, SettingKeys.MonthlyLimit, SettingKeys.AlertNewApp, SettingKeys.AlertNewDevice, SettingKeys.TunnelProcesses, SettingKeys.Priority,
+        [SettingKeys.DailyLimit, SettingKeys.MonthlyLimit, SettingKeys.AlertNewApp, SettingKeys.AlertNewDevice, SettingKeys.AlertDevicePresence,
+         SettingKeys.TunnelProcesses, SettingKeys.Priority,
          SettingKeys.MonthStartDay, SettingKeys.WeekStart];
 
     protected override async Task ExecuteAsync(CancellationToken ct)
@@ -86,6 +87,12 @@ public sealed class PipeServer(Database db, UsageAccumulator usage, ProcessResol
                 return null;
             case "devices":
                 return db.Devices();
+            case "device.rename":
+                var mac = r.Settings?.GetValueOrDefault("mac") ?? throw new InvalidOperationException("Which device?");
+                if (!DeviceLabel.TryCleanName(r.Settings.GetValueOrDefault("name"), out var name))
+                    throw new InvalidOperationException($"A device name can be up to {DeviceLabel.MaxNameLength} characters, with no line breaks.");
+                if (!db.RenameDevice(mac, name)) throw new InvalidOperationException("That device isn't in the list any more.");
+                return null;
             case "scan":
                 devices.RequestScan();
                 return null;

@@ -37,13 +37,17 @@ public static class Ssdp
     }
 
     /// <summary>
-    /// Only follow a description link that points back at the device that answered, on the local network:
-    /// otherwise a device could make the service fetch arbitrary addresses.
+    /// Only follow a link that points back at the device that answered and looks like a description document (no
+    /// query, no user name, a path ending in .xml or naming a description): otherwise a device could make the
+    /// service fetch other addresses, or poke an admin page on itself.
     /// </summary>
     public static Uri? SafeLocation(string? location, IPAddress sender)
     {
         if (!Uri.TryCreate(location, UriKind.Absolute, out var uri) || uri.Scheme != Uri.UriSchemeHttp) return null;
         if (!IPAddress.TryParse(uri.Host, out var host) || !host.Equals(sender)) return null;
+        if (uri.Query.Length > 0 || uri.Fragment.Length > 0 || uri.UserInfo.Length > 0) return null;
+        var path = uri.AbsolutePath;
+        if (!path.EndsWith(".xml", StringComparison.OrdinalIgnoreCase) && !path.Contains("desc", StringComparison.OrdinalIgnoreCase)) return null;
         return uri;
     }
 

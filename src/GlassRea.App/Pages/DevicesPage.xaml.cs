@@ -5,7 +5,10 @@ using Microsoft.UI.Xaml.Controls;
 
 namespace GlassRea.App.Pages;
 
-public sealed record DeviceRow(string Name, string Note, string Glyph, string Os, Visibility OsShown, string Ip, string Mac, string First, string Last, double Fade);
+/// <param name="Custom">The name you gave it, or "".</param>
+/// <param name="Own">What it would be called without your name.</param>
+public sealed record DeviceRow(string Name, string Note, string Glyph, string Os, Visibility OsShown, string Ip, string Mac, string First, string Last, double Fade,
+    string Custom, string Own);
 
 /// <summary>Everything seen on the Wi-Fi: the router, this PC, phones, TVs. A new one raises an alert.</summary>
 public sealed partial class DevicesPage : UserControl, IPage
@@ -23,6 +26,7 @@ public sealed partial class DevicesPage : UserControl, IPage
         Summary.Text = status.LastDeviceScan == 0
             ? "The first scan runs shortly after the service starts."
             : $"{online} device{(online == 1 ? "" : "s")} online at the last scan, {Fmt.Ago(status.LastDeviceScan)}. Scans run every 5 minutes.";
+        PublicHint.Visibility = status.NetworkPublic ? Visibility.Visible : Visibility.Collapsed;
         var rows = devices
             .OrderByDescending(d => d.IsGateway).ThenByDescending(d => d.IsThisPc).ThenByDescending(d => d.LastSeen >= recent)
             .ThenBy(DeviceLabel.For, StringComparer.CurrentCultureIgnoreCase)
@@ -36,7 +40,8 @@ public sealed partial class DevicesPage : UserControl, IPage
                 notes.Add(d.LastSeen < recent ? "Offline" : "Online");
                 var os = DeviceOs.Display(d.Os) ?? "";
                 return new DeviceRow(name, string.Join(", ", notes), Glyph(d), os, os.Length == 0 ? Visibility.Collapsed : Visibility.Visible,
-                    d.Ip, d.Mac, $"First seen {Fmt.Date(d.FirstSeen)}", $"Last seen {Fmt.Ago(d.LastSeen)}", d.LastSeen < recent ? 0.55 : 1);
+                    d.Ip, d.Mac, $"First seen {Fmt.Date(d.FirstSeen)}", $"Last seen {Fmt.Ago(d.LastSeen)}", d.LastSeen < recent ? 0.55 : 1,
+                    d.CustomName ?? "", DeviceLabel.For(d with { CustomName = null }));
             }).ToList();
         List.ItemsSource = rows;
     }
@@ -59,6 +64,52 @@ public sealed partial class DevicesPage : UserControl, IPage
         DeviceKinds.Network => "\uE701",
         _ => "\uE772",
     };
+
+    private async void OnOpenNetworkSettings(object sender, RoutedEventArgs e) =>
+        await Windows.System.Launcher.LaunchUriAsync(new Uri("ms-settings:network-wifi"));
+
+    /// <summary>Your own name for a device, kept by the service; blank goes back to the name it gives itself.</summary>
+    private void OnRename(object sender, RoutedEventArgs e)
+    {
+        if (sender is not Button { Tag: DeviceRow row } button) return;
+        var box = new TextBox
+        {
+            Header = "Name", Text = row.Custom, PlaceholderText = row.Own, MaxLength = DeviceLabel.MaxNameLength, Width = 240,
+        };
+        var error = new TextBlock { Style = (Style)Application.Current.Resources["Caption"], TextWrapping = TextWrapping.Wrap, Visibility = Visibility.Collapsed };
+        var save = new Button { Content = "Save", Style = (Style)Application.Current.Resources["AccentButtonStyle"] };
+        var reset = new Button { Content = "Use its own name", IsEnabled = row.Custom.Length > 0 };
+        var flyout = new Flyout
+        {
+            Content = new StackPanel
+            {
+                Spacing = 12, Width = 240,
+                Children = { box, error, new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, Children = { save, reset } } },
+            },
+        };
+        async Task Apply(string name)
+        {
+            save.IsEnabled = reset.IsEnabled = false;
+            try
+            {
+                await Service.Do("device.rename", settings: new() { ["mac"] = row.Mac, ["name"] = name });
+                flyout.Hide();
+                await Refresh();
+            }
+            catch (Exception ex) when (Service.IsOffline(ex) || ex is ServiceException)
+            {
+                error.Text = ex is ServiceException ? ex.Message : "The Glass-Rea service isn't answering. Try again in a moment.";
+                error.Visibility = Visibility.Visible;
+                save.IsEnabled = true;
+                reset.IsEnabled = row.Custom.Length > 0;
+            }
+        }
+        save.Click += async (_, _) => await Apply(box.Text);
+        reset.Click += async (_, _) => await Apply("");
+        box.KeyDown += async (_, k) => { if (k.Key == Windows.System.VirtualKey.Enter) { k.Handled = true; await Apply(box.Text); } };
+        flyout.Opened += (_, _) => { box.Focus(FocusState.Programmatic); box.SelectAll(); };
+        flyout.ShowAt(button);
+    }
 
     private async void OnScan(object sender, RoutedEventArgs e)
     {

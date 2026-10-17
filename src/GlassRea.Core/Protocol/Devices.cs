@@ -72,8 +72,30 @@ public static class DeviceLabel
     /// </summary>
     public static string For(DeviceInfo d)
     {
+        if (!string.IsNullOrWhiteSpace(d.CustomName)) return d.CustomName.Trim();
         if (!string.IsNullOrWhiteSpace(d.Name)) return d.Name.Trim();
         return What(d) ?? (d.Randomized ? "Private device" : "Unnamed device");
+    }
+
+    public const int MaxNameLength = 40;
+
+    /// <summary>
+    /// Checks a name typed on the Devices page: trimmed, Arabic-Indic and Persian digits made 0-9, at most
+    /// <see cref="MaxNameLength"/> characters, no control characters. Blank means "go back to its own name" (null).
+    /// </summary>
+    public static bool TryCleanName(string? name, out string? clean)
+    {
+        clean = null;
+        if (string.IsNullOrWhiteSpace(name)) return true;
+        var text = new string(name.Trim().Select(ch => ch switch
+        {
+            >= '\u0660' and <= '\u0669' => (char)('0' + ch - '\u0660'),
+            >= '\u06F0' and <= '\u06F9' => (char)('0' + ch - '\u06F0'),
+            _ => ch,
+        }).ToArray());
+        if (text.Length > MaxNameLength || text.Any(char.IsControl)) return false;
+        clean = text;
+        return true;
     }
 
     /// <summary>What the device is, without its name: "iPhone", "Samsung phone", "Greenpacket router". Null when unknown.</summary>

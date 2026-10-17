@@ -12,7 +12,7 @@ public sealed class FirewallManager(Database db, ILogger<FirewallManager> log)
 {
     public const string Group = "Glass-Rea";
     public const string DiscoveryRule = Group + " device discovery";
-    private const int DirIn = 1, DirOut = 2, ActionBlock = 0, ActionAllow = 1, AnyProtocol = 256, Udp = 17, AllProfiles = 0x7FFFFFFF;
+    private const int DirIn = 1, DirOut = 2, ActionBlock = 0, ActionAllow = 1, AnyProtocol = 256, Udp = 17, AllProfiles = 0x7FFFFFFF, PrivateAndDomain = 1 | 2;
     private readonly Lock _gate = new();
     private HashSet<long> _blocked = [];
     private long _syncedAt = long.MinValue;
@@ -84,7 +84,8 @@ public sealed class FirewallManager(Database db, ILogger<FirewallManager> log)
 
     /// <summary>
     /// Lets this service, and only it, hear devices on the local network introduce themselves (DHCP on UDP 67,
-    /// Bonjour on UDP 5353). Rewritten at every start so it always points at the current program.
+    /// Bonjour on UDP 5353), on private and work networks only: on a network marked Public (a café, a hotel) it
+    /// stays deaf. Rewritten at every start so it always points at the current program.
     /// </summary>
     public void AllowDiscovery()
     {
@@ -103,7 +104,7 @@ public sealed class FirewallManager(Database db, ILogger<FirewallManager> log)
                 rule.Protocol = Udp;
                 rule.LocalPorts = "67,5353";
                 rule.RemoteAddresses = "LocalSubnet";
-                rule.Profiles = AllProfiles;
+                rule.Profiles = PrivateAndDomain;
                 rule.ApplicationName = Environment.ProcessPath;
                 rule.ServiceName = ServiceName;
                 rule.Enabled = true;

@@ -52,7 +52,7 @@ public sealed partial class OverviewPage : UserControl, IPage
         DownText.Text = $"Download {Fmt.Bytes(r.NetIn)}";
         UpText.Text = $"Upload {Fmt.Bytes(r.NetOut)}";
         var tunnel = r.Apps.FirstOrDefault(a => a.IsTunnel && a.NetIn + a.NetOut > 0);
-        TunnelText.Text = tunnel is null ? "" : $"{tunnel.Name} tunnel {Fmt.Bytes(r.TunnelIn + r.TunnelOut)}, not counted twice";
+        TunnelText.Text = TunnelLine(r, tunnel);
         if (r.ImportedBefore > from)
         {
             HistoryNote.Text = $"Before {Fmt.DateTime(r.ImportedBefore)} the figures come from the usage history Windows keeps, which records whole hours and counts local network traffic as internet.";
@@ -101,6 +101,20 @@ public sealed partial class OverviewPage : UserControl, IPage
             ? $"{first.Name} is downloading at {Fmt.Rate(first.InPerSec)}."
             : $"{first.Name} is uploading at {Fmt.Rate(first.OutPerSec)}.";
         NowMore.Text = busy.Count > 1 ? "Also active: " + string.Join(", ", busy.Skip(1).Take(3).Select(a => a.Name)) : "";
+    }
+
+    /// <summary>
+    /// With a VPN on, what crossed the connection (what the internet provider counts, and what limits use) is more than
+    /// what the apps moved: the VPN's headers and encryption ride along.
+    /// </summary>
+    private static string TunnelLine(UsageReport r, AppUsage? tunnel)
+    {
+        if (tunnel is null) return "";
+        var connection = r.ConnectionIn + r.ConnectionOut;
+        var extra = connection - (r.NetIn + r.NetOut);
+        return extra > 0
+            ? $"Your connection carried {Fmt.Bytes(connection)}, {Fmt.Bytes(extra)} of it {tunnel.Name}'s overhead"
+            : $"{tunnel.Name} tunnel {Fmt.Bytes(r.TunnelIn + r.TunnelOut)}, not counted twice";
     }
 
     private async Task ShowMonth(UsageReport current)

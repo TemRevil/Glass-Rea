@@ -6,8 +6,9 @@ using GlassRea.Core.Usage;
 
 namespace GlassRea.Service;
 
-/// <summary>Checks today's and this month's internet use against the limits once a minute. "This month" runs from
-/// the reset day set in Settings > Data.</summary>
+/// <summary>Checks today's and this month's internet use against the limits once a minute, counted as your internet
+/// provider counts it (a VPN's wrapping included, see <see cref="Database.Connection"/>). "This month" runs from the
+/// reset day set in Settings > Data.</summary>
 public sealed class LimitWatcher(Database db, ServiceState state, ILogger<LimitWatcher> log) : BackgroundService
 {
     private const string FiredKey = "limit_alerts_fired";
@@ -37,8 +38,8 @@ public sealed class LimitWatcher(Database db, ServiceState state, ILogger<LimitW
         var fired = (db.GetSetting(FiredKey) ?? "").Split(',', StringSplitOptions.RemoveEmptyEntries)
             .Where(k => k.StartsWith(dayKey) || k.StartsWith(monthKey)).ToHashSet();
 
-        var crossings = LimitTracker.Check(dayKey, "Daily", db.InternetTotal(day.ToUnixTimeSeconds(), to), state.Number(SettingKeys.DailyLimit), fired)
-            .Concat(LimitTracker.Check(monthKey, "Monthly", db.InternetTotal(month.ToUnixTimeSeconds(), to), state.Number(SettingKeys.MonthlyLimit), fired, monthDay))
+        var crossings = LimitTracker.Check(dayKey, "Daily", db.ConnectionTotal(day.ToUnixTimeSeconds(), to), state.Number(SettingKeys.DailyLimit), fired)
+            .Concat(LimitTracker.Check(monthKey, "Monthly", db.ConnectionTotal(month.ToUnixTimeSeconds(), to), state.Number(SettingKeys.MonthlyLimit), fired, monthDay))
             .ToList();
         foreach (var c in crossings) db.AddAlert("limit", c.Title, c.Body, now.ToUnixTimeSeconds());
         db.SetSetting(FiredKey, string.Join(",", fired));
