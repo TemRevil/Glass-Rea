@@ -41,7 +41,9 @@ gh release create $tag $exe --title "Glass-Rea $version" --notes-file $notesFile
 if ($LASTEXITCODE -ne 0) { throw 'GitHub refused the release.' }
 
 # What GitHub recorded must be byte for byte what was built and signed here.
-$digest = gh api "repos/{owner}/{repo}/releases/tags/$tag" --jq '.assets[] | select(.name | endswith("Setup.exe")) | .digest'
+# (Parsed here rather than with --jq: Windows PowerShell drops the quotes inside a jq filter.)
+$asset = (gh api "repos/{owner}/{repo}/releases/tags/$tag" | ConvertFrom-Json).assets | Where-Object { $_.name -like '*Setup.exe' } | Select-Object -First 1
+$digest = $asset.digest
 $local = 'sha256:' + (Get-FileHash $exe -Algorithm SHA256).Hash.ToLowerInvariant()
 if ($digest -ne $local) { throw "GitHub recorded '$digest' for the setup, but the file here is $local." }
 Write-Host "Released $tag with $([math]::Round((Get-Item $exe).Length / 1MB)) MB setup, $digest"

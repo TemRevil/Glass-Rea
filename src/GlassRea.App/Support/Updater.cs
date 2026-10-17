@@ -128,6 +128,14 @@ public static partial class Updater
         {
             throw new UpdateException("The update needs admin permission to install. Choose Install again and allow it.");
         }
+        catch (System.ComponentModel.Win32Exception ex) when (ex.NativeErrorCode == 4551)
+        {
+            throw new UpdateException("Windows Smart App Control blocked the setup, because its certificate isn't one Windows knows. Open the release on GitHub and run the setup from there, or turn Smart App Control off.");
+        }
+        catch (System.ComponentModel.Win32Exception ex)
+        {
+            throw new UpdateException($"Windows couldn't start the setup: {ex.Message}");
+        }
     }
 
     /// <summary>Removes setups for versions this copy already is or has passed.</summary>
