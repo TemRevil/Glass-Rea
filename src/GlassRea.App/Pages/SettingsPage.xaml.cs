@@ -2,6 +2,7 @@ using System.Globalization;
 using GlassRea.App.Controls;
 using GlassRea.App.Support;
 using GlassRea.Core.Protocol;
+using GlassRea.Core.Updates;
 using GlassRea.Core.Usage;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
@@ -20,6 +21,9 @@ public sealed partial class SettingsPage : UserControl, IPage
     private const double Gb = 1024d * 1024 * 1024;
     private static readonly string[] PriorityValues = [Priority.Normal, Priority.AboveNormal, Priority.High];
     private static int _section; // the section stays picked between visits
+    public const int About = 4;
+    private static event Action<int>? SectionRequested;
+    private bool _checking, _installing;
     private readonly Dictionary<string, Button> _swatches = [];
     private readonly Grid[] _sections;
     private bool _loading = true, _loaded;
@@ -43,8 +47,106 @@ public sealed partial class SettingsPage : UserControl, IPage
         ShowAppearance();
         Unloaded += (_, _) => Appearance.Changed -= ShowAppearance;
         Loaded += (_, _) => { ShowAppearance(); Appearance.Changed += ShowAppearance; };
-        VersionText.Text = $"Version {typeof(App).Assembly.GetName().Version?.ToString(3)}";
+        VersionText.Text = $"Version {Updater.Current.ToString(3)}";
+        AutoUpdateBox.IsOn = Preferences.State.CheckForUpdates;
+        ShowUpdate();
+        // The page is kept between visits: listen only while it's on screen.
+        Unloaded += (_, _) => { SectionRequested -= OnSectionRequested; Updater.Checked -= OnUpdateChecked; };
+        Loaded += (_, _) =>
+        {
+            SectionRequested += OnSectionRequested;
+            Updater.Checked += OnUpdateChecked;
+            if (SectionPick.SelectedIndex != _section) ShowSection(_section, animate: false);
+            ShowUpdate();
+        };
         _loading = false;
+    }
+
+    /// <summary>Makes Settings open on <paramref name="section"/>, now if it's showing, or the next time it is.</summary>
+    public static void Open(int section)
+    {
+        _section = section;
+        SectionRequested?.Invoke(section);
+    }
+
+    private void OnSectionRequested(int section) => DispatcherQueue.TryEnqueue(() => ShowSection(section, animate: true));
+
+    private void OnUpdateChecked() => DispatcherQueue.TryEnqueue(ShowUpdate);
+
+    // ---------- updates ----------
+
+    private void ShowUpdate()
+    {
+        if (_installing) return;
+        var release = Updater.Available;
+        if (release is not null)
+        {
+            var when = release.Published > DateTimeOffset.MinValue ? $", released {Fmt.Date(release.Published.ToUnixTimeSeconds())}" : "";
+            UpdateText.Text = $"Version {release.Version.ToString(3)} is available{when}. You have {Updater.Current.ToString(3)}. Your history and settings are kept.";
+            ReleaseNotes.Text = Releases.PlainNotes(release.Notes) is { Length: > 0 } notes ? notes : "No notes were published with this release.";
+            ReleaseLink.NavigateUri = new Uri(release.PageUrl);
+            ReleasePanel.Visibility = Visibility.Visible;
+        }
+        else
+        {
+            UpdateText.Text = Updater.LastChecked is { } at
+                ? $"You have the latest version, {Updater.Current.ToString(3)}. Checked {Fmt.Ago(at.ToUnixTimeSeconds())}."
+                : "Glass-Rea's releases are published on GitHub. Check to see if there's a newer one.";
+            ReleasePanel.Visibility = Visibility.Collapsed;
+        }
+    }
+
+    private async void OnCheckUpdates(object sender, RoutedEventArgs e)
+    {
+        if (_checking) return;
+        _checking = true;
+        CheckButton.IsEnabled = false;
+        CheckRing.IsActive = true;
+        CheckRing.Visibility = Visibility.Visible;
+        CheckLabel.Text = "Checking";
+        try
+        {
+            await Updater.Check();
+            ShowUpdate();
+        }
+        catch (UpdateException ex) { UpdateText.Text = ex.Message; }
+        finally
+        {
+            _checking = false;
+            CheckButton.IsEnabled = true;
+            CheckRing.IsActive = false;
+            CheckRing.Visibility = Visibility.Collapsed;
+            CheckLabel.Text = "Check now";
+        }
+    }
+
+    private async void OnInstallUpdate(object sender, RoutedEventArgs e)
+    {
+        if (Updater.Available is not { } release || _installing) return;
+        _installing = true;
+        InstallButton.IsEnabled = CheckButton.IsEnabled = false;
+        DownloadBar.Value = 0;
+        DownloadBar.Visibility = Visibility.Visible;
+        UpdateText.Text = $"Downloading version {release.Version.ToString(3)} ({Fmt.Bytes(release.SetupSize)})...";
+        try
+        {
+            var path = await Updater.Download(release, new Progress<double>(p => DownloadBar.Value = p));
+            UpdateText.Text = "Downloaded and checked: signed by Tem Revil. Windows will ask to let the setup make changes; it closes this window and opens the new version when it's done.";
+            await Updater.Install(path);
+        }
+        catch (UpdateException ex) { UpdateText.Text = ex.Message; }
+        finally
+        {
+            _installing = false;
+            InstallButton.IsEnabled = CheckButton.IsEnabled = true;
+            DownloadBar.Visibility = Visibility.Collapsed;
+        }
+    }
+
+    private void OnAutoUpdate(object sender, RoutedEventArgs e)
+    {
+        if (_loading) return;
+        Preferences.Update(p => p.CheckForUpdates = AutoUpdateBox.IsOn);
     }
 
     public TimeSpan RefreshEvery => TimeSpan.FromSeconds(5);

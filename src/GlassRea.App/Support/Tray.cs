@@ -19,6 +19,7 @@ public sealed partial class Tray : IDisposable
     private readonly nint _hwnd, _icon, _largeIcon;
     private readonly uint _taskbarCreated;
     private readonly Action _open, _exit, _openAlerts;
+    private Action? _balloonClick; // what clicking the latest notification opens; the Alerts page when null
 
     public Tray(string iconPath, Action open, Action openAlerts, Action exit)
     {
@@ -49,9 +50,10 @@ public sealed partial class Tray : IDisposable
         Shell_NotifyIconW(NimSetVersion, ref data);
     }
 
-    /// <summary>Shows a Windows notification from the tray icon.</summary>
-    public void Notify(string title, string body)
+    /// <summary>Shows a Windows notification from the tray icon. Clicking it runs <paramref name="onClick"/>, or opens Alerts.</summary>
+    public void Notify(string title, string body, Action? onClick = null)
     {
+        _balloonClick = onClick;
         var data = Data(NifInfo);
         data.szInfoTitle = Trim(title, 63);
         data.szInfo = Trim(body, 255);
@@ -80,7 +82,7 @@ public sealed partial class Tray : IDisposable
             switch ((int)(lParam & 0xFFFF))
             {
                 case NinSelect or NinKeySelect or WmLButtonUp: _open(); return 0;
-                case NinBalloonUserClick: _openAlerts(); return 0;
+                case NinBalloonUserClick: (_balloonClick ?? _openAlerts)(); return 0;
                 case WmContextMenu or WmRButtonUp: ShowMenu(); return 0;
             }
         }

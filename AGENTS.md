@@ -18,7 +18,10 @@ A personal network monitor for Windows by Tem Revil: per-app internet use, live 
 dotnet build GlassRea.slnx
 dotnet test tests\GlassRea.Tests
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts\build-setup.ps1   # publish\Glass-Rea Setup.exe
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\release.ps1        # GitHub release v<Version>, notes from CHANGELOG
 ```
+
+Releases live on GitHub. The app's updater (`App/Support/Updater.cs`, `Core/Updates/Releases.cs`) installs only a setup whose SHA-256 matches GitHub's record and whose signer is the pinned Tem Revil certificate. Moving to a new signing certificate means first shipping a release, signed with the old one, that pins the new `Releases.SignerThumbprint`.
 
 A change isn't done until the build has no warnings and the tests pass. A new test must be seen failing (revert the fix, watch it go red) before it counts.
 

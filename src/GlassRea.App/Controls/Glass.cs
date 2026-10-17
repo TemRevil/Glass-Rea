@@ -94,7 +94,8 @@ public sealed class Glass : ContentControl
     private void Build()
     {
         if (_backdrop is null || _sprite is not null || !IsLoaded || BlurSource is null) return;
-        var c = ElementCompositionPreview.GetElementVisual(this).Compositor;
+        // Not this element's own visual: WinUI refuses it once an OpacityTransition is set (the chart readout fades).
+        var c = CompositionTarget.GetCompositorForCurrentThread();
         var blur = new GaussianBlurEffect
         {
             Name = "Blur", BlurAmount = Appearance.GlassBlur, BorderMode = EffectBorderMode.Hard,

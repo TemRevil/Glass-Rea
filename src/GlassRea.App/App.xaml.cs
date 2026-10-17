@@ -44,6 +44,12 @@ public partial class App : Application
         _ = ListenForShowRequests(_stop.Token);
         _ = WatchAlerts(_stop.Token);
         _ = ApplySavedPriority(_stop.Token);
+        _ = Updater.Watch(release => _ui.TryEnqueue(() => Notify($"Glass-Rea {release.Version.ToString(3)} is available",
+            "Click to see what's new and install it from Settings > About.", onClick: () => _ui.TryEnqueue(() =>
+            {
+                Pages.SettingsPage.Open(Pages.SettingsPage.About);
+                ShowWindow("settings");
+            }))), _stop.Token);
         if (!_startInTray) ShowWindow();
     }
 
@@ -54,9 +60,9 @@ public partial class App : Application
     }
 
     /// <summary>Shows a Windows notification, unless they're turned off in Settings.</summary>
-    public void Notify(string title, string body, bool evenWhenOff = false)
+    public void Notify(string title, string body, bool evenWhenOff = false, Action? onClick = null)
     {
-        if (evenWhenOff || Preferences.State.ShowNotifications) _tray?.Notify(title, body);
+        if (evenWhenOff || Preferences.State.ShowNotifications) _tray?.Notify(title, body, onClick);
     }
 
     /// <summary>Quits the app: the window, the tray icon and notifications. The service keeps recording.</summary>

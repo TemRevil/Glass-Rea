@@ -2,7 +2,7 @@ using System.Text.Json;
 
 namespace GlassRea.App.Support;
 
-/// <summary>What Settings > General and Notifications keep on this PC, for this Windows user.</summary>
+/// <summary>What Settings > General, Notifications and About keep on this PC, for this Windows user.</summary>
 public sealed class PreferencesState
 {
     /// <summary>Minimizing hides the window to the tray instead of the taskbar.</summary>
@@ -11,6 +11,12 @@ public sealed class PreferencesState
     public bool CloseToTray { get; set; } = true;
     /// <summary>New alerts pop up as Windows notifications. They're listed on the Alerts page either way.</summary>
     public bool ShowNotifications { get; set; } = true;
+    /// <summary>Look for a newer release on GitHub once a day.</summary>
+    public bool CheckForUpdates { get; set; } = true;
+    /// <summary>Unix seconds of the last update check.</summary>
+    public long LastUpdateCheck { get; set; }
+    /// <summary>The release tag already announced in a notification, so each new version is announced once.</summary>
+    public string? AnnouncedVersion { get; set; }
 }
 
 public static class Preferences

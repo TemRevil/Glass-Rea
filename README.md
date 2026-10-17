@@ -12,7 +12,7 @@ A personal network monitor for Windows: how much each app used the internet, by 
 | Firewall | Block or unblock any app's internet access in one click (Windows Firewall rules, so blocks hold even when the app is closed). |
 | Devices | Devices on your network, named and recognised: the name each gives itself (or one you give it), its maker, what it is (phone, TV, printer and so on) and its system (iOS, Android, Windows...), with IP, MAC, whether the MAC is a randomized private one, and first and last seen. |
 | Alerts | An app going online for the first time, a new device joining your network, a device leaving or coming back (optional), 80% and 100% of a daily or monthly limit. Each also shows as a Windows notification with a short title and a plain line on what it means. |
-| Settings | In sections. **General:** start with Windows (in the tray or with the window), minimize to the tray, close to the tray, and how much processor priority to ask Windows for (Normal, Above normal, High). **Notifications:** which alerts, whether they pop up, and a test button. **Data:** daily and monthly limits, the day the month and the week start again, VPN tunnel processes. **Appearance:** theme, accent, blur and glass. **About.** |
+| Settings | In sections. **General:** start with Windows (in the tray or with the window), minimize to the tray, close to the tray, and how much processor priority to ask Windows for (Normal, Above normal, High). **Notifications:** which alerts, whether they pop up, and a test button. **Data:** daily and monthly limits, the day the month and the week start again, VPN tunnel processes. **Appearance:** theme, accent, blur and glass. **About:** version, the recording service's state, and updates. |
 
 A live strip of the last two minutes runs along the top of every page.
 
@@ -28,7 +28,7 @@ Devices are recognised from what they say about themselves on the local network:
 
 ## Install
 
-Run `Glass-Rea Setup.exe` (it asks for admin once). It installs to `C:\Program Files\Glass-Rea\` unless you pick another folder on a local drive, installs .NET 10 from Microsoft if it's missing, registers and starts the `GlassRea` service (automatic start, restarts on failure, hosted by Microsoft's signed `dotnet.exe` so Smart App Control allows it), adds the app to Start and to Installed apps, and can start it in the tray when you sign in. When it finishes it can open Glass-Rea and temrevil.com. Running a newer setup updates in place; your history and settings are kept. Installing over the old "Glasswire REA" moves its history, settings and firewall blocks across and removes the old copy.
+Download `Glass-Rea.Setup.exe` from the [latest release](https://github.com/TemRevil/Glass-Rea/releases/latest) and run it (it asks for admin once). It installs to `C:\Program Files\Glass-Rea\` unless you pick another folder on a local drive, installs .NET 10 from Microsoft if it's missing, registers and starts the `GlassRea` service (automatic start, restarts on failure, hosted by Microsoft's signed `dotnet.exe` so Smart App Control allows it), adds the app to Start and to Installed apps, and can start it in the tray when you sign in. When it finishes it can open Glass-Rea and temrevil.com. Running a newer setup updates in place; your history and settings are kept. Settings > About finds newer releases and installs them for you: it checks the download is the file GitHub recorded and that it's signed by Tem Revil before running it. Installing over the old "Glasswire REA" moves its history, settings and firewall blocks across and removes the old copy.
 
 ## Uninstall
 
@@ -42,5 +42,7 @@ dotnet test tests\GlassRea.Tests
 ```
 
 Build the installer with `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\build-setup.ps1`; it writes `publish\Glass-Rea Setup.exe`. It's signed as Tem Revil once `scripts\make-cert.ps1` has made the certificate on this PC (trusted on this PC only).
+
+To publish a release, raise `<Version>` in `Directory.Build.props`, give it a `## <version>` section in `CHANGELOG.md`, commit and push, then run `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\release.ps1`. It builds and signs the setup, creates the GitHub release with that section as its notes, and checks GitHub stored the exact file.
 
 `scripts\make-icon.ps1` regenerates `src\GlassRea.App\Assets\app.ico` from the Twin flow mark (`design\logo\twin-flow.svg`).

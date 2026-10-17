@@ -237,8 +237,9 @@
                 </Grid>
 
                 <!-- About -->
-                <Grid x:Name="AboutSection" VerticalAlignment="Top" ColumnSpacing="12" Visibility="Collapsed">
+                <Grid x:Name="AboutSection" VerticalAlignment="Top" ColumnSpacing="12" RowSpacing="12" Visibility="Collapsed">
                     <Grid.ColumnDefinitions><ColumnDefinition /><ColumnDefinition /></Grid.ColumnDefinitions>
+                    <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
 
                     <Border Style="{StaticResource Card}">
                         <StackPanel Spacing="12">
@@ -259,6 +260,42 @@
                         <StackPanel Spacing="10">
                             <StackPanel Orientation="Horizontal" Spacing="8"><FontIcon Glyph="&#xE9F5;" FontSize="15" /><TextBlock Text="Recording service" Style="{StaticResource CardTitle}" /></StackPanel>
                             <TextBlock x:Name="ServiceText" Style="{StaticResource Caption}" IsTextSelectionEnabled="True" />
+                        </StackPanel>
+                    </Border>
+
+                    <Border Grid.Row="1" Grid.ColumnSpan="2" Style="{StaticResource Card}">
+                        <StackPanel Spacing="12">
+                            <Grid ColumnSpacing="12">
+                                <Grid.ColumnDefinitions><ColumnDefinition /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                                <StackPanel Spacing="2">
+                                    <StackPanel Orientation="Horizontal" Spacing="8"><FontIcon Glyph="&#xE895;" FontSize="15" /><TextBlock Text="Updates" Style="{StaticResource CardTitle}" /></StackPanel>
+                                    <TextBlock x:Name="UpdateText" Style="{StaticResource Caption}" TextWrapping="Wrap" />
+                                </StackPanel>
+                                <Button x:Name="CheckButton" Grid.Column="1" VerticalAlignment="Top" Click="OnCheckUpdates" AutomationProperties.Name="Check for updates now">
+                                    <StackPanel Orientation="Horizontal" Spacing="8">
+                                        <ProgressRing x:Name="CheckRing" Width="14" Height="14" IsActive="False" Visibility="Collapsed" />
+                                        <TextBlock x:Name="CheckLabel" Text="Check now" />
+                                    </StackPanel>
+                                </Button>
+                            </Grid>
+                            <StackPanel x:Name="ReleasePanel" Spacing="10" Visibility="Collapsed">
+                                <Border Style="{StaticResource Row}">
+                                    <TextBlock x:Name="ReleaseNotes" Style="{StaticResource Caption}" TextWrapping="Wrap" MaxLines="9" TextTrimming="CharacterEllipsis" IsTextSelectionEnabled="True" />
+                                </Border>
+                                <Grid ColumnSpacing="12">
+                                    <Grid.ColumnDefinitions><ColumnDefinition Width="Auto" /><ColumnDefinition /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                                    <Button x:Name="InstallButton" Style="{StaticResource AccentButtonStyle}" Content="Download and install" Click="OnInstallUpdate" />
+                                    <ProgressBar x:Name="DownloadBar" Grid.Column="1" VerticalAlignment="Center" Maximum="1" Visibility="Collapsed" />
+                                    <HyperlinkButton x:Name="ReleaseLink" Grid.Column="2" Content="Release notes on GitHub" Padding="0" VerticalAlignment="Center" />
+                                </Grid>
+                            </StackPanel>
+                            <Border Style="{StaticResource Row}">
+                                <Grid ColumnSpacing="12">
+                                    <Grid.ColumnDefinitions><ColumnDefinition /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                                    <StackPanel VerticalAlignment="Center"><TextBlock Text="Check for updates automatically" /><TextBlock Text="Once a day, with a notification when a new version is out" Style="{StaticResource Caption}" /></StackPanel>
+                                    <ToggleSwitch x:Name="AutoUpdateBox" Grid.Column="1" MinWidth="0" OnContent="" OffContent="" Toggled="OnAutoUpdate" AutomationProperties.Name="Check for updates automatically" />
+                                </Grid>
+                            </Border>
                         </StackPanel>
                     </Border>
                 </Grid>

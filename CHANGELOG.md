@@ -1,7 +1,8 @@
 # Changelog
 
-## Unreleased
+## 1.1.0
 
+- Updates: Settings > About checks GitHub for a newer release (and, unless turned off, does so once a day with a notification when one is out), shows what's new, and downloads and installs it. A download is installed only if it is exactly the file GitHub recorded for the release and is signed by Tem Revil.
 - Devices are named and recognised: the name a device gives itself (from DHCP, Bonjour, NetBIOS or UPnP), its maker (the IEEE registry, built in), and what it is (phone, tablet, computer, TV, speaker, printer, console, camera, watch, smart home, storage, network gear) with its system (iOS, iPadOS, macOS, Android, Windows, Linux), each with its own icon. Devices with no name are called by what they are ("iPhone", "Samsung phone"). The Connections page names devices on your network the same way.
 - The service listens for devices joining the network and announcing themselves, and adds one firewall rule (UDP 67 and 5353, local network only, for this service alone) so it can hear them.
 - Apps using a VPN's local proxy or DNS (Cloudflare WARP in proxy mode, or its DNS) are counted as themselves.

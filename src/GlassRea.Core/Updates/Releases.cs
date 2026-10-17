@@ -1,0 +1,84 @@
+using System.Text.Json;
+
+namespace GlassRea.Core.Updates;
+
+/// <param name="SetupSha256">The setup's SHA-256 as GitHub recorded it on upload (lowercase hex), when GitHub gives one.</param>
+public sealed record Release(Version Version, string Tag, string Notes, DateTimeOffset Published, string PageUrl,
+    string SetupUrl, long SetupSize, string? SetupSha256);
+
+/// <summary>
+/// Glass-Rea's releases on GitHub. Each one carries the signed setup; running a newer setup updates in place.
+/// </summary>
+public static class Releases
+{
+    public const string Repository = "TemRevil/Glass-Rea";
+    public const string LatestUrl = $"https://api.github.com/repos/{Repository}/releases/latest";
+    public const string PageUrl = $"https://github.com/{Repository}/releases";
+
+    /// <summary>
+    /// The certificate every Glass-Rea setup is signed with (CN=Tem Revil). A download signed by anything else is
+    /// refused, even if it came from the right place.
+    /// </summary>
+    public const string SignerThumbprint = "E6A4B1317EA62EDEAC18FCA3214798EFBF8D068E";
+
+    private const string DownloadPrefix = $"https://github.com/{Repository}/releases/download/";
+
+    /// <summary>
+    /// Reads GitHub's answer for the latest release. Null when it isn't one Glass-Rea can install: a draft or
+    /// pre-release, a tag that isn't a version, or no setup attached.
+    /// </summary>
+    public static Release? Parse(string json)
+    {
+        using var doc = JsonDocument.Parse(json);
+        var r = doc.RootElement;
+        if (r.ValueKind != JsonValueKind.Object) return null;
+        if (Bool(r, "draft") || Bool(r, "prerelease")) return null;
+        var tag = Str(r, "tag_name");
+        if (tag is null || VersionOf(tag) is not { } version) return null;
+        if (!r.TryGetProperty("assets", out var assets) || assets.ValueKind != JsonValueKind.Array) return null;
+        foreach (var a in assets.EnumerateArray())
+        {
+            var name = Str(a, "name") ?? "";
+            var url = Str(a, "browser_download_url") ?? "";
+            // GitHub turns the spaces in "Glass-Rea Setup.exe" into dots.
+            if (!name.EndsWith("Setup.exe", StringComparison.OrdinalIgnoreCase) || !IsOwnDownload(url)) continue;
+            if (!a.TryGetProperty("size", out var size) || !size.TryGetInt64(out var bytes) || bytes <= 0) continue;
+            var digest = Str(a, "digest");
+            var sha = digest is not null && digest.StartsWith("sha256:", StringComparison.OrdinalIgnoreCase) && digest.Length == 7 + 64
+                ? digest[7..].ToLowerInvariant() : null;
+            var published = DateTimeOffset.TryParse(Str(r, "published_at"), System.Globalization.CultureInfo.InvariantCulture,
+                System.Globalization.DateTimeStyles.AssumeUniversal, out var p) ? p : DateTimeOffset.MinValue;
+            return new Release(version, tag, (Str(r, "body") ?? "").Trim(), published, Str(r, "html_url") ?? PageUrl, url, bytes, sha);
+        }
+        return null;
+    }
+
+    /// <summary>"v1.2.0" or "1.2" as a version with three parts; null for anything else.</summary>
+    public static Version? VersionOf(string tag)
+    {
+        var text = tag.Trim();
+        if (text.StartsWith('v') || text.StartsWith('V')) text = text[1..];
+        if (!Version.TryParse(text, out var v) || v.Revision > 0) return null;
+        return Plain(v);
+    }
+
+    public static bool IsNewer(Release release, Version current) => release.Version > Plain(current);
+
+    /// <summary>Only a setup attached to one of Glass-Rea's own releases is ever downloaded.</summary>
+    public static bool IsOwnDownload(string url) =>
+        url.StartsWith(DownloadPrefix, StringComparison.Ordinal) && Uri.TryCreate(url, UriKind.Absolute, out var u) && u.Query.Length == 0;
+
+    /// <summary>The release notes as plain lines: Markdown list marks, headings and bold dropped.</summary>
+    public static string PlainNotes(string notes) => string.Join("\n", notes.Replace("\r", "").Split('\n')
+        .Select(l => l.Trim())
+        .Where(l => l.Length > 0)
+        .Select(l => l.TrimStart('#', ' ').Replace("**", "").Replace("`", ""))
+        .Select(l => l.StartsWith("- ") || l.StartsWith("* ") ? "• " + l[2..] : l));
+
+    private static Version Plain(Version v) => new(v.Major, v.Minor, Math.Max(v.Build, 0));
+
+    private static string? Str(JsonElement e, string name) =>
+        e.TryGetProperty(name, out var v) && v.ValueKind == JsonValueKind.String ? v.GetString() : null;
+
+    private static bool Bool(JsonElement e, string name) => e.TryGetProperty(name, out var v) && v.ValueKind == JsonValueKind.True;
+}
