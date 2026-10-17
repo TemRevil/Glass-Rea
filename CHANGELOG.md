@@ -1,8 +1,9 @@
 # Changelog
 
-## Unreleased
+## 1.1.1
 
 - Fix: Windows history records some VPNs under their service name (Cloudflare WARP as "CloudflareWARP"), so their traffic was counted as an ordinary app on top of the apps it carried. The service's program is now looked up, and history already imported is corrected once. On the PC this was found on, October dropped from 300 GB to 158 GB.
+- Fix: the Connections page gave a VPN's share as a part of the apps' total, which doesn't include it, so it could read over 100%. A VPN's share is now of your connection.
 
 ## 1.1.0
 

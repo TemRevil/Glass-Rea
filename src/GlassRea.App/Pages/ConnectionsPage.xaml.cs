@@ -7,7 +7,7 @@ using Microsoft.UI.Xaml.Controls;
 
 namespace GlassRea.App.Pages;
 
-public sealed record ConnApp(long Id, string Name, string? Path, string Total, long In, long Out, bool Blocked, bool CanBlock);
+public sealed record ConnApp(long Id, string Name, string? Path, string Total, long In, long Out, bool Blocked, bool CanBlock, bool IsTunnel);
 public sealed record HostRow(string Name, string Ip, string Down, string Up, string Seen);
 
 /// <summary>Pick an app on the left; on the right, what it moved and who it talked to, and a way to block it.</summary>
@@ -17,7 +17,7 @@ public sealed partial class ConnectionsPage : UserControl, IPage
     public static long PendingAppId;
 
     private readonly PeriodPicker _period = new(Periods.Kind.Day);
-    private long _selected, _periodTotal;
+    private long _selected, _periodTotal, _connectionTotal;
     private bool _updating;
 
     public ConnectionsPage()
@@ -35,10 +35,11 @@ public sealed partial class ConnectionsPage : UserControl, IPage
         var to = Math.Min(_period.To, DateTimeOffset.Now.ToUnixTimeSeconds() + 1);
         var report = await Service.Call<UsageReport>("usage", _period.From, to);
         _periodTotal = report.NetIn + report.NetOut;
+        _connectionTotal = report.ConnectionIn + report.ConnectionOut;
         var apps = report.Apps.Where(a => a.NetIn + a.NetOut + a.LanIn + a.LanOut > 0)
             .OrderByDescending(a => a.NetIn + a.NetOut + a.LanIn + a.LanOut)
             .Select(a => new ConnApp(a.AppId, a.Name, a.Path, Fmt.Bytes(a.NetIn + a.NetOut + a.LanIn + a.LanOut),
-                a.NetIn, a.NetOut, a.Blocked, a.Path is not null && a.Service?.Contains(',') != true))
+                a.NetIn, a.NetOut, a.Blocked, a.Path is not null && a.Service?.Contains(',') != true, a.IsTunnel))
             .ToList();
         _updating = true;
         Apps.ItemsSource = apps;
@@ -65,7 +66,10 @@ public sealed partial class ConnectionsPage : UserControl, IPage
         AppSub.Text = app.Path ?? "No program file";
         KDown.Text = Fmt.Bytes(app.In);
         KUp.Text = Fmt.Bytes(app.Out);
-        KShare.Text = _periodTotal > 0 ? Fmt.Percent((double)(app.In + app.Out) / _periodTotal) : "0%";
+        // A VPN carries the other apps' traffic, so it isn't in the apps' total; its share is of the connection.
+        var total = app.IsTunnel ? _connectionTotal : _periodTotal;
+        KShareLabel.Text = app.IsTunnel ? "Share of your connection" : "Share of the period";
+        KShare.Text = total > 0 ? Fmt.Percent(Math.Min(1, (double)(app.In + app.Out) / total)) : app.IsTunnel ? "-" : "0%";
         BlockButton.Content = app.Blocked ? "Allow internet" : "Block internet";
         BlockButton.IsEnabled = app.CanBlock;
         ToolTipService.SetToolTip(BlockButton, app.CanBlock ? null : "This one has no program file of its own, so it can't be blocked separately.");

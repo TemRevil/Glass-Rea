@@ -30,6 +30,8 @@ Devices are recognised from what they say about themselves on the local network:
 
 Download `Glass-Rea.Setup.exe` from the [latest release](https://github.com/TemRevil/Glass-Rea/releases/latest) and run it (it asks for admin once). It installs to `C:\Program Files\Glass-Rea\` unless you pick another folder on a local drive, installs .NET 10 from Microsoft if it's missing, registers and starts the `GlassRea` service (automatic start, restarts on failure, hosted by Microsoft's signed `dotnet.exe` so Smart App Control allows it), adds the app to Start and to Installed apps, and can start it in the tray when you sign in. When it finishes it can open Glass-Rea and temrevil.com. Running a newer setup updates in place; your history and settings are kept. Settings > About finds newer releases and installs them for you: it checks the download is the file GitHub recorded and that it's signed by Tem Revil before running it. Installing over the old "Glasswire REA" moves its history, settings and firewall blocks across and removes the old copy.
 
+The setup is signed with Tem Revil's own certificate, not one bought from a certificate authority, so Windows SmartScreen warns before running it (More info, then Run anyway), and Smart App Control, where it's turned on, won't run it at all.
+
 ## Uninstall
 
 Settings > Apps > Installed apps > Glass-Rea > Uninstall. Choose whether to keep your usage history (kept by default in `C:\ProgramData\Glass-Rea`). Every firewall block the app made is removed either way, so no app stays blocked.

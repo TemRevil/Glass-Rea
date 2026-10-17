@@ -46,7 +46,7 @@
                     <Grid.ColumnDefinitions><ColumnDefinition /><ColumnDefinition /><ColumnDefinition /></Grid.ColumnDefinitions>
                     <Border Style="{StaticResource Row}"><StackPanel><TextBlock Text="Downloaded" Style="{StaticResource Caption}" /><TextBlock x:Name="KDown" Style="{StaticResource BigNumber}" FontSize="20" /></StackPanel></Border>
                     <Border Grid.Column="1" Style="{StaticResource Row}"><StackPanel><TextBlock Text="Uploaded" Style="{StaticResource Caption}" /><TextBlock x:Name="KUp" Style="{StaticResource BigNumber}" FontSize="20" /></StackPanel></Border>
-                    <Border Grid.Column="2" Style="{StaticResource Row}"><StackPanel><TextBlock Text="Share of the period" Style="{StaticResource Caption}" /><TextBlock x:Name="KShare" Style="{StaticResource BigNumber}" FontSize="20" /></StackPanel></Border>
+                    <Border Grid.Column="2" Style="{StaticResource Row}"><StackPanel><TextBlock x:Name="KShareLabel" Text="Share of the period" Style="{StaticResource Caption}" /><TextBlock x:Name="KShare" Style="{StaticResource BigNumber}" FontSize="20" /></StackPanel></Border>
                 </Grid>
                 <Grid Grid.Row="3" RowSpacing="6">
                     <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /><RowDefinition Height="*" /></Grid.RowDefinitions>
