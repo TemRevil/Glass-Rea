@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.2.4
 
 - The bottom bar stays frosted while pages change: the old page dissolves and the new one sharpens in behind the glass, at the same time, so the bar never shows an empty or unblurred moment.
 - The highlight under the selected tab slides smoothly to it and the page follows, instead of the highlight stalling halfway and jumping. The page change runs at the screen's full rate (about 10 frames a second before) and eases in instead of snapping into place.
