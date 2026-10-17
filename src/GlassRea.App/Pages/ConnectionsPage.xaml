@@ -18,7 +18,7 @@
                         <DataTemplate x:DataType="p:ConnItem">
                             <Grid ColumnSpacing="10" Padding="0,7">
                                 <Grid.ColumnDefinitions><ColumnDefinition Width="Auto" /><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
-                                <c:AppIconView AppPath="{x:Bind Row.Path, Mode=OneWay}" AppName="{x:Bind Row.Name, Mode=OneWay}" />
+                                <c:AppIconView Icon="{x:Bind Row.Icon, Mode=OneWay}" Glyph="{x:Bind Row.Glyph, Mode=OneWay}" />
                                 <TextBlock Grid.Column="1" Text="{x:Bind Row.Name, Mode=OneWay}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
                                 <TextBlock Grid.Column="2" Text="{x:Bind Row.Total, Mode=OneWay}" Style="{StaticResource Caption}" VerticalAlignment="Center" />
                             </Grid>
@@ -36,7 +36,12 @@
                     <Grid.ColumnDefinitions><ColumnDefinition Width="Auto" /><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
                     <c:AppIconView x:Name="AppIcon" Width="44" Height="44" />
                     <StackPanel Grid.Column="1" VerticalAlignment="Center">
-                        <TextBlock x:Name="AppTitle" Style="{StaticResource PageTitle}" TextTrimming="CharacterEllipsis" />
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <TextBlock x:Name="AppTitle" Style="{StaticResource PageTitle}" TextTrimming="CharacterEllipsis" />
+                            <Border x:Name="AppTag" BorderThickness="1" BorderBrush="{StaticResource CardStrokeBrush}" CornerRadius="4" Padding="6,1" VerticalAlignment="Center">
+                                <TextBlock x:Name="AppTagText" FontSize="11" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                            </Border>
+                        </StackPanel>
                         <TextBlock x:Name="AppSub" Style="{StaticResource Caption}" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" />
                     </StackPanel>
                     <Button x:Name="BlockButton" Grid.Column="2" Click="OnBlock" VerticalAlignment="Center" />

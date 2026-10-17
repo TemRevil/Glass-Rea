@@ -237,7 +237,7 @@
                 <!-- About -->
                 <Grid x:Name="AboutSection" VerticalAlignment="Top" ColumnSpacing="12" RowSpacing="12" Visibility="Collapsed">
                     <Grid.ColumnDefinitions><ColumnDefinition /><ColumnDefinition /></Grid.ColumnDefinitions>
-                    <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
+                    <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
 
                     <Border Style="{StaticResource Card}">
                         <StackPanel Spacing="12">
@@ -294,6 +294,29 @@
                                     <ToggleSwitch x:Name="AutoUpdateBox" Grid.Column="1" MinWidth="0" OnContent="" OffContent="" Toggled="OnAutoUpdate" AutomationProperties.Name="Check for updates automatically" />
                                 </Grid>
                             </Border>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- What went wrong, for sending to the developer. -->
+                    <Border Grid.Row="2" Grid.ColumnSpan="2" Style="{StaticResource Card}">
+                        <StackPanel Spacing="12">
+                            <StackPanel Spacing="2">
+                                <StackPanel Orientation="Horizontal" Spacing="8"><FontIcon Glyph="&#xE8A5;" FontSize="15" /><TextBlock Text="Logs" Style="{StaticResource CardTitle}" /></StackPanel>
+                                <TextBlock Style="{StaticResource Caption}" TextWrapping="Wrap"
+                                           Text="Glass-Rea notes crashes, errors, moments the window stopped responding and anything that was slow, here on this PC. Nothing leaves it unless you send it. If something went wrong, send the logs to temrevil@gmail.com with a line on what happened." />
+                            </StackPanel>
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <Button x:Name="SendLogsButton" Style="{StaticResource AccentButtonStyle}" Click="OnSendLogs">
+                                    <StackPanel Orientation="Horizontal" Spacing="8"><FontIcon Glyph="&#xE715;" FontSize="14" /><TextBlock Text="Email the logs" /></StackPanel>
+                                </Button>
+                                <Button x:Name="SaveLogsButton" Click="OnSaveLogs">
+                                    <StackPanel Orientation="Horizontal" Spacing="8"><FontIcon Glyph="&#xE896;" FontSize="14" /><TextBlock Text="Save a copy" /></StackPanel>
+                                </Button>
+                                <Button Click="OnOpenLogs">
+                                    <StackPanel Orientation="Horizontal" Spacing="8"><FontIcon Glyph="&#xE838;" FontSize="14" /><TextBlock Text="Open the logs folder" /></StackPanel>
+                                </Button>
+                            </StackPanel>
+                            <InfoBar x:Name="LogsBar" IsOpen="False" IsClosable="True" />
                         </StackPanel>
                     </Border>
                 </Grid>

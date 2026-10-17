@@ -8,7 +8,7 @@ using Microsoft.UI.Xaml.Controls;
 
 namespace GlassRea.App.Pages;
 
-public sealed record ConnApp(long Id, string Name, string? Path, string Total, long In, long Out, bool Blocked, bool CanBlock, bool IsTunnel);
+public sealed record ConnApp(long Id, string Name, string? Icon, string Glyph, string Tag, string Sub, string Total, long In, long Out, bool Blocked, bool CanBlock, bool IsTunnel);
 public sealed record HostRow(string Name, string Ip, string Down, string Up, string Seen);
 
 /// <summary>Pick an app on the left; on the right, what it moved and who it talked to, and a way to block it.</summary>
@@ -20,6 +20,8 @@ public sealed partial class ConnectionsPage : UserControl, IPage
     private readonly PeriodPicker _period = new(Periods.Kind.Day);
     private readonly LiveList<ConnItem, ConnApp> _apps = new(a => a.Id);
     private readonly LiveList<HostItem, HostRow> _hosts = new(h => h.Ip);
+    /// <summary>The rows each listed app is made of (see <see cref="AppFaces.Merge"/>), whose hosts are shown together.</summary>
+    private Dictionary<long, IReadOnlyList<long>> _rowsOf = [];
     private long _selected, _periodTotal, _connectionTotal;
     private bool _updating;
 
@@ -41,10 +43,17 @@ public sealed partial class ConnectionsPage : UserControl, IPage
         var report = await Service.Call<UsageReport>("usage", _period.From, to);
         _periodTotal = report.NetIn + report.NetOut;
         _connectionTotal = report.ConnectionIn + report.ConnectionOut;
-        var apps = report.Apps.Where(a => a.NetIn + a.NetOut + a.LanIn + a.LanOut > 0)
+        await AppFaces.Prepare(report.Apps);
+        var merged = AppFaces.Merge(report.Apps).Where(m => m.App.NetIn + m.App.NetOut + m.App.LanIn + m.App.LanOut > 0).ToList();
+        _rowsOf = merged.ToDictionary(m => m.App.AppId, m => m.Ids);
+        var apps = merged.Select(m => m.App)
             .OrderByDescending(a => a.NetIn + a.NetOut + a.LanIn + a.LanOut)
-            .Select(a => new ConnApp(a.AppId, a.Name, a.Path, Fmt.Bytes(a.NetIn + a.NetOut + a.LanIn + a.LanOut),
-                a.NetIn, a.NetOut, a.Blocked, a.Path is not null && a.Service?.Contains(',') != true, a.IsTunnel))
+            .Select(a =>
+            {
+                var face = AppFaces.For(a);
+                return new ConnApp(a.AppId, face.Name, face.Icon, face.Glyph, face.Tag, face.About, Fmt.Bytes(a.NetIn + a.NetOut + a.LanIn + a.LanOut),
+                    a.NetIn, a.NetOut, a.Blocked, a.Path is not null && a.Service?.Contains(',') != true, a.IsTunnel);
+            })
             .ToList();
         _updating = true;
         _apps.Sync(apps);
@@ -66,10 +75,13 @@ public sealed partial class ConnectionsPage : UserControl, IPage
         if (Apps.SelectedItem is not ConnItem { Row: var app }) { _hosts.Sync([]); return; }
         var changed = app.Id != _selected;
         _selected = app.Id;
-        AppIcon.AppName = app.Name;
-        AppIcon.AppPath = app.Path;
+        AppIcon.Glyph = app.Glyph;
+        AppIcon.Icon = app.Icon;
         AppTitle.Text = app.Name;
-        AppSub.Text = app.Path ?? "No program file";
+        AppTagText.Text = app.Tag;
+        AppTag.Visibility = app.Tag.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
+        AppSub.Text = app.Sub;
+        ToolTipService.SetToolTip(AppSub, app.Sub);
         KDown.Text = Fmt.Bytes(app.In);
         KUp.Text = Fmt.Bytes(app.Out);
         // A VPN carries the other apps' traffic, so it isn't in the apps' total; its share is of the connection.
@@ -82,7 +94,12 @@ public sealed partial class ConnectionsPage : UserControl, IPage
         if (animate && changed) foreach (var child in Detail.Children) Motion.Arrive(child, 0, rise: 6);
 
         var to = Math.Min(_period.To, DateTimeOffset.Now.ToUnixTimeSeconds());
-        var hosts = await Service.Call<List<HostUsage>>("hosts", _period.From, to, appId: app.Id);
+        // Every row of the app (each version, each sign-in's copy of a service), as one list of hosts.
+        var hosts = new List<HostUsage>();
+        foreach (var id in _rowsOf.GetValueOrDefault(app.Id) ?? [app.Id]) hosts.AddRange(await Service.Call<List<HostUsage>>("hosts", _period.From, to, appId: id));
+        if (Apps.SelectedItem is not ConnItem { Row.Id: var still } || still != app.Id) return; // another app was picked meanwhile
+        hosts = hosts.GroupBy(h => h.Ip).Select(g => new HostUsage(g.Key, g.Select(h => h.Name).FirstOrDefault(n => n is not null),
+            g.Sum(h => h.In), g.Sum(h => h.Out), g.Max(h => h.LastSeen))).OrderByDescending(h => h.In + h.Out).ToList();
         Scope ScopeOf(HostUsage h) => System.Net.IPAddress.TryParse(h.Ip, out var ip) ? AddressScope.Classify(ip) : Scope.Internet;
         // Devices on the network are named as the Devices page names them.
         var lan = hosts.Any(h => h.Name is null && ScopeOf(h) == Scope.Lan)

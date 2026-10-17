@@ -12,6 +12,8 @@ A personal network monitor for Windows by Tem Revil: per-app internet use, live 
 | `src/GlassRea.Setup` | Elevated single-file installer and uninstaller with the app and service embedded as `payload.zip`. |
 | `tests/GlassRea.Tests` | xUnit tests for Core and the service's pure logic. |
 
+The lists show one row per app: `Core/Usage/AppKinds.cs` tells apps, Store apps, services, Windows, VPN tunnels and unknown programs apart and adds an app's rows together (each version, Windows' history rows, each sign-in's copy of a service); `App/Support/AppFaces.cs` gives each its name, icon and kind label from Windows (services from the registry, packages from `PackageManager`); `App/Support/AppIcons.cs` draws icons one at a time on its own thread, because the shell answers "pending" to several at once.
+
 ## Build and check
 
 ```powershell
@@ -24,6 +26,15 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts\release.ps1        #
 Releases live on GitHub. The app's updater (`App/Support/Updater.cs`, `Core/Updates/Releases.cs`) installs only a setup whose SHA-256 matches GitHub's record and whose signer `Releases.AcceptsSigner` accepts: SignPath Foundation with a chain Windows trusts on a file whose ProductName is `Releases.Product` (SignPath signs many projects), or the pinned Tem Revil certificate (`Releases.SignerThumbprint`). Releases are made by `.github/workflows/release.yml`, which has SignPath sign Glass-Rea's own files and then the setup built around them; `.signpath/artifact-configurations/` mirrors the configurations kept in SignPath, and README's "Code signing policy" must stay true (a SignPath condition). `scripts/release.ps1` is the fallback from the owner's PC, signed as Tem Revil. Moving to any other signer means first shipping a release, signed by one the installed updater accepts, that accepts the new one. Any new network call the user didn't ask for goes in `PRIVACY.md` and must be possible to turn off (also a SignPath condition).
 
 A change isn't done until the build has no warnings and the tests pass. A new test must be seen failing (revert the fix, watch it go red) before it counts.
+
+## Logs
+
+When asked to look at the logs, read them here (or in the .zip the user sends, from Settings > About > Logs: `app/`, `service/`, `about.txt`):
+
+- App: `%LocalAppData%\Glass-Rea\Logs\app.log` (`Support/Log.cs`). Crashes (caught by the app, plus Windows' own crash and hang reports for Glass-Rea, copied in at start), errors, the window not responding for 0.5 s or more (`FREEZE`, with the page), pages and service calls over 1.5 s (`SLOW`), the service going away and coming back.
+- Service: `C:\ProgramData\Glass-Rea\Logs\service.log` (`FileLogger.cs`, beside the event log). Everything it logs at Information and up, failed requests with their stack, requests over 1 s. Its folder is reset to SYSTEM/administrators-only at start, since anyone may add files under ProgramData.
+
+One line each: `time zone LEVEL source: message`, an exception's lines indented under it. Files roll over at 1 MB, keeping four old ones (`Core/Logs/LogFile.cs`). Before fixing a FREEZE or SLOW, measure where the time goes; don't guess.
 
 ## Rules
 

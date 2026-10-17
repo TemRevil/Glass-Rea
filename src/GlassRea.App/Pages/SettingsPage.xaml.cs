@@ -11,6 +11,7 @@ using Microsoft.UI.Xaml.Controls.Primitives;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Shapes;
 using Microsoft.Win32;
+using Path = System.IO.Path;
 
 namespace GlassRea.App.Pages;
 
@@ -388,9 +389,79 @@ public sealed partial class SettingsPage : UserControl, IPage
 
     // ---------- service settings (saved to the service as you change them) ----------
 
+    // ---------- logs ----------
+
+    private string? _serviceVersion;
+
+    /// <summary>
+    /// Packs the logs into a .zip in the temp folder, shows it in Explorer and opens a new email to the developer,
+    /// since an email link can't attach a file itself.
+    /// </summary>
+    private async void OnSendLogs(object sender, RoutedEventArgs e)
+    {
+        SendLogsButton.IsEnabled = false;
+        try
+        {
+            var dir = Path.Combine(Path.GetTempPath(), "Glass-Rea");
+            Directory.CreateDirectory(dir);
+            var zip = Path.Combine(dir, LogsFileName() + ".zip");
+            await Task.Run(() => { using var file = File.Create(zip); Log.Bundle(file, _serviceVersion); });
+            System.Diagnostics.Process.Start("explorer.exe", $"/select,\"{zip}\"");
+            var body = $"What happened (and roughly when):\r\n\r\n\r\n\r\nThe logs are attached: {Path.GetFileName(zip)}";
+            await Windows.System.Launcher.LaunchUriAsync(new Uri($"mailto:{LogsTo}?subject={Uri.EscapeDataString($"Glass-Rea {Updater.Current.ToString(3)} logs")}&body={Uri.EscapeDataString(body)}"));
+            ShowLogs(InfoBarSeverity.Informational, "Attach the file Explorer is showing",
+                $"Your email app should have opened a message to {LogsTo}. Drag {Path.GetFileName(zip)} into it, say what happened, and send it.");
+        }
+        catch (Exception ex)
+        {
+            Log.Error("Settings", "Couldn't prepare the logs to email", ex);
+            ShowLogs(InfoBarSeverity.Error, "Couldn't prepare the logs", ex.Message);
+        }
+        finally { SendLogsButton.IsEnabled = true; }
+    }
+
+    private async void OnSaveLogs(object sender, RoutedEventArgs e)
+    {
+        SaveLogsButton.IsEnabled = false;
+        try
+        {
+            var picker = new Windows.Storage.Pickers.FileSavePicker { SuggestedFileName = LogsFileName(), SuggestedStartLocation = Windows.Storage.Pickers.PickerLocationId.Desktop };
+            picker.FileTypeChoices.Add("Zip file", [".zip"]);
+            WinRT.Interop.InitializeWithWindow.Initialize(picker, WinRT.Interop.WindowNative.GetWindowHandle(MainWindow.Instance));
+            if (await picker.PickSaveFileAsync() is not { } target) return;
+            await Task.Run(() => { using var file = File.Create(target.Path); Log.Bundle(file, _serviceVersion); });
+            ShowLogs(InfoBarSeverity.Success, "Logs saved", target.Path);
+        }
+        catch (Exception ex)
+        {
+            Log.Error("Settings", "Couldn't save the logs", ex);
+            ShowLogs(InfoBarSeverity.Error, "Couldn't save the logs", ex.Message);
+        }
+        finally { SaveLogsButton.IsEnabled = true; }
+    }
+
+    private void OnOpenLogs(object sender, RoutedEventArgs e)
+    {
+        Directory.CreateDirectory(Log.File.Directory);
+        System.Diagnostics.Process.Start("explorer.exe", $"\"{Log.File.Directory}\"");
+    }
+
+    private const string LogsTo = "temrevil@gmail.com";
+
+    private static string LogsFileName() => "Glass-Rea logs " + DateTime.Now.ToString("yyyy-MM-dd HH-mm", System.Globalization.CultureInfo.InvariantCulture);
+
+    private void ShowLogs(InfoBarSeverity severity, string title, string message)
+    {
+        LogsBar.Severity = severity;
+        LogsBar.Title = title;
+        LogsBar.Message = message;
+        LogsBar.IsOpen = true;
+    }
+
     public async Task Refresh()
     {
         var status = await Service.Call<ServiceStatus>("status");
+        _serviceVersion = status.Version;
         ServiceText.Text =
             (status.Capturing ? $"Recording since {Fmt.DateTime(status.TrackingSince)}." : $"Not recording: {status.CaptureError ?? "starting"}.") + "\n" +
             $"Windows history: {status.HistoryImport}.\n" +

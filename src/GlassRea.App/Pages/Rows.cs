@@ -4,33 +4,29 @@ using Microsoft.UI.Xaml;
 
 namespace GlassRea.App.Pages;
 
-/// <summary>An app in a usage list.</summary>
-public sealed record AppRow(long Id, string Name, string? Path, string Sub, string Down, string Up, string Total, double Share, bool IsTunnel)
+/// <summary>An app in a usage list: every row of it added together (see <see cref="AppFaces.Merge"/>).</summary>
+public sealed record AppRow(long Id, string Name, string? Icon, string Glyph, string Tag, string Sub, string Down, string Up, string Total, double Share, bool IsTunnel)
 {
-    public Visibility TunnelTag => IsTunnel ? Visibility.Visible : Visibility.Collapsed;
+    public Visibility TagShown => Tag.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
     public double Dim => IsTunnel ? 0.7 : 1;
 
     /// <summary>Rows for a report: counted apps by size, then VPN tunnels (shown, never added to totals).</summary>
-    public static List<AppRow> From(UsageReport r)
+    public static async Task<List<AppRow>> From(UsageReport r)
     {
-        var max = Math.Max(1, r.Apps.Count == 0 ? 1 : r.Apps.Max(a => a.NetIn + a.NetOut));
-        var rows = new List<AppRow>();
-        foreach (var a in r.Apps.Where(a => !a.IsTunnel && a.NetIn + a.NetOut > 0).OrderByDescending(a => a.NetIn + a.NetOut))
-        {
-            var parts = new List<string>();
-            if (a.Blocked) parts.Add("Blocked");
-            if (!string.IsNullOrEmpty(a.Path)) parts.Add(a.Path);
-            else if (a.Service is not null) parts.Add($"Service: {a.Service}");
-            if (a.LanIn + a.LanOut > 0) parts.Add($"{(parts.Count > 0 ? "plus " : "")}{Fmt.Bytes(a.LanIn + a.LanOut)} on the local network");
-            var sub = string.Join(", ", parts);
-            if (sub.Length > 0) sub = char.ToUpperInvariant(sub[0]) + sub[1..];
-            rows.Add(new AppRow(a.AppId, NameOf(a.Name, a.Path), a.Path, sub, Fmt.Bytes(a.NetIn), Fmt.Bytes(a.NetOut), Fmt.Bytes(a.NetIn + a.NetOut),
-                (double)(a.NetIn + a.NetOut) / max, false));
-        }
-        foreach (var a in r.Apps.Where(a => a.IsTunnel && a.NetIn + a.NetOut > 0))
-            rows.Add(new AppRow(a.AppId, NameOf(a.Name, a.Path), a.Path, "VPN tunnel: the encrypted copy of the traffic above, so it isn't added to the total",
-                Fmt.Bytes(a.NetIn), Fmt.Bytes(a.NetOut), Fmt.Bytes(a.NetIn + a.NetOut), (double)(a.NetIn + a.NetOut) / max, true));
-        return rows;
+        await AppFaces.Prepare(r.Apps);
+        var apps = AppFaces.Merge(r.Apps).Select(m => m.App).Where(a => a.NetIn + a.NetOut > 0).ToList();
+        var max = Math.Max(1, apps.Count == 0 ? 1 : apps.Max(a => a.NetIn + a.NetOut));
+        return apps.Where(a => !a.IsTunnel).OrderByDescending(a => a.NetIn + a.NetOut)
+            .Concat(apps.Where(a => a.IsTunnel))
+            .Select(a =>
+            {
+                var face = AppFaces.For(a);
+                var sub = face.About;
+                if (a.Blocked) sub = "Blocked, " + sub;
+                if (a.LanIn + a.LanOut > 0 && !a.IsTunnel) sub += $", plus {Fmt.Bytes(a.LanIn + a.LanOut)} on the local network";
+                return new AppRow(a.AppId, face.Name, face.Icon, face.Glyph, face.Tag, sub, Fmt.Bytes(a.NetIn), Fmt.Bytes(a.NetOut),
+                    Fmt.Bytes(a.NetIn + a.NetOut), (double)(a.NetIn + a.NetOut) / max, a.IsTunnel);
+            }).ToList();
     }
 
     /// <summary>What to call an app when Windows gave no name: its file name, or a plain description.</summary>

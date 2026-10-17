@@ -27,6 +27,7 @@ public partial class App : Application
         {
             // A refresh that fails because the service went away must not take the window down with it.
             if (Service.IsOffline(e.Exception) || e.Exception is ServiceException) e.Handled = true;
+            else Log.Crash("App", $"Glass-Rea closed on an error it didn't expect ({Log.Place}): {e.Message}", e.Exception);
         };
     }
 
@@ -37,6 +38,7 @@ public partial class App : Application
     protected override void OnLaunched(LaunchActivatedEventArgs args)
     {
         _ui = DispatcherQueue.GetForCurrentThread();
+        Log.Start(_ui);
         Appearance.Load();
         Appearance.Prime();
         Preferences.Load();

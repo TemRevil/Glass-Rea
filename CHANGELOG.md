@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- Real app icons everywhere: programs show the icon Explorer shows, Store apps the one in Start, and a program that has since updated into a new folder shows its current icon. What has no icon of its own gets a symbol for its kind, never a letter. Several icons asked for at once used to come back empty from Windows; they're now drawn one at a time.
+- Kinds of apps: each row says whether it's a Store app, a service, Windows itself or a VPN tunnel, and the Apps page explains the difference. Services are shown by the name Windows gives them ("Delivery Optimization") with what they do, Store apps by their name and maker.
+- One row per app: an app's versions, the rows Windows' history keeps for it and each sign-in's copy of a service are added together, on Apps, the Overview, Connections and Firewall. On Firewall, programs stay one row per program file, since a block names one file.
+- Logs: the app and the service record crashes, errors, moments the window stopped responding, slow pages and slow requests, plus the crash reports Windows keeps for Glass-Rea. Settings > About > Logs emails them to the developer, saves a copy, or opens the folder. They stay on your PC until you send them.
+
 ## 1.2.1
 
 - Fix: checking for updates said "GitHub is limiting requests from this network" on networks many people share, such as Cloudflare WARP. GitHub allows only 60 of the requests it used per hour from one address. The app now reads each release's own description file, an ordinary download GitHub doesn't limit that way, and asks the limited service only for a release without one.

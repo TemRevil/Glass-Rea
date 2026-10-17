@@ -19,6 +19,9 @@ public sealed class PipeServer(Database db, UsageAccumulator usage, ProcessResol
          SettingKeys.TunnelProcesses, SettingKeys.Priority,
          SettingKeys.MonthStartDay, SettingKeys.WeekStart];
 
+    /// <summary>Longer than this and a request is logged as slow: the app waits on every one.</summary>
+    private static readonly TimeSpan SlowRequest = TimeSpan.FromSeconds(1);
+
     protected override async Task ExecuteAsync(CancellationToken ct)
     {
         var security = new PipeSecurity();
@@ -46,15 +49,27 @@ public sealed class PipeServer(Database db, UsageAccumulator usage, ProcessResol
             while (!ct.IsCancellationRequested && await reader.ReadLineAsync(ct) is { } line)
             {
                 Response response;
+                var op = "?";
+                var started = System.Diagnostics.Stopwatch.GetTimestamp();
                 try
                 {
                     var request = JsonSerializer.Deserialize<Request>(line, Pipe.Json) ?? throw new InvalidOperationException("Empty request.");
+                    op = request.Op;
                     response = new Response(true, JsonSerializer.SerializeToElement(Handle(request), Pipe.Json));
+                }
+                catch (InvalidOperationException ex)
+                {
+                    // Refusals the app shows as they are ("Unknown app.", "Limits must be...").
+                    log.LogInformation("Refused {Op}: {Reason}", op, ex.Message);
+                    response = new Response(false, Error: ex.Message);
                 }
                 catch (Exception ex) when (ex is not OperationCanceledException)
                 {
+                    log.LogError(ex, "Request {Op} failed", op);
                     response = new Response(false, Error: ex.Message);
                 }
+                var took = System.Diagnostics.Stopwatch.GetElapsedTime(started);
+                if (took > SlowRequest) log.LogInformation(FileLoggerProvider.Slow, "Request {Op} took {Seconds:0.0} s", op, took.TotalSeconds);
                 await writer.WriteLineAsync(JsonSerializer.Serialize(response, Pipe.Json).AsMemory(), ct);
             }
         }

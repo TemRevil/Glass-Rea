@@ -8,12 +8,42 @@ public static class Service
 {
     public static readonly PipeClient Client = new();
 
+    private static bool _offline;
+
     public static Task<T> Call<T>(string op, long from = 0, long to = 0, long appId = 0, bool value = false, long afterId = 0,
         Dictionary<string, string>? settings = null) =>
-        Client.Call<T>(new Request(op, from, to, appId, value, afterId, settings));
+        Logged<T>(new Request(op, from, to, appId, value, afterId, settings));
 
     public static Task Do(string op, long appId = 0, bool value = false, Dictionary<string, string>? settings = null) =>
-        Client.Call<object?>(new Request(op, AppId: appId, Value: value, Settings: settings));
+        Logged<object?>(new Request(op, AppId: appId, Value: value, Settings: settings));
+
+    /// <summary>Every call, timed: slow ones, failures and the service going away or coming back are logged.</summary>
+    private static async Task<T> Logged<T>(Request request)
+    {
+        var started = System.Diagnostics.Stopwatch.GetTimestamp();
+        try
+        {
+            var answer = await Client.Call<T>(request);
+            if (_offline) { _offline = false; Log.Info("Service", "reachable again"); }
+            Log.IfSlow("Service", $"The {request.Op} request", System.Diagnostics.Stopwatch.GetElapsedTime(started));
+            return answer;
+        }
+        catch (Exception e) when (IsOffline(e))
+        {
+            if (!_offline) { _offline = true; Log.Warn("Service", $"not reachable ({request.Op}: {e.GetType().Name}: {e.Message})"); }
+            throw;
+        }
+        catch (ServiceException e)
+        {
+            Log.Info("Service", $"refused {request.Op}: {e.Message}");
+            throw;
+        }
+        catch (Exception e)
+        {
+            Log.Error("Service", $"The {request.Op} request failed", e);
+            throw;
+        }
+    }
 
     /// <summary>True for the failures that mean "the service isn't reachable right now", as opposed to a bug.</summary>
     public static bool IsOffline(Exception e) => e is TimeoutException or IOException or UnauthorizedAccessException or OperationCanceledException;

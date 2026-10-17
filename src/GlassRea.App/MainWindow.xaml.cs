@@ -163,6 +163,9 @@ public sealed partial class MainWindow : Window
         if (key == _current || _tabs.All(t => t.Key != key)) return;
         var first = _current == "";
         _current = key;
+        Log.Where = key;
+        var opening = System.Diagnostics.Stopwatch.GetTimestamp();
+        var fresh = false;
         foreach (var (k, b) in _tabButtons)
         {
             var on = k == key;
@@ -173,14 +176,23 @@ public sealed partial class MainWindow : Window
 
         if (!_pages.TryGetValue(key, out var page))
         {
+            fresh = true;
             _pages[key] = page = _tabs.First(t => t.Key == key).Create();
             // Give a new page a moment to fetch its data, so it arrives filled rather than filling in afterwards.
             if (page is IPage p)
             {
-                try { await Task.WhenAny(p.Refresh(), Task.Delay(450)); } catch { /* shown by the next tick */ }
+                var filling = p.Refresh();
+                var started = System.Diagnostics.Stopwatch.GetTimestamp();
+                _ = filling.ContinueWith(t =>
+                {
+                    if (t.Exception is { } ex && !Service.IsOffline(ex.InnerException!)) Log.Error("Window", $"The {key} page couldn't load its data", ex.InnerException);
+                    else Log.IfSlow("Window", $"Filling the {key} page the first time", System.Diagnostics.Stopwatch.GetElapsedTime(started));
+                }, TaskScheduler.Default);
+                try { await Task.WhenAny(filling, Task.Delay(450)); } catch { /* shown by the next tick */ }
             }
         }
         await Motion.SwapPage(PageHost, Ghost, page, arrived: () => { if (StaggerTarget(page) is { } panel) Motion.Stagger(panel); });
+        Log.IfSlow("Window", $"Opening the {key} page{(fresh ? " the first time" : "")}", System.Diagnostics.Stopwatch.GetElapsedTime(opening));
         _lastRefresh = DateTime.MinValue;
         await Tick();
     }
@@ -331,7 +343,9 @@ public sealed partial class MainWindow : Window
                     ? $"Recording since {Fmt.Date(status.TrackingSince)}"
                     : $"Not recording: {status.CaptureError ?? "starting"}";
                 Periods.Use(await Service.Call<Dictionary<string, string>>("settings")); // the reset day shapes "this month"
+                var started = System.Diagnostics.Stopwatch.GetTimestamp();
                 await page.Refresh();
+                Log.IfSlow("Window", $"Refreshing the {_current} page", System.Diagnostics.Stopwatch.GetElapsedTime(started));
             }
         }
         catch (Exception ex) when (Service.IsOffline(ex))

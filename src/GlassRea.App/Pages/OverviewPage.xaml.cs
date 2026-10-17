@@ -34,7 +34,8 @@ public sealed partial class OverviewPage : UserControl, IPage
         var phrase = Phrase();
         PeriodText.Text = _period.Label;
 
-        var top = r.Apps.Where(a => !a.IsTunnel).MaxBy(a => a.NetIn + a.NetOut);
+        var appRows = await AppRow.From(r);
+        var top = AppFaces.Merge(r.Apps).Select(m => m.App).Where(a => !a.IsTunnel).MaxBy(a => a.NetIn + a.NetOut);
         if (total == 0)
         {
             HeadA.Text = $"Nothing has used the internet {phrase} yet.";
@@ -43,7 +44,7 @@ public sealed partial class OverviewPage : UserControl, IPage
         else
         {
             HeadA.Text = "You used ";
-            HeadB.Text = $" {phrase}." + (top is null ? "" : $" {top.Name} took {Fmt.Percent((double)(top.NetIn + top.NetOut) / total)} of it.");
+            HeadB.Text = $" {phrase}." + (top is null ? "" : $" {AppFaces.For(top).Name} took {Fmt.Percent((double)(top.NetIn + top.NetOut) / total)} of it.");
             if (!_counted) { _counted = true; Motion.CountUp(DispatcherQueue, total, Fmt.Bytes, s => HeadTotal.Text = s); }
             else HeadTotal.Text = Fmt.Bytes(total);
         }
@@ -64,7 +65,7 @@ public sealed partial class OverviewPage : UserControl, IPage
 
         TopTitle.Text = _period.Kind switch { Periods.Kind.Day => "Top apps today", Periods.Kind.Week => "Top apps this week", _ => "Top apps this month" };
         if (!IsCurrent()) TopTitle.Text = "Top apps";
-        var rows = AppRow.From(r).Take(7).ToList();
+        var rows = appRows.Take(7).ToList();
         TopApps.ItemsSource ??= _topApps;
         _topApps.Sync(rows);
         NoApps.Visibility = rows.Count == 0 ? Visibility.Visible : Visibility.Collapsed;

@@ -20,6 +20,19 @@ public sealed partial class AppsPage : UserControl, IPage
         List.ItemsSource = _rows;
         PickerHost.Content = _period;
         _period.Changed += () => _ = Refresh();
+        foreach (var (kind, title, text) in AppFaces.Kinds)
+        {
+            var entry = new Grid { ColumnSpacing = 12 };
+            entry.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            entry.ColumnDefinitions.Add(new ColumnDefinition());
+            entry.Children.Add(new AppIconView { Glyph = AppFaces.Glyph(kind), VerticalAlignment = VerticalAlignment.Top });
+            var words = new StackPanel { Spacing = 2 };
+            words.Children.Add(new TextBlock { Text = title, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold });
+            words.Children.Add(new TextBlock { Text = text, Style = (Style)Application.Current.Resources["Caption"], TextWrapping = TextWrapping.Wrap });
+            Grid.SetColumn(words, 1);
+            entry.Children.Add(words);
+            KindsPanel.Children.Add(entry);
+        }
     }
 
     public TimeSpan RefreshEvery => TimeSpan.FromSeconds(10);
@@ -32,7 +45,7 @@ public sealed partial class AppsPage : UserControl, IPage
         TotalText.Text = Fmt.Bytes(r.NetIn + r.NetOut);
         DownText.Text = Fmt.Bytes(r.NetIn);
         UpText.Text = Fmt.Bytes(r.NetOut);
-        var rows = AppRow.From(r);
+        var rows = await AppRow.From(r);
         // A refresh changes only the figures that moved; a new period starts again from the top.
         var key = $"{_period.Kind}:{_period.From}";
         _rows.Sync(rows);
@@ -40,6 +53,8 @@ public sealed partial class AppsPage : UserControl, IPage
         _shown = key;
         Empty.Visibility = rows.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
     }
+
+    private void OnKinds(object sender, RoutedEventArgs e) => Microsoft.UI.Xaml.Controls.Primitives.FlyoutBase.ShowAttachedFlyout((FrameworkElement)sender);
 
     private void OnOpen(object sender, ItemClickEventArgs e)
     {

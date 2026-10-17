@@ -8,8 +8,10 @@ using Microsoft.UI.Xaml.Media.Imaging;
 namespace GlassRea.App.Support;
 
 /// <summary>
-/// Program icons, drawn by the shell exactly as Explorer shows them, cached by path. Null when the file is gone or
-/// has no icon. The shell renders off the UI thread; the bitmap is made on the caller's (UI) thread.
+/// App icons, cached by what they're drawn from: a program file's path or a Start menu entry
+/// (<c>shell:AppsFolder\&lt;app id&gt;</c>), both drawn by the shell exactly as Explorer and Start show them, or an
+/// app package's logo (<c>package:&lt;family name&gt;</c>) for packages with no Start entry. Null when there's nothing
+/// to draw. The work happens off the UI thread; the bitmap is made on the caller's (UI) thread.
 /// </summary>
 public static partial class AppIcons
 {
@@ -18,27 +20,83 @@ public static partial class AppIcons
     private static readonly ConcurrentDictionary<string, Task<byte[]?>> Pixels = new(StringComparer.OrdinalIgnoreCase);
     private static readonly Dictionary<string, ImageSource> Bitmaps = new(StringComparer.OrdinalIgnoreCase);
 
-    public static async Task<ImageSource?> For(string? path)
+    public const string PackagePrefix = "package:";
+    public const string StartPrefix = @"shell:AppsFolder\";
+
+    public static async Task<ImageSource?> For(string? source)
     {
-        if (string.IsNullOrEmpty(path)) return null;
-        if (Bitmaps.TryGetValue(path, out var cached)) return cached;
-        var pixels = await Pixels.GetOrAdd(path, p => Task.Run(() => Render(p)));
+        if (string.IsNullOrEmpty(source)) return null;
+        if (Bitmaps.TryGetValue(source, out var cached)) return cached;
+        var pixels = await Pixels.GetOrAdd(source, s => s.StartsWith(PackagePrefix, StringComparison.Ordinal)
+            ? Task.Run(() => Logo(s[PackagePrefix.Length..])) : OnShellThread(s));
         if (pixels is null) return null;
-        if (Bitmaps.TryGetValue(path, out cached)) return cached;
+        if (Bitmaps.TryGetValue(source, out cached)) return cached;
         var bmp = new WriteableBitmap(Size, Size);
         using (var stream = bmp.PixelBuffer.AsStream()) stream.Write(pixels);
         bmp.Invalidate();
-        return Bitmaps[path] = bmp;
+        return Bitmaps[source] = bmp;
     }
 
-    /// <summary>Top-down premultiplied BGRA, Size x Size.</summary>
-    private static byte[]? Render(string path)
+    /// <summary>A package's logo, fitted into Size x Size: top-down premultiplied BGRA.</summary>
+    private static async Task<byte[]?> Logo(string family)
     {
         try
         {
-            if (!File.Exists(path)) return null;
-            if (SHCreateItemFromParsingName(path, 0, typeof(IShellItemImageFactory).GUID, out var factory) != 0 || factory is null) return null;
-            if (factory.GetImage(new SIZE(Size, Size), SIIGBF_ICONONLY | SIIGBF_BIGGERSIZEOK, out var hbitmap) != 0 || hbitmap == 0) return null;
+            if (AppFaces.PackageOf(family)?.Package is not { } package) return null;
+            using var stream = await package.GetLogoAsRandomAccessStreamReference(new Windows.Foundation.Size(Size, Size)).OpenReadAsync();
+            var decoder = await Windows.Graphics.Imaging.BitmapDecoder.CreateAsync(stream);
+            var scale = (double)Size / Math.Max(decoder.PixelWidth, decoder.PixelHeight);
+            var (w, h) = ((uint)Math.Max(1, Math.Round(decoder.PixelWidth * scale)), (uint)Math.Max(1, Math.Round(decoder.PixelHeight * scale)));
+            var data = await decoder.GetPixelDataAsync(Windows.Graphics.Imaging.BitmapPixelFormat.Bgra8, Windows.Graphics.Imaging.BitmapAlphaMode.Premultiplied,
+                new Windows.Graphics.Imaging.BitmapTransform { ScaledWidth = w, ScaledHeight = h, InterpolationMode = Windows.Graphics.Imaging.BitmapInterpolationMode.Fant },
+                Windows.Graphics.Imaging.ExifOrientationMode.IgnoreExifOrientation, Windows.Graphics.Imaging.ColorManagementMode.DoNotColorManage);
+            var src = data.DetachPixelData();
+            // Centred: a logo that isn't square keeps its shape.
+            var pixels = new byte[Size * Size * 4];
+            var (left, top) = ((Size - (int)w) / 2, (Size - (int)h) / 2);
+            for (var y = 0; y < h; y++) Array.Copy(src, y * w * 4, pixels, ((top + y) * Size + left) * 4, w * 4);
+            return pixels;
+        }
+        catch { return null; }
+    }
+
+    // The shell draws one icon at a time: asked for several at once, it answers "pending" (E_PENDING) and draws
+    // nothing. So every request waits its turn on one thread of its own.
+    private static readonly BlockingCollection<(string Source, TaskCompletionSource<byte[]?> Done)> Queue = [];
+
+    static AppIcons()
+    {
+        var worker = new Thread(() => { foreach (var (source, done) in Queue.GetConsumingEnumerable()) done.SetResult(Render(source)); })
+        { IsBackground = true, Name = "App icons" };
+        worker.SetApartmentState(ApartmentState.STA);
+        worker.Start();
+    }
+
+    private static Task<byte[]?> OnShellThread(string source)
+    {
+        var done = new TaskCompletionSource<byte[]?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        Queue.Add((source, done));
+        return done.Task;
+    }
+
+    private const int E_PENDING = unchecked((int)0x8000000A);
+
+    /// <summary>Top-down premultiplied BGRA, Size x Size.</summary>
+    private static byte[]? Render(string source)
+    {
+        try
+        {
+            if (!source.StartsWith(StartPrefix, StringComparison.OrdinalIgnoreCase) && !File.Exists(source)) return null;
+            if (SHCreateItemFromParsingName(source, 0, typeof(IShellItemImageFactory).GUID, out var factory) != 0 || factory is null) return null;
+            nint hbitmap = 0;
+            var hr = E_PENDING;
+            // Still pending now and then while the shell reads a file's icon for the first time.
+            for (var tries = 0; hr == E_PENDING && tries < 10; tries++)
+            {
+                if (tries > 0) Thread.Sleep(30);
+                hr = factory.GetImage(new SIZE(Size, Size), SIIGBF_ICONONLY | SIIGBF_BIGGERSIZEOK, out hbitmap);
+            }
+            if (hr != 0 || hbitmap == 0) return null;
             try
             {
                 var info = new BITMAPINFOHEADER { biSize = Marshal.SizeOf<BITMAPINFOHEADER>(), biWidth = Size, biHeight = -Size, biPlanes = 1, biBitCount = 32 };

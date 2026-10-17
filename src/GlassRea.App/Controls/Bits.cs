@@ -7,43 +7,61 @@ using Microsoft.UI.Xaml.Media;
 
 namespace GlassRea.App.Controls;
 
-/// <summary>A program's icon; until it loads (or when there is none) a tile with the program's first letter.</summary>
+/// <summary>
+/// An app's icon (see <see cref="AppIcons"/>); when it has none, or while it loads for the first time, a quiet tile
+/// with the symbol for its kind.
+/// </summary>
 public sealed class AppIconView : Grid
 {
-    public static readonly DependencyProperty AppPathProperty = DependencyProperty.Register(nameof(AppPath), typeof(string), typeof(AppIconView),
+    public static readonly DependencyProperty IconProperty = DependencyProperty.Register(nameof(Icon), typeof(string), typeof(AppIconView),
         new PropertyMetadata(null, (d, _) => ((AppIconView)d).Load()));
-    public static readonly DependencyProperty AppNameProperty = DependencyProperty.Register(nameof(AppName), typeof(string), typeof(AppIconView),
+    public static readonly DependencyProperty GlyphProperty = DependencyProperty.Register(nameof(Glyph), typeof(string), typeof(AppIconView),
         new PropertyMetadata("", (d, _) => ((AppIconView)d).Load()));
 
-    public string? AppPath { get => (string?)GetValue(AppPathProperty); set => SetValue(AppPathProperty, value); }
-    public string AppName { get => (string)GetValue(AppNameProperty); set => SetValue(AppNameProperty, value); }
+    public string? Icon { get => (string?)GetValue(IconProperty); set => SetValue(IconProperty, value); }
+    public string Glyph { get => (string)GetValue(GlyphProperty); set => SetValue(GlyphProperty, value); }
 
-    private static readonly string[] Tints = ["#3E82F7", "#0F6CBD", "#1BA39C", "#7A5AF8", "#C2410C", "#2D7DD2", "#9333EA", "#0E7C66"];
-    private readonly Border _tile = new() { CornerRadius = new CornerRadius(7) };
-    private readonly TextBlock _letter = new() { HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center, FontWeight = FontWeights.Bold, FontSize = 12, Foreground = new SolidColorBrush(Microsoft.UI.Colors.White) };
+    private readonly Border _tile = new()
+    {
+        CornerRadius = new CornerRadius(7),
+        BorderThickness = new Thickness(1),
+        BorderBrush = (Brush)Application.Current.Resources["CardStrokeBrush"],
+        Background = (Brush)Application.Current.Resources["RowBrush"],
+    };
+    private readonly FontIcon _glyph = new() { FontSize = 14, Foreground = (Brush)Application.Current.Resources["TextSecondaryBrush"] };
     private readonly Image _image = new() { Width = 24, Height = 24 };
     private int _version;
 
     public AppIconView()
     {
         Width = 30; Height = 30;
-        _tile.Child = _letter;
+        _tile.Child = _glyph;
         Children.Add(_tile);
         Children.Add(_image);
+        SizeChanged += (_, e) =>
+        {
+            // Bigger views (the Connections header) get a bigger icon in the same proportion.
+            _image.Width = _image.Height = Math.Round(e.NewSize.Width * 0.8);
+            _glyph.FontSize = Math.Round(e.NewSize.Width * 0.47);
+        };
     }
 
     private async void Load()
     {
         var v = ++_version;
-        var name = string.IsNullOrWhiteSpace(AppName) ? "?" : AppName.Trim();
-        _letter.Text = char.ToUpperInvariant(name[0]).ToString();
-        _tile.Background = new SolidColorBrush(Appearance.Hex(Tints[name.Aggregate(7u, (h, ch) => h * 31 + char.ToLowerInvariant(ch)) % Tints.Length]));
-        _tile.Visibility = Visibility.Visible;
-        _image.Source = null;
-        var icon = await AppIcons.For(AppPath);
-        if (v != _version || icon is null) return;
-        _image.Source = icon;
-        _tile.Visibility = Visibility.Collapsed;
+        var icon = AppIcons.For(Icon);
+        if (!icon.IsCompleted)
+        {
+            // Loading for the first time: an empty tile, so the symbol doesn't flash before the icon.
+            _image.Source = null;
+            _glyph.Glyph = "";
+            _tile.Visibility = Visibility.Visible;
+        }
+        var source = await icon;
+        if (v != _version) return;
+        _image.Source = source;
+        _glyph.Glyph = source is null ? Glyph : "";
+        _tile.Visibility = source is null ? Visibility.Visible : Visibility.Collapsed;
     }
 }
 

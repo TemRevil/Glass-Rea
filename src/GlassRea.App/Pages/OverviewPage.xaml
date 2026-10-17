@@ -55,12 +55,12 @@
                         <DataTemplate x:DataType="p:AppItem">
                             <Grid ColumnSpacing="10" Padding="0,7" Opacity="{x:Bind Row.Dim, Mode=OneWay}">
                                 <Grid.ColumnDefinitions><ColumnDefinition Width="Auto" /><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
-                                <c:AppIconView AppPath="{x:Bind Row.Path, Mode=OneWay}" AppName="{x:Bind Row.Name, Mode=OneWay}" VerticalAlignment="Center" />
+                                <c:AppIconView Icon="{x:Bind Row.Icon, Mode=OneWay}" Glyph="{x:Bind Row.Glyph, Mode=OneWay}" VerticalAlignment="Center" />
                                 <StackPanel Grid.Column="1" Spacing="5" VerticalAlignment="Center">
                                     <StackPanel Orientation="Horizontal" Spacing="6">
                                         <TextBlock Text="{x:Bind Row.Name, Mode=OneWay}" TextTrimming="CharacterEllipsis" />
-                                        <Border Visibility="{x:Bind Row.TunnelTag, Mode=OneWay}" BorderThickness="1" BorderBrush="{StaticResource CardStrokeBrush}" CornerRadius="4" Padding="5,0">
-                                            <TextBlock Text="VPN tunnel" FontSize="11" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                        <Border Visibility="{x:Bind Row.TagShown, Mode=OneWay}" BorderThickness="1" BorderBrush="{StaticResource CardStrokeBrush}" CornerRadius="4" Padding="5,0" VerticalAlignment="Center">
+                                            <TextBlock Text="{x:Bind Row.Tag, Mode=OneWay}" FontSize="11" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                                         </Border>
                                     </StackPanel>
                                     <c:ShareBar Value="{x:Bind Row.Share, Mode=OneWay}" />

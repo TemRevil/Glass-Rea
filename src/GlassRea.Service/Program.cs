@@ -13,6 +13,14 @@ CultureInfo.CurrentCulture = CultureInfo.InvariantCulture;
 var builder = Host.CreateApplicationBuilder(args);
 builder.Services.AddWindowsService(o => o.ServiceName = FirewallManager.ServiceName);
 builder.Logging.AddEventLog(o => o.SourceName = "Glass-Rea");
+FileLoggerProvider.PrepareFolder();
+builder.Logging.AddProvider(new FileLoggerProvider());
+AppDomain.CurrentDomain.UnhandledException += (_, e) =>
+    FileLoggerProvider.File.Write(GlassRea.Core.Logs.LogLevel.Crash, "Service", "The service stopped on an error it didn't expect", e.ExceptionObject as Exception);
+TaskScheduler.UnobservedTaskException += (_, e) =>
+    FileLoggerProvider.File.Write(GlassRea.Core.Logs.LogLevel.Error, "Service", "A background task failed and nobody waited for it", e.Exception);
+FileLoggerProvider.File.Write(GlassRea.Core.Logs.LogLevel.Info, "Service",
+    $"Starting Glass-Rea service {typeof(FileLoggerProvider).Assembly.GetName().Version?.ToString(3)} on {Environment.OSVersion.VersionString}, .NET {Environment.Version}");
 
 builder.Services.AddSingleton(_ => Database.OpenFile(Path.Combine(ServiceState.DataDirectory, "data.db")));
 builder.Services.AddSingleton(_ => new UsageAccumulator());

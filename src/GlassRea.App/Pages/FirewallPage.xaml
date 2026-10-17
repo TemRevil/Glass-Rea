@@ -30,9 +30,14 @@
                         <DataTemplate x:DataType="p:FirewallItem">
                             <Grid Padding="2,8" ColumnSpacing="12">
                                 <Grid.ColumnDefinitions><ColumnDefinition Width="40" /><ColumnDefinition Width="*" /><ColumnDefinition Width="110" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
-                                <c:AppIconView AppPath="{x:Bind Row.Path, Mode=OneWay}" AppName="{x:Bind Row.Name, Mode=OneWay}" />
+                                <c:AppIconView Icon="{x:Bind Row.Icon, Mode=OneWay}" Glyph="{x:Bind Row.Glyph, Mode=OneWay}" />
                                 <StackPanel Grid.Column="1" VerticalAlignment="Center">
-                                    <TextBlock Text="{x:Bind Row.Name, Mode=OneWay}" />
+                                    <StackPanel Orientation="Horizontal" Spacing="6">
+                                        <TextBlock Text="{x:Bind Row.Name, Mode=OneWay}" />
+                                        <Border Visibility="{x:Bind Row.TagShown, Mode=OneWay}" BorderThickness="1" BorderBrush="{StaticResource CardStrokeBrush}" CornerRadius="4" Padding="5,0" VerticalAlignment="Center">
+                                            <TextBlock Text="{x:Bind Row.Tag, Mode=OneWay}" FontSize="11" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                        </Border>
+                                    </StackPanel>
                                     <TextBlock Text="{x:Bind Row.Sub, Mode=OneWay}" Style="{StaticResource Caption}" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" />
                                 </StackPanel>
                                 <TextBlock Grid.Column="2" Text="{x:Bind Row.Total, Mode=OneWay}" Style="{StaticResource Caption}" HorizontalAlignment="Right" VerticalAlignment="Center" />
