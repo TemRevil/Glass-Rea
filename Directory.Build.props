@@ -7,5 +7,7 @@
     <Version>1.1.1</Version>
     <Company>Tem Revil</Company>
     <Product>Glass-Rea</Product>
+    <!-- The product version is the plain release number (no "+commit"): SignPath checks it on what it signs. -->
+    <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
   </PropertyGroup>
 </Project>

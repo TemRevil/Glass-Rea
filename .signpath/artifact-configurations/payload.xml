@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  SignPath artifact configuration "payload": Glass-Rea's own files inside the app and service build
+  (scripts\build-setup.ps1 -Step Stage), which the release workflow uploads as one zip. Everything else in
+  those folders is Microsoft's and already signed by Microsoft. The copy in SignPath is the one that counts;
+  keep this file the same as it.
+-->
+<artifact-configuration xmlns="http://signpath.io/artifact-configuration/v1">
+  <parameters>
+    <parameter name="version" required="true" />
+  </parameters>
+  <zip-file>
+    <directory path="App">
+      <pe-file path="GlassRea.exe" product-name="Glass-Rea" product-version="${version}">
+        <authenticode-sign />
+      </pe-file>
+      <pe-file path="GlassRea.dll" product-name="Glass-Rea" product-version="${version}">
+        <authenticode-sign />
+      </pe-file>
+      <pe-file path="GlassRea.Core.dll" product-name="Glass-Rea" product-version="${version}">
+        <authenticode-sign />
+      </pe-file>
+    </directory>
+    <directory path="Service">
+      <pe-file path="GlassRea.Service.dll" product-name="Glass-Rea" product-version="${version}">
+        <authenticode-sign />
+      </pe-file>
+      <pe-file path="GlassRea.Core.dll" product-name="Glass-Rea" product-version="${version}">
+        <authenticode-sign />
+      </pe-file>
+    </directory>
+  </zip-file>
+</artifact-configuration>

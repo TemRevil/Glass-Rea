@@ -105,6 +105,7 @@
                                     <TextBlock x:Name="RuntimeText" Style="{StaticResource Caption}" />
                                 </StackPanel>
                             </Border>
+                            <TextBlock Style="{StaticResource Caption}" Margin="2,2,0,0">What it records never leaves your PC. <Hyperlink Click="OnPrivacy">Privacy policy</Hyperlink></TextBlock>
                         </StackPanel>
                         <StackPanel Grid.Row="3" Style="{StaticResource Footer}" Margin="0,16,0,0">
                             <Button Content="Cancel" Style="{StaticResource FooterButton}" Click="OnClose" />

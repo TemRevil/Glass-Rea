@@ -12,7 +12,8 @@ public sealed class UpdateException(string message) : Exception(message);
 
 /// <summary>
 /// Finds newer releases on GitHub, downloads the setup into this user's Glass-Rea folder, checks it is the one
-/// GitHub recorded and that Tem Revil signed it, then runs it (Windows asks for admin, and the setup updates in place).
+/// GitHub recorded and that Glass-Rea's publisher signed it (<see cref="Releases.AcceptsSigner"/>), then runs it
+/// (Windows asks for admin, and the setup updates in place).
 /// </summary>
 public static partial class Updater
 {
@@ -71,7 +72,7 @@ public static partial class Updater
 
     /// <summary>
     /// Downloads the release's setup, or reuses one already downloaded and checked. Refuses a file that isn't
-    /// exactly what GitHub recorded or isn't signed by Tem Revil.
+    /// exactly what GitHub recorded or isn't signed by Glass-Rea's publisher.
     /// </summary>
     public static async Task<string> Download(Release release, IProgress<double> progress, CancellationToken ct = default)
     {
@@ -181,7 +182,7 @@ public static partial class Updater
         }
     }
 
-    /// <summary>Null when the file is the release's setup, signed by Tem Revil; otherwise why it isn't.</summary>
+    /// <summary>Null when the file is the release's setup, signed by Glass-Rea's publisher; otherwise why it isn't.</summary>
     internal static string? Verify(string path, Release release)
     {
         if (new FileInfo(path).Length != release.SetupSize) return "The download isn't the size the release says. It was thrown away.";
@@ -192,26 +193,27 @@ public static partial class Updater
                 return "The download doesn't match the file GitHub recorded for this release. It was thrown away.";
         }
         var trust = SignatureStatus(path);
-        // The Tem Revil certificate is its own root, so on most PCs Windows can't vouch for it: the signature
-        // itself must still be intact, and the signer must be exactly that certificate.
-        if (trust is not (0 or CertUntrustedRoot)) return "The download isn't properly signed. It was thrown away.";
-        if (SignerThumbprint(path) != Releases.SignerThumbprint) return "The download is signed by someone other than Tem Revil. It was thrown away.";
+        if (trust is not (0 or Releases.UntrustedRoot)) return "The download isn't properly signed. It was thrown away.";
+        var (thumbprint, name, organization) = Signer(path);
+        if (!Releases.AcceptsSigner(trust, thumbprint, name, organization))
+            return "The download isn't signed by Glass-Rea's publisher. It was thrown away.";
         return null;
     }
 
-    private static string? SignerThumbprint(string path)
+    /// <summary>The signer's certificate: its thumbprint, and the common name and organisation it was issued to.</summary>
+    private static (string? Thumbprint, string? Name, string? Organization) Signer(string path)
     {
         try
         {
 #pragma warning disable SYSLIB0057 // X509CertificateLoader can't read a signed file's signer; the signature itself is checked by WinVerifyTrust
             using var cert = new X509Certificate2(X509Certificate.CreateFromSignedFile(path));
 #pragma warning restore SYSLIB0057
-            return cert.Thumbprint;
+            string? Part(string oid) => cert.SubjectName.EnumerateRelativeDistinguishedNames()
+                .FirstOrDefault(n => !n.HasMultipleElements && n.GetSingleElementType().Value == oid)?.GetSingleElementValue();
+            return (cert.Thumbprint, Part("2.5.4.3"), Part("2.5.4.10")); // CN, O
         }
-        catch (CryptographicException) { return null; }
+        catch (CryptographicException) { return (null, null, null); }
     }
-
-    private const int CertUntrustedRoot = unchecked((int)0x800B0109);
 
     private static unsafe int SignatureStatus(string path)
     {

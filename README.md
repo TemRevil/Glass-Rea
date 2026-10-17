@@ -28,9 +28,22 @@ Devices are recognised from what they say about themselves on the local network:
 
 ## Install
 
-Download `Glass-Rea.Setup.exe` from the [latest release](https://github.com/TemRevil/Glass-Rea/releases/latest) and run it (it asks for admin once). It installs to `C:\Program Files\Glass-Rea\` unless you pick another folder on a local drive, installs .NET 10 from Microsoft if it's missing, registers and starts the `GlassRea` service (automatic start, restarts on failure, hosted by Microsoft's signed `dotnet.exe` so Smart App Control allows it), adds the app to Start and to Installed apps, and can start it in the tray when you sign in. When it finishes it can open Glass-Rea and temrevil.com. Running a newer setup updates in place; your history and settings are kept. Settings > About finds newer releases and installs them for you: it checks the download is the file GitHub recorded and that it's signed by Tem Revil before running it. Installing over the old "Glasswire REA" moves its history, settings and firewall blocks across and removes the old copy.
+Download `Glass-Rea.Setup.exe` from the [latest release](https://github.com/TemRevil/Glass-Rea/releases/latest) and run it (it asks for admin once). It installs to `C:\Program Files\Glass-Rea\` unless you pick another folder on a local drive, installs .NET 10 from Microsoft if it's missing, registers and starts the `GlassRea` service (automatic start, restarts on failure, hosted by Microsoft's signed `dotnet.exe` so Smart App Control allows it), adds the app to Start and to Installed apps, and can start it in the tray when you sign in. When it finishes it can open Glass-Rea and temrevil.com. Running a newer setup updates in place; your history and settings are kept. Settings > About finds newer releases and installs them for you: it checks the download is the file GitHub recorded and that it's signed by Glass-Rea's publisher before running it. Installing over the old "Glasswire REA" moves its history, settings and firewall blocks across and removes the old copy.
 
-The setup is signed with Tem Revil's own certificate, not one bought from a certificate authority, so Windows SmartScreen warns before running it (More info, then Run anyway), and Smart App Control, where it's turned on, won't run it at all.
+Releases are signed by SignPath Foundation (see [Code signing policy](#code-signing-policy)), a certificate Windows trusts, so Smart App Control lets setup and the app run. Releases up to 1.1.1 were signed with Tem Revil's own certificate, which only the PC that made it trusts: SmartScreen warns about those (More info, then Run anyway) and Smart App Control blocks them.
+
+## Code signing policy
+
+Free code signing provided by [SignPath.io](https://about.signpath.io), certificate by [SignPath Foundation](https://signpath.org).
+
+- Committers and reviewers: [Tem Revil](https://github.com/TemRevil)
+- Approvers: [Tem Revil](https://github.com/TemRevil)
+
+Every signed file is built from this repository by GitHub Actions ([`.github/workflows/release.yml`](.github/workflows/release.yml)) on GitHub's own machines, and each signing request is approved by hand. Only Glass-Rea's own files are signed; everything else in the setup is Microsoft's and signed by Microsoft.
+
+## Privacy
+
+Glass-Rea sends nothing about you or your network anywhere. It asks GitHub once a day whether there's a new version, which you can turn off. See [PRIVACY.md](PRIVACY.md).
 
 ## Uninstall
 
@@ -43,8 +56,8 @@ dotnet build GlassRea.slnx
 dotnet test tests\GlassRea.Tests
 ```
 
-Build the installer with `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\build-setup.ps1`; it writes `publish\Glass-Rea Setup.exe`. It's signed as Tem Revil once `scripts\make-cert.ps1` has made the certificate on this PC (trusted on this PC only).
+Build the installer with `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\build-setup.ps1`; it writes `publish\Glass-Rea Setup.exe`. It's signed as Tem Revil once `scripts\make-cert.ps1` has made the certificate on this PC (trusted on this PC only), and unsigned otherwise.
 
-To publish a release, raise `<Version>` in `Directory.Build.props`, give it a `## <version>` section in `CHANGELOG.md`, commit and push, then run `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\release.ps1`. It builds and signs the setup, creates the GitHub release with that section as its notes, and checks GitHub stored the exact file.
+To publish a release, raise `<Version>` in `Directory.Build.props`, give it a `## <version>` section in `CHANGELOG.md`, commit and push to main, then run **Release** from the Actions tab. It builds and tests on GitHub, has SignPath sign Glass-Rea's files and then the setup (each approved on signpath.io), creates the GitHub release with that section as its notes, and checks GitHub stored the exact file. `scripts\release.ps1` does the same from this PC, signed with the Tem Revil certificate instead.
 
 `scripts\make-icon.ps1` regenerates `src\GlassRea.App\Assets\app.ico` from the Twin flow mark (`design\logo\twin-flow.svg`).

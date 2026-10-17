@@ -16,10 +16,30 @@ public static class Releases
     public const string PageUrl = $"https://github.com/{Repository}/releases";
 
     /// <summary>
-    /// The certificate every Glass-Rea setup is signed with (CN=Tem Revil). A download signed by anything else is
-    /// refused, even if it came from the right place.
+    /// Tem Revil's own certificate (CN=Tem Revil), which signed releases up to 1.1.1 and still signs builds made on
+    /// the owner's PC. It's its own root, so Windows can't vouch for it; it's accepted by its exact thumbprint.
     /// </summary>
     public const string SignerThumbprint = "E6A4B1317EA62EDEAC18FCA3214798EFBF8D068E";
+
+    /// <summary>
+    /// Who signs releases built by GitHub Actions: SignPath Foundation, which signs open-source projects for free
+    /// (https://signpath.org). Its certificate is issued by a certificate authority Windows trusts, and is renewed
+    /// from time to time, so it's accepted by name with a chain Windows fully trusts, not by thumbprint.
+    /// </summary>
+    public const string SignPathFoundation = "SignPath Foundation";
+
+    /// <summary>WinVerifyTrust's answer for a signature that's intact but whose root Windows doesn't trust.</summary>
+    public const int UntrustedRoot = unchecked((int)0x800B0109);
+
+    /// <summary>
+    /// Whether a setup with this signature may be installed as an update. <paramref name="trust"/> is what
+    /// WinVerifyTrust said (0 is fully trusted); the rest describe the signer's certificate. The file must also be
+    /// byte for byte what GitHub recorded for the release, which is checked first and matters most: the signature
+    /// only says who built it.
+    /// </summary>
+    public static bool AcceptsSigner(int trust, string? thumbprint, string? commonName, string? organization) =>
+        trust == 0 && commonName == SignPathFoundation && organization == SignPathFoundation
+        || (trust is 0 or UntrustedRoot) && string.Equals(thumbprint, SignerThumbprint, StringComparison.OrdinalIgnoreCase);
 
     private const string DownloadPrefix = $"https://github.com/{Repository}/releases/download/";
 

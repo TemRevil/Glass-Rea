@@ -132,7 +132,7 @@ public sealed partial class SettingsPage : UserControl, IPage
         try
         {
             var path = await Updater.Download(release, new Progress<double>(p => DownloadBar.Value = p));
-            UpdateText.Text = "Downloaded and checked: signed by Tem Revil. Windows will ask to let the setup make changes; it closes this window and opens the new version when it's done.";
+            UpdateText.Text = "Downloaded and checked: it's the release's own file, properly signed. Windows will ask to let the setup make changes; it closes this window and opens the new version when it's done.";
             await Updater.Install(path);
         }
         catch (UpdateException ex) { UpdateText.Text = ex.Message; }

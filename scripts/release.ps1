@@ -1,6 +1,8 @@
-# Publishes a GitHub release: builds and signs "publish\Glass-Rea Setup.exe", then creates release v<Version>
-# (the <Version> in Directory.Build.props) with that version's CHANGELOG.md section as its notes and the setup
-# attached. The app's update check (Settings > About) finds it there.
+# Publishes a GitHub release from this PC: builds "publish\Glass-Rea Setup.exe" signed with the Tem Revil
+# certificate, then creates release v<Version> (the <Version> in Directory.Build.props) with that version's
+# CHANGELOG.md section as its notes and the setup attached. The app's update check (Settings > About) finds it there.
+# Releases are normally made by .github/workflows/release.yml and signed by SignPath Foundation, which Smart App
+# Control trusts; this is the fallback, and only PCs that trust the Tem Revil certificate run its setup unwarned.
 # Run from the repo, on main, with everything committed and pushed:
 #   powershell -NoProfile -ExecutionPolicy Bypass -File scripts\release.ps1
 $ErrorActionPreference = 'Stop'

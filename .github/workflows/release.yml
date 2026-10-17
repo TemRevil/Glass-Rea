@@ -1,0 +1,145 @@
+# Publishes a release: builds Glass-Rea on GitHub's own Windows machines, has SignPath sign it (free code signing
+# for open source, certificate by SignPath Foundation), and creates release v<Version> (the <Version> in
+# Directory.Build.props) with that version's CHANGELOG.md section as its notes and the setup attached.
+#
+# Run it from the Actions tab (Release, then Run workflow) once main has the new <Version> and its CHANGELOG
+# section. Each run asks for two approvals on signpath.io: first Glass-Rea's files inside the app, then the setup
+# built around them (the setup carries the app inside it, so the app is signed first).
+#
+# Needs, in the repository's settings:
+#   secret   SIGNPATH_API_TOKEN          a SignPath user token that may submit signing requests
+#   variable SIGNPATH_ORGANIZATION_ID    the SignPath organization's id
+# and, only if SignPath set them up under other names: SIGNPATH_PROJECT_SLUG (default Glass-Rea),
+# SIGNPATH_POLICY_SLUG (default release-signing).
+name: Release
+on:
+  workflow_dispatch:
+permissions:
+  contents: write # create the release
+  actions: read   # SignPath reads this job and downloads its artifacts
+concurrency:
+  group: release
+  cancel-in-progress: false
+jobs:
+  release:
+    runs-on: windows-latest
+    timeout-minutes: 300
+    env:
+      GH_TOKEN: ${{ github.token }}
+      SIGNPATH_PROJECT: ${{ vars.SIGNPATH_PROJECT_SLUG || 'Glass-Rea' }}
+      SIGNPATH_POLICY: ${{ vars.SIGNPATH_POLICY_SLUG || 'release-signing' }}
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Check the version and write the notes
+        id: version
+        run: |
+          if ('${{ github.ref }}' -ne 'refs/heads/main') { throw 'Release from main.' }
+          if (-not '${{ vars.SIGNPATH_ORGANIZATION_ID }}') { throw 'Set the SIGNPATH_ORGANIZATION_ID variable in the repository settings.' }
+          $version = ([xml](Get-Content Directory.Build.props)).Project.PropertyGroup.Version
+          $tags = gh release list --limit 200 --json tagName --jq '.[].tagName'
+          if ($tags -contains "v$version") { throw "v$version is already released. Raise <Version> in Directory.Build.props for the next one." }
+          # The notes are this version's section of the changelog, without its heading.
+          $lines = Get-Content CHANGELOG.md
+          $start = [Array]::IndexOf($lines, "## $version")
+          if ($start -lt 0) { throw "CHANGELOG.md has no '## $version' section." }
+          $end = $lines.Count
+          for ($i = $start + 1; $i -lt $lines.Count; $i++) { if ($lines[$i].StartsWith('## ')) { $end = $i; break } }
+          $notes = ($lines[($start + 1)..($end - 1)] -join "`n").Trim()
+          if (-not $notes) { throw "The '## $version' section of CHANGELOG.md is empty." }
+          $notes += "`n`nSigned for free by SignPath Foundation. Code signing policy: https://github.com/${{ github.repository }}#code-signing-policy"
+          Set-Content -Path release-notes.md -Value $notes -Encoding utf8
+          "version=$version" >> $env:GITHUB_OUTPUT
+
+      - name: Build and test
+        run: |
+          dotnet build GlassRea.slnx -warnaserror
+          if ($LASTEXITCODE -ne 0) { throw 'The build failed.' }
+          dotnet test tests\GlassRea.Tests --no-build
+          if ($LASTEXITCODE -ne 0) { throw 'The tests failed.' }
+
+      - name: Build the app and the service
+        run: scripts\build-setup.ps1 -Step Stage -NoSign
+
+      - name: Upload them for signing
+        id: payload
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: payload-unsigned
+          path: publish/stage
+          if-no-files-found: error
+          retention-days: 1
+
+      - name: Sign Glass-Rea's files (approve on signpath.io)
+        uses: signpath/github-action-submit-signing-request@f6d04783b4569d051e0c80105fe66e82819d0092 # v3.0
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          project-slug: ${{ env.SIGNPATH_PROJECT }}
+          signing-policy-slug: ${{ env.SIGNPATH_POLICY }}
+          artifact-configuration-slug: payload
+          github-artifact-id: ${{ steps.payload.outputs.artifact-id }}
+          parameters: |
+            version: "${{ steps.version.outputs.version }}"
+          wait-for-completion-timeout-in-seconds: 14400
+          output-artifact-directory: publish/stage-signed
+
+      - name: Check the files' signatures
+        run: |
+          $files = Get-ChildItem publish\stage-signed -Recurse -Include GlassRea*.dll, GlassRea*.exe
+          if ($files.Count -ne 5) { throw "Expected Glass-Rea's 5 files back from SignPath, got $($files.Count)." }
+          foreach ($f in $files) {
+            $s = Get-AuthenticodeSignature $f.FullName
+            if ($s.Status -ne 'Valid' -or $s.SignerCertificate.Subject -notlike 'CN=SignPath Foundation, O=SignPath Foundation,*') {
+              throw "$($f.FullName) isn't signed by SignPath Foundation: $($s.Status) $($s.SignerCertificate.Subject)"
+            }
+          }
+
+      - name: Build the setup around them
+        run: scripts\build-setup.ps1 -Step Pack -Stage publish\stage-signed -NoSign
+
+      - name: Upload it for signing
+        id: setup
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: setup-unsigned
+          path: publish/Glass-Rea Setup.exe
+          if-no-files-found: error
+          retention-days: 1
+
+      - name: Sign the setup (approve on signpath.io)
+        uses: signpath/github-action-submit-signing-request@f6d04783b4569d051e0c80105fe66e82819d0092 # v3.0
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          project-slug: ${{ env.SIGNPATH_PROJECT }}
+          signing-policy-slug: ${{ env.SIGNPATH_POLICY }}
+          artifact-configuration-slug: setup
+          github-artifact-id: ${{ steps.setup.outputs.artifact-id }}
+          parameters: |
+            version: "${{ steps.version.outputs.version }}"
+          wait-for-completion-timeout-in-seconds: 14400
+          output-artifact-directory: publish/signed
+
+      - name: Publish the release
+        run: |
+          $version = '${{ steps.version.outputs.version }}'
+          $exe = 'publish\signed\Glass-Rea Setup.exe'
+          $s = Get-AuthenticodeSignature $exe
+          if ($s.Status -ne 'Valid' -or $s.SignerCertificate.Subject -notlike 'CN=SignPath Foundation, O=SignPath Foundation,*') {
+            throw "The setup isn't signed by SignPath Foundation: $($s.Status) $($s.SignerCertificate.Subject)"
+          }
+          gh release create "v$version" $exe --title "Glass-Rea $version" --notes-file release-notes.md --target '${{ github.sha }}'
+          if ($LASTEXITCODE -ne 0) { throw 'GitHub refused the release.' }
+          # What GitHub recorded must be byte for byte what SignPath signed; the app's updater checks the same.
+          $asset = (gh api "repos/${{ github.repository }}/releases/tags/v$version" | ConvertFrom-Json).assets |
+            Where-Object { $_.name -like '*Setup.exe' } | Select-Object -First 1
+          $local = 'sha256:' + (Get-FileHash $exe -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($asset.digest -ne $local) { throw "GitHub recorded '$($asset.digest)' for the setup, but the signed file is $local." }
+          "Released v$version, $($asset.digest)"

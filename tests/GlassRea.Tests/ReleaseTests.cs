@@ -60,4 +60,27 @@ public class ReleaseTests
         Assert.Equal(new Version(2, 0, 1), Releases.VersionOf("V2.0.1"));
         Assert.Null(Releases.VersionOf("v1.2.0.5"));
     }
+
+    private const string TemRevil = Releases.SignerThumbprint;
+    private const string SignPath = Releases.SignPathFoundation;
+
+    [Fact]
+    public void SignPathFoundationIsAcceptedOnlyWithAChainWindowsTrusts()
+    {
+        Assert.True(Releases.AcceptsSigner(0, "0123456789ABCDEF0123456789ABCDEF01234567", SignPath, SignPath));
+        Assert.False(Releases.AcceptsSigner(Releases.UntrustedRoot, "0123456789ABCDEF0123456789ABCDEF01234567", SignPath, SignPath));
+        Assert.False(Releases.AcceptsSigner(unchecked((int)0x80096010), null, SignPath, SignPath)); // tampered: bad digest
+        Assert.False(Releases.AcceptsSigner(0, null, SignPath, "Someone Else"));                   // only the name, not the organisation
+        Assert.False(Releases.AcceptsSigner(0, null, "Someone Else", SignPath));
+    }
+
+    [Fact]
+    public void TemRevilsOwnCertificateIsAcceptedByThumbprint()
+    {
+        Assert.True(Releases.AcceptsSigner(Releases.UntrustedRoot, TemRevil, "Tem Revil", null));
+        Assert.True(Releases.AcceptsSigner(0, TemRevil.ToLowerInvariant(), "Tem Revil", null));
+        Assert.False(Releases.AcceptsSigner(Releases.UntrustedRoot, "0123456789ABCDEF0123456789ABCDEF01234567", "Tem Revil", null));
+        Assert.False(Releases.AcceptsSigner(unchecked((int)0x80096010), TemRevil, "Tem Revil", null));
+        Assert.False(Releases.AcceptsSigner(0, null, null, null)); // unsigned
+    }
 }

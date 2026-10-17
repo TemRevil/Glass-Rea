@@ -5,6 +5,8 @@
 - Glass settings: Settings > Appearance has a Glass card with the same controls as RealGlass (https://real-glass.vercel.app): chromatic aberration, frosting, glass opacity, light strength, edge smoothness, refraction index, corner radius, specular shininess, thickness, tint colour and tint strength, and a button to put them back. Chromatic aberration splits the edge into colours the way a prism does, from each colour's own refractive index. Blur is now called Frosting, and Glass is now Glass opacity (the same setting, read the other way round).
 - Lists update in place: when a figure changes, only that figure changes on screen. Before, the whole list on Apps, Connections, Firewall, Devices, Alerts and the Overview's top apps was rebuilt, which also made the app stutter for a moment.
 - The light that follows the pointer over the glass no longer trails behind it: Windows' compositor moves it from the pointer's own position, so it keeps up however busy the app is.
+- Signing: releases are now built on GitHub and signed by SignPath Foundation (free code signing for open source), a certificate Windows trusts, so Smart App Control no longer blocks setup or the app. Updates signed that way are accepted, as well as ones signed by Tem Revil.
+- Privacy policy: [PRIVACY.md](https://github.com/TemRevil/Glass-Rea/blob/main/PRIVACY.md) says exactly what the app and setup send over the internet (only the update check, which can be turned off, and the .NET download), and setup links to it.
 
 ## 1.1.1
 

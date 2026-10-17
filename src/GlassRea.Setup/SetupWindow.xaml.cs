@@ -161,6 +161,12 @@ public sealed partial class SetupWindow : Window
         InstallPathText.Text = dir;
     }
 
+    private void OnPrivacy(Microsoft.UI.Xaml.Documents.Hyperlink sender, Microsoft.UI.Xaml.Documents.HyperlinkClickEventArgs e)
+    {
+        try { AppProcess.OpenWebsiteAsUser(Paths.PrivacyPolicy); }
+        catch (Exception ex) { Log.Write($"Could not open {Paths.PrivacyPolicy}: {ex}"); }
+    }
+
     private void OnFinish(object sender, RoutedEventArgs e)
     {
         Finish(); // Close() from code doesn't raise AppWindow.Closing, so Finish can't wait for it

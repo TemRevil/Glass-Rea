@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  SignPath artifact configuration "setup": the installer (scripts\build-setup.ps1 -Step Pack), built around the
+  files the "payload" request signed. The release workflow uploads it as a zip holding just that file. The copy in
+  SignPath is the one that counts; keep this file the same as it.
+-->
+<artifact-configuration xmlns="http://signpath.io/artifact-configuration/v1">
+  <parameters>
+    <parameter name="version" required="true" />
+  </parameters>
+  <zip-file>
+    <pe-file path="Glass-Rea Setup.exe" product-name="Glass-Rea" product-version="${version}">
+      <authenticode-sign />
+    </pe-file>
+  </zip-file>
+</artifact-configuration>

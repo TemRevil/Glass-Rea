@@ -23,6 +23,8 @@ public static class Paths
     public const string AppExeName = "GlassRea.exe";
     /// <summary>Opened when setup finishes; a temrevil.com link that redirects and counts the visit as coming from setup.</summary>
     public const string Website = "https://temrevil.com/revil/ge2CozAa";
+    /// <summary>What the app and setup send over the internet, linked from the welcome page.</summary>
+    public const string PrivacyPolicy = "https://github.com/TemRevil/Glass-Rea/blob/main/PRIVACY.md";
 
     public static readonly string DataDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), ProductName);
     public static readonly string UserDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), ProductName);
