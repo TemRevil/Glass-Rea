@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.2.2
 
 - Real app icons everywhere: programs show the icon Explorer shows, Store apps the one in Start, and a program that has since updated into a new folder shows its current icon. What has no icon of its own gets a symbol for its kind, never a letter. Several icons asked for at once used to come back empty from Windows; they're now drawn one at a time.
 - Kinds of apps: each row says whether it's a Store app, a service, Windows itself or a VPN tunnel, and the Apps page explains the difference. Services are shown by the name Windows gives them ("Delivery Optimization") with what they do, Store apps by their name and maker.
