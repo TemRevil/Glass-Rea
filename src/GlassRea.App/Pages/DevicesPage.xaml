@@ -32,16 +32,20 @@
                     <DataTemplate x:DataType="p:DeviceRow">
                         <Border Style="{StaticResource Card}" Padding="16,14" Opacity="{x:Bind Fade}">
                             <Grid ColumnSpacing="14" RowSpacing="10">
-                                <Grid.ColumnDefinitions><ColumnDefinition Width="Auto" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+                                <Grid.ColumnDefinitions><ColumnDefinition Width="Auto" /><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
                                 <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
                                 <Border Width="40" Height="40" CornerRadius="10" Background="{StaticResource AccentSoftBrush}">
                                     <FontIcon Glyph="{x:Bind Glyph}" FontSize="18" Foreground="{StaticResource AccentBrush}" />
                                 </Border>
                                 <StackPanel Grid.Column="1" VerticalAlignment="Center">
                                     <TextBlock Text="{x:Bind Name}" Style="{StaticResource CardTitle}" TextTrimming="CharacterEllipsis" />
-                                    <TextBlock Text="{x:Bind Note}" Style="{StaticResource Caption}" />
+                                    <TextBlock Text="{x:Bind Note}" Style="{StaticResource Caption}" TextTrimming="CharacterEllipsis" />
                                 </StackPanel>
-                                <Grid Grid.Row="1" Grid.ColumnSpan="2" ColumnSpacing="16">
+                                <Border Grid.Column="2" VerticalAlignment="Top" Margin="0,2,0,0" Padding="7,2" CornerRadius="5"
+                                        Background="{ThemeResource SubtleFillColorSecondaryBrush}" Visibility="{x:Bind OsShown}">
+                                    <TextBlock Text="{x:Bind Os}" FontSize="11" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                </Border>
+                                <Grid Grid.Row="1" Grid.ColumnSpan="3" ColumnSpacing="16">
                                     <Grid.ColumnDefinitions><ColumnDefinition /><ColumnDefinition /></Grid.ColumnDefinitions>
                                     <StackPanel>
                                         <TextBlock Text="{x:Bind Ip}" FontFamily="Cascadia Mono, Consolas" FontSize="12" IsTextSelectionEnabled="True" />

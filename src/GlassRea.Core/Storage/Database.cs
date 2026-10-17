@@ -33,11 +33,22 @@ public sealed class Database : IDisposable
             CREATE TABLE IF NOT EXISTS dns(ip TEXT PRIMARY KEY, name TEXT NOT NULL, seen INTEGER NOT NULL);
             CREATE TABLE IF NOT EXISTS devices(
               mac TEXT PRIMARY KEY, ip TEXT NOT NULL, name TEXT, randomized INTEGER NOT NULL,
-              is_gateway INTEGER NOT NULL, is_this_pc INTEGER NOT NULL, first_seen INTEGER NOT NULL, last_seen INTEGER NOT NULL);
+              is_gateway INTEGER NOT NULL, is_this_pc INTEGER NOT NULL, first_seen INTEGER NOT NULL, last_seen INTEGER NOT NULL,
+              vendor TEXT, model TEXT, kind TEXT, os TEXT);
+            CREATE TABLE IF NOT EXISTS device_hints(
+              mac TEXT NOT NULL, key TEXT NOT NULL, value TEXT NOT NULL, seen INTEGER NOT NULL,
+              PRIMARY KEY(mac, key)) WITHOUT ROWID;
             CREATE TABLE IF NOT EXISTS alerts(
               id INTEGER PRIMARY KEY AUTOINCREMENT, time INTEGER NOT NULL, kind TEXT NOT NULL, title TEXT NOT NULL, body TEXT NOT NULL);
             CREATE TABLE IF NOT EXISTS settings(key TEXT PRIMARY KEY, value TEXT NOT NULL);
             """);
+        // Older databases predate what a device says about itself.
+        var columns = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        using (var info = Cmd("PRAGMA table_info(devices)"))
+        using (var r = info.ExecuteReader())
+            while (r.Read()) columns.Add(r.GetString(1));
+        foreach (var column in new[] { "vendor", "model", "kind", "os" })
+            if (!columns.Contains(column)) Exec($"ALTER TABLE devices ADD COLUMN {column} TEXT");
     }
 
     public static Database OpenFile(string path)
@@ -233,10 +244,13 @@ public sealed class Database : IDisposable
             using var find = Cmd("SELECT 1 FROM devices WHERE mac=$m", ("$m", d.Mac));
             var isNew = find.ExecuteScalar() is null;
             using var c = Cmd("""
-                INSERT INTO devices(mac,ip,name,randomized,is_gateway,is_this_pc,first_seen,last_seen) VALUES($m,$ip,$n,$r,$g,$p,$f,$l)
-                ON CONFLICT(mac) DO UPDATE SET ip=$ip, name=coalesce($n,name), randomized=$r, is_gateway=$g, is_this_pc=$p, last_seen=$l
+                INSERT INTO devices(mac,ip,name,randomized,is_gateway,is_this_pc,first_seen,last_seen,vendor,model,kind,os)
+                VALUES($m,$ip,$n,$r,$g,$p,$f,$l,$v,$md,$k,$o)
+                ON CONFLICT(mac) DO UPDATE SET ip=$ip, name=coalesce($n,name), randomized=$r, is_gateway=$g, is_this_pc=$p, last_seen=$l,
+                  vendor=coalesce($v,vendor), model=coalesce($md,model),
+                  kind=CASE WHEN $k IS NULL OR $k='unknown' THEN coalesce(kind,$k) ELSE $k END, os=coalesce($o,os)
                 """, ("$m", d.Mac), ("$ip", d.Ip), ("$n", d.Name), ("$r", d.Randomized ? 1 : 0), ("$g", d.IsGateway ? 1 : 0),
-                ("$p", d.IsThisPc ? 1 : 0), ("$f", d.FirstSeen), ("$l", d.LastSeen));
+                ("$p", d.IsThisPc ? 1 : 0), ("$f", d.FirstSeen), ("$l", d.LastSeen), ("$v", d.Vendor), ("$md", d.Model), ("$k", d.Kind), ("$o", d.Os));
             c.ExecuteNonQuery();
             return isNew;
         }
@@ -246,13 +260,68 @@ public sealed class Database : IDisposable
     {
         lock (_gate)
         {
-            using var c = Cmd("SELECT mac,ip,name,randomized,is_gateway,is_this_pc,first_seen,last_seen FROM devices ORDER BY last_seen DESC, ip");
+            using var c = Cmd("SELECT mac,ip,name,randomized,is_gateway,is_this_pc,first_seen,last_seen,vendor,model,kind,os FROM devices ORDER BY last_seen DESC, ip");
             using var r = c.ExecuteReader();
             var list = new List<DeviceInfo>();
             while (r.Read())
                 list.Add(new DeviceInfo(r.GetString(0), r.GetString(1), r.IsDBNull(2) ? null : r.GetString(2), r.GetInt64(3) == 1,
-                    r.GetInt64(4) == 1, r.GetInt64(5) == 1, r.GetInt64(6), r.GetInt64(7)));
+                    r.GetInt64(4) == 1, r.GetInt64(5) == 1, r.GetInt64(6), r.GetInt64(7),
+                    r.IsDBNull(8) ? null : r.GetString(8), r.IsDBNull(9) ? null : r.GetString(9), r.IsDBNull(10) ? null : r.GetString(10), r.IsDBNull(11) ? null : r.GetString(11)));
             return list;
+        }
+    }
+
+    /// <summary>
+    /// Remembers what a device said about itself when it joined or announced itself (its DHCP name, Bonjour names
+    /// and services), so a scan minutes later still knows. A device can store at most 64 facts.
+    /// </summary>
+    public void SaveDeviceHints(string mac, IEnumerable<(string Key, string Value)> hints, long now)
+    {
+        lock (_gate)
+        {
+            using var count = Cmd("SELECT count(*) FROM device_hints WHERE mac=$m", ("$m", mac));
+            var room = 64 - (long)count.ExecuteScalar()!;
+            using var tx = _db.BeginTransaction();
+            using var update = Cmd("UPDATE device_hints SET value=$v, seen=$s WHERE mac=$m AND key=$k", ("$m", mac), ("$k", ""), ("$v", ""), ("$s", now));
+            using var insert = Cmd("INSERT OR IGNORE INTO device_hints(mac,key,value,seen) VALUES($m,$k,$v,$s)", ("$m", mac), ("$k", ""), ("$v", ""), ("$s", now));
+            foreach (var (key, value) in hints)
+            {
+                if (key.Length > 200 || value.Length > 200) continue;
+                update["$k"] = key; update["$v"] = value;
+                if (update.ExecuteNonQuery() > 0 || room <= 0) continue;
+                insert["$k"] = key; insert["$v"] = value;
+                room -= insert.ExecuteNonQuery();
+            }
+            tx.Commit();
+        }
+    }
+
+    public Dictionary<string, List<(string Key, string Value)>> DeviceHints()
+    {
+        lock (_gate)
+        {
+            using var c = Cmd("SELECT mac,key,value FROM device_hints ORDER BY seen DESC");
+            using var r = c.ExecuteReader();
+            var map = new Dictionary<string, List<(string, string)>>(StringComparer.OrdinalIgnoreCase);
+            while (r.Read())
+            {
+                if (!map.TryGetValue(r.GetString(0), out var list)) map[r.GetString(0)] = list = [];
+                list.Add((r.GetString(1), r.GetString(2)));
+            }
+            return map;
+        }
+    }
+
+    /// <summary>Forgets hints for hardware that never showed up as a device within a day, and anything a month old.</summary>
+    public void PruneDeviceHints(long now)
+    {
+        lock (_gate)
+        {
+            using var c = Cmd("""
+                DELETE FROM device_hints WHERE seen < $month
+                   OR (seen < $day AND mac NOT IN (SELECT mac FROM devices))
+                """, ("$month", now - 30 * 86400), ("$day", now - 86400));
+            c.ExecuteNonQuery();
         }
     }
 

@@ -153,6 +153,8 @@ public sealed class PeriodPicker : StackPanel
         Kind = start;
         _kind.SelectedIndex = (int)start;
         Update(raise: false);
+        // Pages live as long as the app, so this subscription does too.
+        Periods.Changed += () => Update();
     }
 
     private static Button Arrow(string glyph, string name)

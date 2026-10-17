@@ -15,6 +15,8 @@ This repository contains only Glass-Rea's own source. Building it restores the p
 
 Test-only, not redistributed: xunit 2.9.3 (Apache-2.0), xunit.runner.visualstudio 3.1.5 (Apache-2.0), Microsoft.NET.Test.Sdk 18.11.0 (MIT).
 
+The service carries a table of network card makers, `src/GlassRea.Service/Devices/oui.tsv.gz`, built by `scripts/update-oui.ps1` from the IEEE Registration Authority's public MA-L, MA-M and MA-S registries (https://standards-oui.ieee.org/). It holds each prefix and the company name as registered.
+
 The service is hosted by the .NET 10 runtime, which setup installs from Microsoft when it's missing (MIT, .NET Foundation). SQLite is Windows' own `winsqlite3.dll`; SQLite itself is in the public domain.
 
 ## MIT License (for the packages marked MIT)

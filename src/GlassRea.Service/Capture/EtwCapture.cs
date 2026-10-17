@@ -14,7 +14,8 @@ namespace GlassRea.Service.Capture;
 /// <summary>
 /// Real-time ETW session: Kernel-Network gives bytes per packet with the owning process id, Kernel-Process names
 /// processes as they start, and DNS-Client maps the addresses apps connect to back to domain names.
-/// Because it sees traffic at the TCP/IP layer, apps behind a VPN like Cloudflare WARP are counted as themselves.
+/// Because it sees traffic at the TCP/IP layer, apps behind a VPN like Cloudflare WARP are counted as themselves,
+/// including when the VPN works as a local proxy.
 /// </summary>
 public sealed class EtwCapture(UsageAccumulator usage, ProcessResolver resolver, DnsCache dns, ServiceState state,
     Database db, ILogger<EtwCapture> log) : BackgroundService
@@ -25,6 +26,9 @@ public sealed class EtwCapture(UsageAccumulator usage, ProcessResolver resolver,
     private const string DnsClient = "Microsoft-Windows-DNS-Client";
 
     private volatile HashSet<IPAddress> _localAddresses = LocalAddresses();
+    private volatile TunnelPorts _tunnelPorts = TunnelPorts.None;
+    private long _tunnelPortsAt = long.MinValue;
+    private bool? _portsSwapped;
     private static readonly ConcurrentDictionary<int, bool> Outbound = new()
     {
         [10] = true, [26] = true, [42] = true, [58] = true,   // TCP/UDP send, IPv4/IPv6
@@ -91,9 +95,41 @@ public sealed class EtwCapture(UsageAccumulator usage, ProcessResolver resolver,
         // The remote end is whichever address is not one of ours; if both or neither are, use the destination.
         var local = _localAddresses;
         var remote = local.Contains(Plain(daddr)) && !local.Contains(Plain(saddr)) ? saddr : daddr;
-        if (AddressScope.Classify(daddr) == Scope.Loopback || AddressScope.Classify(saddr) == Scope.Loopback) return;
         var app = resolver.Resolve(Int(e, "PID"));
-        usage.Add(app, new DateTimeOffset(e.TimeStamp), Convert.ToInt64(e.PayloadByName("size")), outbound, remote);
+        var time = new DateTimeOffset(e.TimeStamp);
+        var size = Convert.ToInt64(e.PayloadByName("size"));
+        if (AddressScope.Classify(daddr) == Scope.Loopback || AddressScope.Classify(saddr) == Scope.Loopback)
+        {
+            OnLoopback(e, app, time, size, outbound);
+            return;
+        }
+        usage.Add(app, time, size, outbound, remote);
+    }
+
+    /// <summary>
+    /// Traffic inside this PC is ignored, except an app talking to a VPN's local proxy or DNS (WARP in proxy mode,
+    /// or its DNS on 127.0.2.2): that is the app's internet use, which the VPN then carries as its own.
+    /// </summary>
+    private void OnLoopback(TraceEvent e, AppIdentity app, DateTimeOffset time, long size, bool outbound)
+    {
+        if (Environment.TickCount64 - Interlocked.Read(ref _tunnelPortsAt) > 15_000)
+        {
+            Interlocked.Exchange(ref _tunnelPortsAt, Environment.TickCount64);
+            try { _tunnelPorts = TunnelPorts.From(Native.LocalSockets(), pid => resolver.Resolve(pid).IsTunnel); }
+            catch (Exception ex) { log.LogDebug(ex, "Could not read the socket tables"); }
+        }
+        var ports = _tunnelPorts;
+        if (ports.IsEmpty) return;
+        var tcp = (int)e.ID is 10 or 11 or 26 or 27;
+        var sport = Int(e, "sport");
+        var dport = Int(e, "dport");
+        if (app.IsTunnel)
+        {
+            _portsSwapped ??= ports.OrderFrom(tcp, sport, dport);
+            return;
+        }
+        if (ports.Has(tcp, sport, _portsSwapped) || ports.Has(tcp, dport, _portsSwapped))
+            usage.AddThroughTunnel(app, time, size, outbound);
     }
 
     private static IPAddress Plain(IPAddress a) => a.IsIPv4MappedToIPv6 ? a.MapToIPv4() : a;

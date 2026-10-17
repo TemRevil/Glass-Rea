@@ -18,12 +18,15 @@ public static class AlertText
         $"Seen for the first time at {ip}, hardware address {mac}. If it isn't yours, someone else may be using your network.");
 
     /// <param name="period">"Daily" or "Monthly".</param>
-    public static (string Title, string Body) Limit(string period, int percent, long used, long limit)
+    /// <param name="monthDay">The day of the month the monthly count starts again (Settings > Data).</param>
+    public static (string Title, string Body) Limit(string period, int percent, long used, long limit, int monthDay = 1)
     {
         var monthly = period.Equals("Monthly", StringComparison.OrdinalIgnoreCase);
         var name = monthly ? "monthly" : "daily";
         var when = monthly ? "this month" : "today";
-        var restart = monthly ? "The count starts again on the 1st." : "The count starts again at midnight.";
+        var restart = !monthly ? "The count starts again at midnight."
+            : monthDay > 28 ? $"The count starts again on the {Usage.Cycle.Ordinal(monthDay)}, or the last day of a shorter month."
+            : $"The count starts again on the {Usage.Cycle.Ordinal(monthDay)}.";
         var amount = $"{Bytes.Format(used)} of {Bytes.Format(limit)} used {when}.";
         return percent >= 100
             ? ($"{(monthly ? "Monthly" : "Daily")} limit reached", $"{amount} Glass-Rea doesn't cut your connection. {restart}")

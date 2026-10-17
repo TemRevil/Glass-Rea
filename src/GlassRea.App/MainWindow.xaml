@@ -32,7 +32,8 @@
                     <Ellipse x:Name="LiveDot" Width="6" Height="6" Fill="{StaticResource AccentBrush}" VerticalAlignment="Center" />
                     <TextBlock Text="Live, last 2 minutes" Style="{StaticResource Caption}" />
                 </StackPanel>
-                <c:Glass x:Name="RatesGlass" HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,12,0" CornerRadius="16" Padding="16,8">
+                <c:Glass x:Name="RatesGlass" HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,12,0" CornerRadius="16" Padding="16,8"
+                         SmoothWidth="True" HorizontalContentAlignment="Center">
                     <StackPanel Orientation="Horizontal" Spacing="22">
                         <Grid ColumnSpacing="8" RowSpacing="0">
                             <Grid.ColumnDefinitions><ColumnDefinition Width="Auto" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
@@ -55,8 +56,6 @@
 
         <Grid Grid.Row="2">
             <Grid x:Name="PageHost" Margin="14,12,14,0" />
-            <!-- Content sliding under the floating bar softens into blur. -->
-            <c:EdgeBlur x:Name="Edge" VerticalAlignment="Bottom" Height="104" />
             <Grid x:Name="Ghost" IsHitTestVisible="False" />
 
             <InfoBar x:Name="Offline" IsOpen="False" IsClosable="False" Severity="Warning" Margin="14,12,14,0" VerticalAlignment="Top"

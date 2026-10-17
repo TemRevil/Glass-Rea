@@ -10,13 +10,15 @@ A personal network monitor for Windows: how much each app used the internet, by 
 | Apps | Every app that used the internet in the period, with downloaded, uploaded and total. |
 | Connections | Per app: the remote hosts it talked to, with their DNS names, bytes in and out, and when last seen. |
 | Firewall | Block or unblock any app's internet access in one click (Windows Firewall rules, so blocks hold even when the app is closed). |
-| Devices | Devices on your network (IP, MAC, name, whether the MAC is a randomized private one, first and last seen). |
+| Devices | Devices on your network, named and recognised: the name each gives itself, its maker, what it is (phone, TV, printer and so on) and its system (iOS, Android, Windows...), with IP, MAC, whether the MAC is a randomized private one, and first and last seen. |
 | Alerts | An app going online for the first time, a new device joining your network, 80% and 100% of a daily or monthly limit. Each also shows as a Windows notification with a short title and a plain line on what it means. |
-| Settings | In sections. **General:** start with Windows (in the tray or with the window), minimize to the tray, close to the tray, and how much processor priority to ask Windows for (Normal, Above normal, High). **Notifications:** which alerts, whether they pop up, and a test button. **Data:** daily and monthly limits, VPN tunnel processes. **Appearance:** theme, accent, blur and glass. **About.** |
+| Settings | In sections. **General:** start with Windows (in the tray or with the window), minimize to the tray, close to the tray, and how much processor priority to ask Windows for (Normal, Above normal, High). **Notifications:** which alerts, whether they pop up, and a test button. **Data:** daily and monthly limits, the day the month and the week start again, VPN tunnel processes. **Appearance:** theme, accent, blur and glass. **About.** |
 
 A live strip of the last two minutes runs along the top of every page.
 
-VPN tunnels (Cloudflare WARP, WireGuard, OpenVPN, Proton, Nord) are listed but left out of totals and the live graph, because the traffic they carry is already counted under the apps that sent it.
+VPN tunnels (Cloudflare WARP, WireGuard, OpenVPN, Proton, Nord) are listed but left out of totals and the live graph, because the traffic they carry is already counted under the apps that sent it, including apps that reach the VPN through its local proxy or DNS.
+
+Devices are recognised from what they say about themselves on the local network: the name they send when they join (DHCP) and their Bonjour, NetBIOS and UPnP answers, plus a few ports only one kind of device keeps open (62078 on iPhones and iPads, 9100 on printers) and the maker registered for their network card. A device that says nothing, such as a phone with a private address and no name, is called by what it is.
 
 ## How it works
 

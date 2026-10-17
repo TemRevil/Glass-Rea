@@ -54,8 +54,7 @@ public static class Bars
                 var hour = from / 3600 + i;
                 byHour.TryGetValue(hour, out var h);
                 var label = DateTimeOffset.FromUnixTimeSeconds(hour * 3600).ToLocalTime().ToString("HH", inv);
-                return new Controls.Bar(label + ":00", h?.NetIn ?? 0, h?.NetOut ?? 0,
-                    $"{label}:00 to {label}:59\nDownload {Fmt.Bytes(h?.NetIn ?? 0)}\nUpload {Fmt.Bytes(h?.NetOut ?? 0)}");
+                return new Controls.Bar(label + ":00", h?.NetIn ?? 0, h?.NetOut ?? 0, $"{label}:00 to {label}:59");
             }).ToList();
         }
         var byDay = r.Days.ToDictionary(d => d.Day);
@@ -66,8 +65,7 @@ public static class Bars
             var d = start.AddDays(i);
             byDay.TryGetValue(d.Year * 10000 + d.Month * 100 + d.Day, out var t);
             var label = kind == Periods.Kind.Week ? d.ToString("ddd", inv) : d.ToString("d MMM", inv);
-            return new Controls.Bar(label, t?.NetIn ?? 0, t?.NetOut ?? 0,
-                $"{d.ToString("dddd d MMM", inv)}\nDownload {Fmt.Bytes(t?.NetIn ?? 0)}\nUpload {Fmt.Bytes(t?.NetOut ?? 0)}");
+            return new Controls.Bar(label, t?.NetIn ?? 0, t?.NetOut ?? 0, d.ToString("dddd d MMM", inv));
         }).ToList();
     }
 }

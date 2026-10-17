@@ -24,7 +24,20 @@ public sealed class UsageAccumulator(int liveSeconds = 300)
     public void Add(AppIdentity app, DateTimeOffset time, long bytes, bool outbound, IPAddress remote)
     {
         var scope = AddressScope.Classify(remote);
-        if (scope == Scope.Loopback || bytes <= 0) return;
+        if (scope == Scope.Loopback) return;
+        Count(app, time, bytes, outbound, scope, remote.IsIPv4MappedToIPv6 ? remote.MapToIPv4().ToString() : remote.ToString());
+    }
+
+    /// <summary>
+    /// Bytes an app sent to or got from a VPN's local proxy or DNS port: internet use, though where it went is
+    /// hidden inside the VPN, so no host is recorded.
+    /// </summary>
+    public void AddThroughTunnel(AppIdentity app, DateTimeOffset time, long bytes, bool outbound) =>
+        Count(app, time, bytes, outbound, Scope.Internet, null);
+
+    private void Count(AppIdentity app, DateTimeOffset time, long bytes, bool outbound, Scope scope, string? ip)
+    {
+        if (bytes <= 0) return;
         var unix = time.ToUnixTimeSeconds();
         var hour = unix / 3600;
         lock (_gate)
@@ -33,11 +46,12 @@ public sealed class UsageAccumulator(int liveSeconds = 300)
             var slot = (scope == Scope.Internet ? 0 : 2) + (outbound ? 1 : 0);
             h[slot] += bytes;
 
-            var day = LocalDay(time);
-            var ip = remote.IsIPv4MappedToIPv6 ? remote.MapToIPv4().ToString() : remote.ToString();
-            var host = Bucket(_hosts, (app.Key, day, ip), 3);
-            host[outbound ? 1 : 0] += bytes;
-            host[2] = unix;
+            if (ip is not null)
+            {
+                var host = Bucket(_hosts, (app.Key, LocalDay(time), ip), 3);
+                host[outbound ? 1 : 0] += bytes;
+                host[2] = unix;
+            }
 
             if (scope == Scope.Internet && !app.IsTunnel) AddLive(app.Key, unix, bytes, outbound);
         }

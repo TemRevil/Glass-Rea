@@ -30,6 +30,8 @@ public static class ServiceSetup
         else Sc("create", Paths.ServiceName, "binPath=", image, "start=", "auto", "DisplayName=", Paths.ProductName);
         Sc("description", Paths.ServiceName, About);
         Sc("failure", Paths.ServiceName, "reset=", "86400", "actions=", "restart/5000/restart/5000/restart/30000");
+        // Its own identity, so a firewall rule can name this service alone (the device discovery rule does).
+        Sc("sidtype", Paths.ServiceName, "unrestricted");
 
         // Event log source the service writes to; same message file .NET uses for its own sources.
         using var key = Registry.LocalMachine.CreateSubKey(Paths.EventLogKey);

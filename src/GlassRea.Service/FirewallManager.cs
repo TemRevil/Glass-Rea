@@ -11,7 +11,8 @@ namespace GlassRea.Service;
 public sealed class FirewallManager(Database db, ILogger<FirewallManager> log)
 {
     public const string Group = "Glass-Rea";
-    private const int DirIn = 1, DirOut = 2, ActionBlock = 0, AnyProtocol = 256, AllProfiles = 0x7FFFFFFF;
+    public const string DiscoveryRule = Group + " device discovery";
+    private const int DirIn = 1, DirOut = 2, ActionBlock = 0, ActionAllow = 1, AnyProtocol = 256, Udp = 17, AllProfiles = 0x7FFFFFFF;
     private readonly Lock _gate = new();
     private HashSet<long> _blocked = [];
     private long _syncedAt = long.MinValue;
@@ -80,6 +81,40 @@ public sealed class FirewallManager(Database db, ILogger<FirewallManager> log)
         }
         log.LogInformation("{Action} {App}", block ? "Blocked" : "Unblocked", app.Name);
     }
+
+    /// <summary>
+    /// Lets this service, and only it, hear devices on the local network introduce themselves (DHCP on UDP 67,
+    /// Bonjour on UDP 5353). Rewritten at every start so it always points at the current program.
+    /// </summary>
+    public void AllowDiscovery()
+    {
+        try
+        {
+            lock (_gate)
+            {
+                dynamic rules = Policy().Rules;
+                if (Exists(rules, DiscoveryRule)) rules.Remove(DiscoveryRule);
+                dynamic rule = Activator.CreateInstance(Type.GetTypeFromProgID("HNetCfg.FWRule", true)!)!;
+                rule.Name = DiscoveryRule;
+                rule.Description = "Lets Glass-Rea hear the devices on your network say their names, so the Devices page can show them.";
+                rule.Grouping = Group;
+                rule.Direction = DirIn;
+                rule.Action = ActionAllow;
+                rule.Protocol = Udp;
+                rule.LocalPorts = "67,5353";
+                rule.RemoteAddresses = "LocalSubnet";
+                rule.Profiles = AllProfiles;
+                rule.ApplicationName = Environment.ProcessPath;
+                rule.ServiceName = ServiceName;
+                rule.Enabled = true;
+                rules.Add(rule);
+            }
+        }
+        catch (Exception ex) { log.LogWarning(ex, "Could not add the device discovery firewall rule"); }
+    }
+
+    /// <summary>The Windows service name, as registered by the installer.</summary>
+    public const string ServiceName = "GlassRea";
 
     private static dynamic Policy() => Activator.CreateInstance(Type.GetTypeFromProgID("HNetCfg.FwPolicy2", true)!)!;
 

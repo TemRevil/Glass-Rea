@@ -2,6 +2,7 @@ using System.Globalization;
 using GlassRea.App.Controls;
 using GlassRea.App.Support;
 using GlassRea.Core.Protocol;
+using GlassRea.Core.Usage;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
@@ -32,6 +33,9 @@ public sealed partial class SettingsPage : UserControl, IPage
         ShowSection(_section, animate: false);
         PriorityPick.SetItems("Normal", "Above normal", "High");
         PriorityPick.SelectionChanged += OnPriority;
+        MonthDayPick.ItemsSource = Enumerable.Range(1, 31).Select(Cycle.Ordinal).ToList();
+        WeekPick.SetItems(Cycle.WeekStarts.Select(d => d.ToString()).ToArray());
+        WeekPick.SelectionChanged += _ => OnCycle(WeekPick, null!);
         ShowLocalSettings();
         ThemePick.SetItems("System", "Light", "Dark");
         ThemePick.SelectionChanged += i => Appearance.Update(s => s.Theme = (ThemeChoice)i);
@@ -198,8 +202,28 @@ public sealed partial class SettingsPage : UserControl, IPage
         NewDeviceBox.IsOn = s.GetValueOrDefault(SettingKeys.AlertNewDevice) == "true";
         TunnelBox.Text = s.GetValueOrDefault(SettingKeys.TunnelProcesses, "");
         PriorityPick.SelectedIndex = Math.Max(0, Array.IndexOf(PriorityValues, s.GetValueOrDefault(SettingKeys.Priority)));
+        var day = Cycle.ParseMonthDay(s.GetValueOrDefault(SettingKeys.MonthStartDay));
+        MonthDayPick.SelectedIndex = day - 1;
+        WeekPick.SelectedIndex = Math.Max(0, Array.IndexOf(Cycle.WeekStarts, Cycle.ParseWeekStart(s.GetValueOrDefault(SettingKeys.WeekStart))));
+        MonthlyResetText.Text = $"Starts again on the {Cycle.Ordinal(day)}";
         _loading = false;
         _loaded = true;
+    }
+
+    private async void OnCycle(object sender, SelectionChangedEventArgs e)
+    {
+        if (_loading || !_loaded || MonthDayPick.SelectedIndex < 0 || WeekPick.SelectedIndex < 0) return;
+        var day = MonthDayPick.SelectedIndex + 1;
+        var values = new Dictionary<string, string>
+        {
+            [SettingKeys.MonthStartDay] = day.ToString(CultureInfo.InvariantCulture),
+            [SettingKeys.WeekStart] = Cycle.WeekStartKey(Cycle.WeekStarts[WeekPick.SelectedIndex]),
+        };
+        var error = await Save(values);
+        if (error is null) Periods.Use(values);
+        MonthlyResetText.Text = $"Starts again on the {Cycle.Ordinal(day)}";
+        var (from, to, _) = Periods.Range(Periods.Kind.Month, DateTime.Today);
+        CycleNote.Text = error ?? $"Saved. This month now runs {Fmt.Date(from)} to {Fmt.Date(to - 86400)}. A reset day of 29 to 31 falls on the last day of shorter months.";
     }
 
     private static string ToGb(string? bytes) => long.TryParse(bytes, out var b) && b > 0 ? Fmt.Number(b / Gb) : "";

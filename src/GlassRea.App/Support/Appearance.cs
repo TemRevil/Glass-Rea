@@ -50,7 +50,7 @@ public static class Appearance
     public static bool IsDark { get; private set; }
     /// <summary>Windows' own "Transparency effects" switch. When off, glass turns solid.</summary>
     public static bool EffectsEnabled => System.AdvancedEffectsEnabled;
-    /// <summary>Blur radius for the app's own glass (the tab bar, the rate chip, the scroll edge).</summary>
+    /// <summary>Blur radius for the app's own glass (the tab bar, the rate chip, the chart tooltips).</summary>
     public static float GlassBlur => EffectsEnabled ? State.Blur * 0.3f : 0f;
 
     /// <summary>Raised after the look changed, on the UI thread.</summary>
@@ -114,9 +114,36 @@ public static class Appearance
     public static void Update(Action<AppearanceState> change)
     {
         change(State);
-        Save();
+        SaveSoon();
         Apply();
     }
+
+    private static Microsoft.UI.Dispatching.DispatcherQueueTimer? _saveTimer;
+
+    /// <summary>Writes the file once things settle, so dragging a slider doesn't write it on every step.</summary>
+    private static void SaveSoon()
+    {
+        if (_root is null) { Save(); return; }
+        if (_saveTimer is null)
+        {
+            _saveTimer = _root.DispatcherQueue.CreateTimer();
+            _saveTimer.Interval = TimeSpan.FromMilliseconds(400);
+            _saveTimer.IsRepeating = false;
+            _saveTimer.Tick += (_, _) => Save();
+        }
+        _saveTimer.Stop();
+        _saveTimer.Start();
+    }
+
+    /// <summary>Saves anything still waiting (on exit).</summary>
+    public static void Flush()
+    {
+        if (_saveTimer?.IsRunning != true) return;
+        _saveTimer.Stop();
+        Save();
+    }
+
+    private static (Color, Color, Color, bool)? _accentApplied;
 
     public static void Apply(bool refreshAccent = true)
     {
@@ -150,7 +177,6 @@ public static class Appearance
         Set(res, "SelectedFillBrush", IsDark ? WithAlpha(Colors.White, 0.08) : WithAlpha(Colors.White, 0.85));
         Set(res, "InkBrush", WithAlpha(Colors.White, IsDark ? 0.16 : 0.75));
         Set(res, "GlowBrush", WithAlpha(Mix(accent, Colors.White, IsDark ? 0.35 : 0.55), IsDark ? 0.42 : 0.55));
-        Set(res, "EdgeBrush", IsDark ? WithAlpha(Hex("#1C1C1E"), 0.55) : WithAlpha(Hex("#F3F3F3"), 0.6));
         if (res["GlassRimBrush"] is LinearGradientBrush rim)
         {
             var r = IsDark ? 0.38 : 0.95;
@@ -159,7 +185,14 @@ public static class Appearance
             rim.GradientStops[2].Color = WithAlpha(Colors.White, r * 0.4);
         }
 
-        if (refreshAccent) SetSystemAccent(res, accent, accentLight, accentDark);
+        // Re-theming every control is slow (it rebuilds their templates), so do it only when the accent really changed:
+        // dragging the Blur or Glass slider leaves it alone.
+        var accentNow = (accent, accentLight, accentDark, IsDark);
+        if (refreshAccent && _accentApplied != accentNow)
+        {
+            _accentApplied = accentNow;
+            SetSystemAccent(res, accent, accentLight, accentDark);
+        }
         _backdrop?.Update(IsDark, State.Blur, glass);
         _titleBar?.Invoke(IsDark);
         Changed?.Invoke();

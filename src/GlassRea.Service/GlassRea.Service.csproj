@@ -16,6 +16,10 @@
     <PackageReference Include="System.Management" Version="10.0.13" />
   </ItemGroup>
   <ItemGroup>
+    <!-- Network card makers from the IEEE registries; refresh with scripts/update-oui.ps1. -->
+    <EmbeddedResource Include="Devices/oui.tsv.gz" LogicalName="GlassRea.Service.Devices.oui.tsv.gz" />
+  </ItemGroup>
+  <ItemGroup>
     <ProjectReference Include="..\GlassRea.Core\GlassRea.Core.csproj" />
   </ItemGroup>
 </Project>

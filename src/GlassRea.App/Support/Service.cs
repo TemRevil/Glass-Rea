@@ -52,7 +52,26 @@ public static class Periods
 {
     public enum Kind { Day, Week, Month }
 
-    /// <summary>[from, to) in unix seconds for the period containing <paramref name="anchor"/>, in local time. Weeks start Saturday.</summary>
+    /// <summary>The day of the month usage starts counting again (Settings > Data), 1 by default.</summary>
+    public static int MonthDay { get; private set; } = Core.Usage.Cycle.DefaultMonthDay;
+    /// <summary>The first day of the week (Settings > Data), Saturday by default.</summary>
+    public static DayOfWeek WeekStart { get; private set; } = Core.Usage.Cycle.DefaultWeekStart;
+
+    /// <summary>Raised when the reset day or week start changed, so period pickers can recompute.</summary>
+    public static event Action? Changed;
+
+    /// <summary>Takes the reset settings from the service's settings.</summary>
+    public static void Use(IReadOnlyDictionary<string, string> settings)
+    {
+        var day = Core.Usage.Cycle.ParseMonthDay(settings.GetValueOrDefault(SettingKeys.MonthStartDay));
+        var week = Core.Usage.Cycle.ParseWeekStart(settings.GetValueOrDefault(SettingKeys.WeekStart));
+        if (day == MonthDay && week == WeekStart) return;
+        MonthDay = day;
+        WeekStart = week;
+        Changed?.Invoke();
+    }
+
+    /// <summary>[from, to) in unix seconds for the period containing <paramref name="anchor"/>, in local time.</summary>
     public static (long From, long To, string Label) Range(Kind kind, DateTime anchor)
     {
         var inv = CultureInfo.InvariantCulture;
@@ -65,13 +84,13 @@ public static class Periods
                 label = start == System.DateTime.Today ? "Today, " + start.ToString("dddd d MMMM", inv) : start.ToString("dddd, d MMM yyyy", inv);
                 break;
             case Kind.Week:
-                var back = ((int)anchor.DayOfWeek - (int)DayOfWeek.Saturday + 7) % 7;
-                start = anchor.Date.AddDays(-back); end = start.AddDays(7);
+                (start, end) = Core.Usage.Cycle.Week(anchor, WeekStart);
                 label = $"{start.ToString("d MMM", inv)} - {end.AddDays(-1).ToString("d MMM yyyy", inv)}";
                 break;
             default:
-                start = new DateTime(anchor.Year, anchor.Month, 1); end = start.AddMonths(1);
-                label = start.ToString("MMMM yyyy", inv);
+                (start, end) = Core.Usage.Cycle.Month(anchor, MonthDay);
+                label = MonthDay == 1 ? start.ToString("MMMM yyyy", inv)
+                    : $"{start.ToString("d MMM", inv)} - {end.AddDays(-1).ToString("d MMM yyyy", inv)}";
                 break;
         }
         return (new DateTimeOffset(start).ToUnixTimeSeconds(), new DateTimeOffset(end).ToUnixTimeSeconds(), label);

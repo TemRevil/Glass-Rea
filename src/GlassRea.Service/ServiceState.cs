@@ -22,6 +22,8 @@ public sealed class ServiceState(Database db)
         [SettingKeys.AlertNewDevice] = "true",
         [SettingKeys.TunnelProcesses] = string.Join(",", TunnelProcesses.Defaults),
         [SettingKeys.Priority] = Priority.Normal,
+        [SettingKeys.MonthStartDay] = Cycle.DefaultMonthDay.ToString(System.Globalization.CultureInfo.InvariantCulture),
+        [SettingKeys.WeekStart] = Cycle.WeekStartKey(Cycle.DefaultWeekStart),
     };
 
     public string Setting(string key) => db.GetSetting(key) ?? Defaults.GetValueOrDefault(key, "");

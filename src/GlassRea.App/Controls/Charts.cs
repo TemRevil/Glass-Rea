@@ -19,11 +19,12 @@ internal static class Ink
         Appearance.WithAlpha(e.ActualTheme == ElementTheme.Dark ? Microsoft.UI.Colors.White : Microsoft.UI.Colors.Black, alpha);
 }
 
-public sealed record Bar(string Label, long Down, long Up, string Tip);
+/// <param name="Title">What the bar covers, in words, for the hover readout ("14:00 to 14:59", "Saturday 17 Oct").</param>
+public sealed record Bar(string Label, long Down, long Up, string Title);
 
 /// <summary>
 /// Stacked bars: download in the accent, upload in its partner on top. New data grows in from the baseline,
-/// the bar under the pointer stays bright while the others dim, and its figures show as a tooltip.
+/// the bar under the pointer stays bright while the others dim, and its figures show in a glass readout.
 /// </summary>
 public sealed class BarChart : Grid
 {
@@ -31,25 +32,34 @@ public sealed class BarChart : Grid
     private IReadOnlyList<Bar> _bars = [];
     private int _hover = -1;
     private double _grow = 99;
-    private readonly ToolTip _tip = new();
+    private readonly GlassTip _tip;
 
     public BarChart()
     {
         Children.Add(_canvas);
-        ToolTipService.SetToolTip(_canvas, _tip);
-        ToolTipService.SetPlacement(_canvas, Microsoft.UI.Xaml.Controls.Primitives.PlacementMode.Mouse);
+        _tip = new GlassTip(_canvas, inline: false);
+        Children.Add(_tip.Layer);
         _canvas.Draw += OnDraw;
-        _canvas.PointerMoved += (_, e) =>
+        // The canvas itself isn't hit-testable; a transparent background makes the whole chart answer the pointer.
+        Background = new SolidColorBrush(Microsoft.UI.Colors.Transparent);
+        PointerMoved += (_, e) =>
         {
             if (_bars.Count == 0) return;
-            var i = (int)(e.GetCurrentPoint(_canvas).Position.X / (_canvas.ActualWidth / _bars.Count));
-            i = Math.Clamp(i, 0, _bars.Count - 1);
+            var p = e.GetCurrentPoint(_canvas).Position;
+            var i = Math.Clamp((int)(p.X / (_canvas.ActualWidth / _bars.Count)), 0, _bars.Count - 1);
+            var b = _bars[i];
+            _tip.Set(b.Title, $"Download {Fmt.Bytes(b.Down)}", $"Upload {Fmt.Bytes(b.Up)}");
+            // Centred above the pointer; below it when there's no room above.
+            var size = _tip.Size;
+            var x = Math.Clamp(p.X - size.Width / 2, 0, Math.Max(0, ActualWidth - size.Width));
+            var y = p.Y - size.Height - 14;
+            if (y < 0) y = p.Y + 20;
+            _tip.Show(new Windows.Foundation.Point(x, y));
             if (i == _hover) return;
             _hover = i;
-            _tip.Content = _bars[i].Tip;
             _canvas.Invalidate();
         };
-        _canvas.PointerExited += (_, _) => { _hover = -1; _tip.IsOpen = false; _canvas.Invalidate(); };
+        PointerExited += (_, _) => { _hover = -1; _tip.Hide(); _canvas.Invalidate(); };
         Loaded += (_, _) => Appearance.Changed += Redraw;
         // Pages are kept and shown again, so the canvas must survive being unloaded (no RemoveFromVisualTree here).
         Unloaded += (_, _) => Appearance.Changed -= Redraw;
@@ -112,28 +122,40 @@ public sealed class BarChart : Grid
 
 /// <summary>
 /// The live strip: download as a filled line, upload as a thinner line, the last two minutes, scrolling smoothly
-/// between the once-a-second samples.
+/// between the once-a-second samples. Hovering shows a guide line, the two values where it crosses, and a glass
+/// readout of that second.
 /// </summary>
 public sealed class LiveGraph : Grid
 {
     private readonly CanvasControl _canvas = new();
+    private readonly GlassTip _tip;
     private long[] _in = [], _out = [];
-    private long _sampleAt;
+    private long _sampleAt, _lastSecond;
     private double _max = 1024;
+    private double? _hoverX;
+
+    /// <summary>Something floating over the right of the strip (the rate chip) that the readout should keep left of.</summary>
+    public FrameworkElement? TipAvoid { get; set; }
 
     public LiveGraph()
     {
         Children.Add(_canvas);
-        IsHitTestVisible = false;
+        _tip = new GlassTip(_canvas, inline: true);
+        Children.Add(_tip.Layer);
         _canvas.Draw += OnDraw;
+        Background = new SolidColorBrush(Microsoft.UI.Colors.Transparent);
+        PointerMoved += (_, e) => _hoverX = e.GetCurrentPoint(_canvas).Position.X;
+        PointerExited += (_, _) => { _hoverX = null; _tip.Hide(); };
         Loaded += (_, _) => CompositionTarget.Rendering += OnFrame;
         Unloaded += (_, _) => CompositionTarget.Rendering -= OnFrame;
     }
 
-    public void SetData(long[] inbound, long[] outbound)
+    /// <param name="lastSecond">Unix second of the newest sample.</param>
+    public void SetData(long[] inbound, long[] outbound, long lastSecond)
     {
         _in = inbound;
         _out = outbound;
+        _lastSecond = lastSecond;
         _sampleAt = Environment.TickCount64;
         var peak = Math.Max(1024, Math.Max(inbound.DefaultIfEmpty().Max(), outbound.DefaultIfEmpty().Max())) * 1.2;
         _max = peak > _max ? peak : _max + (peak - _max) * 0.25; // the scale eases instead of jumping
@@ -165,6 +187,35 @@ public sealed class LiveGraph : Grid
         ds.DrawGeometry(line, accent, 1.6f, style);
         using var upLine = Path(sender, _out, dx, shift, h, close: false);
         ds.DrawGeometry(upLine, up, 1.4f, style);
+        if (_hoverX is { } hx) DrawHover(ds, (float)hx, dx, shift, h, accent, up);
+    }
+
+    private void DrawHover(CanvasDrawingSession ds, float x, float dx, float shift, float h, Color accent, Color up)
+    {
+        var n = _in.Length;
+        var fi = Math.Clamp((x + shift) / dx, 0, n - 1);
+        var i0 = (int)Math.Floor(fi);
+        var i1 = Math.Min(n - 1, i0 + 1);
+        var f = fi - i0;
+        float Y(long[] data) => h - (float)(h * 0.86 * (data[i0] + (data[i1] - data[i0]) * f) / _max) - 1;
+        ds.DrawLine(x, 0, x, h, Ink.Text(this, 0.22), 1);
+        var ring = Ink.Text(this, 0.85);
+        foreach (var (y, c) in new[] { (Y(_in), accent), (Y(_out), up) })
+        {
+            ds.FillCircle(x, y, 4.5f, ring);
+            ds.FillCircle(x, y, 3f, c);
+        }
+
+        // The readout names the second under the pointer.
+        var k = (int)Math.Round(fi);
+        var time = DateTimeOffset.FromUnixTimeSeconds(_lastSecond - (n - 1 - k)).ToLocalTime()
+            .ToString("HH:mm:ss", System.Globalization.CultureInfo.InvariantCulture);
+        _tip.Set(time, Fmt.Rate(_in[k]), Fmt.Rate(_out[k]));
+        var size = _tip.Size;
+        var right = ActualWidth - 4;
+        if (TipAvoid is { ActualWidth: > 0 } avoid) right = Math.Min(right, avoid.TransformToVisual(this).TransformPoint(default).X - 8);
+        var left = x + 14 + size.Width <= right ? x + 14 : x - 14 - size.Width;
+        _tip.Show(new Windows.Foundation.Point(Math.Max(4, left), 6));
     }
 
     private CanvasGeometry Path(ICanvasResourceCreator rc, long[] data, float dx, float shift, float h, bool close)

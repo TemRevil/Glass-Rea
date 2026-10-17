@@ -15,7 +15,8 @@ public sealed class PipeServer(Database db, UsageAccumulator usage, ProcessResol
     DeviceScanner devices, ServiceState state, ILogger<PipeServer> log) : BackgroundService
 {
     private static readonly HashSet<string> EditableSettings =
-        [SettingKeys.DailyLimit, SettingKeys.MonthlyLimit, SettingKeys.AlertNewApp, SettingKeys.AlertNewDevice, SettingKeys.TunnelProcesses, SettingKeys.Priority];
+        [SettingKeys.DailyLimit, SettingKeys.MonthlyLimit, SettingKeys.AlertNewApp, SettingKeys.AlertNewDevice, SettingKeys.TunnelProcesses, SettingKeys.Priority,
+         SettingKeys.MonthStartDay, SettingKeys.WeekStart];
 
     protected override async Task ExecuteAsync(CancellationToken ct)
     {
@@ -102,6 +103,10 @@ public sealed class PipeServer(Database db, UsageAccumulator usage, ProcessResol
                         throw new InvalidOperationException("Limits must be a whole number of bytes.");
                     if (k == SettingKeys.Priority && !Priority.IsValid(v))
                         throw new InvalidOperationException("Priority must be normal, above_normal or high.");
+                    if (k == SettingKeys.MonthStartDay && !Cycle.IsValidMonthDay(v))
+                        throw new InvalidOperationException("The monthly reset day must be a whole number from 1 to 31.");
+                    if (k == SettingKeys.WeekStart && !Cycle.IsValidWeekStart(v))
+                        throw new InvalidOperationException("The week must start on saturday, sunday or monday.");
                     db.SetSetting(k, v);
                 }
                 if (r.Settings?.ContainsKey(SettingKeys.TunnelProcesses) == true) ApplyTunnelSetting();

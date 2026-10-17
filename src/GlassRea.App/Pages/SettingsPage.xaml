@@ -123,6 +123,7 @@
                 <!-- Data -->
                 <Grid x:Name="DataSection" VerticalAlignment="Top" ColumnSpacing="12" RowSpacing="12" Visibility="Collapsed">
                     <Grid.ColumnDefinitions><ColumnDefinition /><ColumnDefinition /></Grid.ColumnDefinitions>
+                    <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
 
                     <Border Style="{StaticResource Card}">
                         <StackPanel Spacing="10">
@@ -138,7 +139,7 @@
                             <Border Style="{StaticResource Row}">
                                 <Grid ColumnSpacing="8">
                                     <Grid.ColumnDefinitions><ColumnDefinition /><ColumnDefinition Width="80" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
-                                    <StackPanel VerticalAlignment="Center"><TextBlock Text="Monthly limit" /><TextBlock Text="Starts again on the 1st" Style="{StaticResource Caption}" /></StackPanel>
+                                    <StackPanel VerticalAlignment="Center"><TextBlock Text="Monthly limit" /><TextBlock x:Name="MonthlyResetText" Text="Starts again on the 1st" Style="{StaticResource Caption}" /></StackPanel>
                                     <TextBox x:Name="MonthlyBox" Grid.Column="1" InputScope="Number" TextAlignment="Right" PlaceholderText="None" LostFocus="OnLimits" AutomationProperties.Name="Monthly limit in GB" />
                                     <TextBlock Grid.Column="2" Text="GB" VerticalAlignment="Center" Style="{StaticResource Muted}" />
                                 </Grid>
@@ -150,9 +151,31 @@
                     <Border Grid.Column="1" Style="{StaticResource Card}">
                         <StackPanel Spacing="10">
                             <StackPanel Orientation="Horizontal" Spacing="8"><FontIcon Glyph="&#xE72E;" FontSize="15" /><TextBlock Text="VPN tunnels" Style="{StaticResource CardTitle}" /></StackPanel>
-                            <TextBlock Style="{StaticResource Caption}" Text="A VPN such as Cloudflare WARP carries an encrypted copy of every app's traffic. These programs are listed but not added to totals, so nothing is counted twice." />
+                            <TextBlock Style="{StaticResource Caption}" TextWrapping="Wrap"
+                                       Text="A VPN such as Cloudflare WARP takes every app's traffic, encrypts it, and sends it again as its own. Glass-Rea already counts each app by itself, so the VPN's copy is the same data twice. It's listed, but never added to your totals." />
                             <TextBox x:Name="TunnelBox" PlaceholderText="warp-svc.exe, wireguard.exe" LostFocus="OnTunnels" AutomationProperties.Name="VPN tunnel programs, comma separated" />
                             <TextBlock x:Name="TunnelNote" Style="{StaticResource Caption}" Text="Program file names, separated by commas." />
+                        </StackPanel>
+                    </Border>
+
+                    <Border Grid.Row="1" Style="{StaticResource Card}">
+                        <StackPanel Spacing="10">
+                            <StackPanel Orientation="Horizontal" Spacing="8"><FontIcon Glyph="&#xE787;" FontSize="15" /><TextBlock Text="When usage starts again" Style="{StaticResource CardTitle}" /></StackPanel>
+                            <Border Style="{StaticResource Row}">
+                                <Grid ColumnSpacing="12">
+                                    <Grid.ColumnDefinitions><ColumnDefinition /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                                    <StackPanel VerticalAlignment="Center"><TextBlock Text="Monthly reset day" /><TextBlock Text="Match your internet plan's billing day" Style="{StaticResource Caption}" /></StackPanel>
+                                    <ComboBox x:Name="MonthDayPick" Grid.Column="1" MinWidth="96" VerticalAlignment="Center" SelectionChanged="OnCycle" AutomationProperties.Name="Monthly reset day" />
+                                </Grid>
+                            </Border>
+                            <Border Style="{StaticResource Row}">
+                                <Grid ColumnSpacing="12">
+                                    <Grid.ColumnDefinitions><ColumnDefinition /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                                    <StackPanel VerticalAlignment="Center"><TextBlock Text="Weeks start on" /><TextBlock Text="For the Week view and its totals" Style="{StaticResource Caption}" /></StackPanel>
+                                    <c:Segmented x:Name="WeekPick" Grid.Column="1" VerticalAlignment="Center" />
+                                </Grid>
+                            </Border>
+                            <TextBlock x:Name="CycleNote" Style="{StaticResource Caption}" TextWrapping="Wrap" Text="Days start at midnight. A reset day of 29 to 31 falls on the last day of shorter months." />
                         </StackPanel>
                     </Border>
                 </Grid>

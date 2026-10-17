@@ -12,7 +12,7 @@ public static class LimitTracker
 {
     public static readonly int[] Thresholds = [80, 100];
 
-    public static List<LimitCrossing> Check(string period, string periodLabel, long used, long limit, ISet<string> fired)
+    public static List<LimitCrossing> Check(string period, string periodLabel, long used, long limit, ISet<string> fired, int monthDay = 1)
     {
         var result = new List<LimitCrossing>();
         if (limit <= 0) return result;
@@ -21,7 +21,7 @@ public static class LimitTracker
             var key = $"{period}:{t}";
             if (used * 100 < limit * t || fired.Contains(key)) continue;
             fired.Add(key);
-            var (title, body) = AlertText.Limit(periodLabel, t, used, limit);
+            var (title, body) = AlertText.Limit(periodLabel, t, used, limit, monthDay);
             result.Add(new LimitCrossing(key, t, title, body));
         }
         return result;

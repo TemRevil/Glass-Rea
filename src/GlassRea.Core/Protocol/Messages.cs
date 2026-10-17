@@ -32,8 +32,13 @@ public sealed record LiveSnapshot(long Now, long[] In, long[] Out, List<LiveApp>
 
 public sealed record HostUsage(string Ip, string? Name, long In, long Out, long LastSeen);
 
+/// <param name="Name">The name the device gives itself (Bonjour, NetBIOS, UPnP or DNS); null when it gave none.</param>
+/// <param name="Vendor">Who made its network card, from the address's maker prefix; null for private addresses.</param>
+/// <param name="Model">A model the device announced ("iPhone", "SM-S911B", "Bravia KD-55X80K").</param>
+/// <param name="Kind">One of <see cref="DeviceKinds"/>.</param>
+/// <param name="Os">One of <see cref="DeviceOs"/>, when it could be told.</param>
 public sealed record DeviceInfo(string Mac, string Ip, string? Name, bool Randomized, bool IsGateway, bool IsThisPc,
-    long FirstSeen, long LastSeen);
+    long FirstSeen, long LastSeen, string? Vendor = null, string? Model = null, string? Kind = null, string? Os = null);
 
 public sealed record AlertInfo(long Id, long Time, string Kind, string Title, string Body);
 
@@ -48,6 +53,8 @@ public static class SettingKeys
     public const string AlertNewDevice = "alert_new_device";
     public const string TunnelProcesses = "tunnel_processes";
     public const string Priority = "priority";
+    public const string MonthStartDay = "month_start_day";
+    public const string WeekStart = "week_start";
     public const string FirstEtwHour = "first_etw_hour";
     public const string SrumState = "srum_state";
 }

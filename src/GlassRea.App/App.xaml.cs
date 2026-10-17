@@ -64,6 +64,7 @@ public partial class App : Application
 
     private new void Exit()
     {
+        Appearance.Flush();
         _stop.Cancel();
         _tray?.Dispose();
         _tray = null;

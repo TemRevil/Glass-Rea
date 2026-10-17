@@ -2,10 +2,12 @@ using System.Globalization;
 using GlassRea.Core.Alerts;
 using GlassRea.Core.Protocol;
 using GlassRea.Core.Storage;
+using GlassRea.Core.Usage;
 
 namespace GlassRea.Service;
 
-/// <summary>Checks today's and this month's internet use against the limits once a minute.</summary>
+/// <summary>Checks today's and this month's internet use against the limits once a minute. "This month" runs from
+/// the reset day set in Settings > Data.</summary>
 public sealed class LimitWatcher(Database db, ServiceState state, ILogger<LimitWatcher> log) : BackgroundService
 {
     private const string FiredKey = "limit_alerts_fired";
@@ -23,18 +25,20 @@ public sealed class LimitWatcher(Database db, ServiceState state, ILogger<LimitW
 
     public void Check(DateTimeOffset now)
     {
+        var monthDay = Cycle.ParseMonthDay(state.Setting(SettingKeys.MonthStartDay));
         var day = new DateTimeOffset(now.Date, now.Offset);
-        var month = new DateTimeOffset(now.Year, now.Month, 1, 0, 0, 0, now.Offset);
+        var cycle = Cycle.Month(now.DateTime, monthDay).Start;
+        var month = new DateTimeOffset(cycle, now.Offset);
         var to = now.ToUnixTimeSeconds() + 1;
         var dayKey = "d" + now.ToString("yyyyMMdd", CultureInfo.InvariantCulture);
-        var monthKey = "m" + now.ToString("yyyyMM", CultureInfo.InvariantCulture);
+        var monthKey = "m" + cycle.ToString("yyyyMMdd", CultureInfo.InvariantCulture);
 
         // Only keep keys for the current periods so the stored set never grows.
         var fired = (db.GetSetting(FiredKey) ?? "").Split(',', StringSplitOptions.RemoveEmptyEntries)
             .Where(k => k.StartsWith(dayKey) || k.StartsWith(monthKey)).ToHashSet();
 
         var crossings = LimitTracker.Check(dayKey, "Daily", db.InternetTotal(day.ToUnixTimeSeconds(), to), state.Number(SettingKeys.DailyLimit), fired)
-            .Concat(LimitTracker.Check(monthKey, "Monthly", db.InternetTotal(month.ToUnixTimeSeconds(), to), state.Number(SettingKeys.MonthlyLimit), fired))
+            .Concat(LimitTracker.Check(monthKey, "Monthly", db.InternetTotal(month.ToUnixTimeSeconds(), to), state.Number(SettingKeys.MonthlyLimit), fired, monthDay))
             .ToList();
         foreach (var c in crossings) db.AddAlert("limit", c.Title, c.Body, now.ToUnixTimeSeconds());
         db.SetSetting(FiredKey, string.Join(",", fired));

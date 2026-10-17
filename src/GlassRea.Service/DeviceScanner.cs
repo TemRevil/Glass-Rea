@@ -4,12 +4,14 @@ using System.Net.Sockets;
 using GlassRea.Core.Alerts;
 using GlassRea.Core.Protocol;
 using GlassRea.Core.Storage;
+using GlassRea.Service.Devices;
 
 namespace GlassRea.Service;
 
 /// <summary>
-/// Every few minutes, pings the local subnet so every device answers ARP, then records each MAC address seen.
-/// A device seen for the first time raises an alert (except on the very first scan, when everything is new).
+/// Every few minutes, pings the local subnet so every device answers ARP, records each MAC address seen, and asks the
+/// devices what they are (see <see cref="DeviceProbe"/>). A device seen for the first time raises an alert (except on
+/// the very first scan, when everything is new).
 /// </summary>
 public sealed class DeviceScanner(Database db, ServiceState state, ILogger<DeviceScanner> log) : BackgroundService
 {
@@ -38,11 +40,18 @@ public sealed class DeviceScanner(Database db, ServiceState state, ILogger<Devic
         var firstScan = db.Devices().Count == 0;
         var hosts = SubnetHosts(ip, mask).ToList();
 
+        // The ping makes every device answer ARP; its reply's TTL hints at the system (128 Windows, 64 phones and Macs).
+        var ttls = new System.Collections.Concurrent.ConcurrentDictionary<IPAddress, int>();
         using var gate = new SemaphoreSlim(64);
         await Task.WhenAll(hosts.Select(async h =>
         {
             await gate.WaitAsync(ct);
-            try { using var ping = new Ping(); await ping.SendPingAsync(h, TimeSpan.FromMilliseconds(400), cancellationToken: ct); }
+            try
+            {
+                using var ping = new Ping();
+                var reply = await ping.SendPingAsync(h, TimeSpan.FromMilliseconds(400), cancellationToken: ct);
+                if (reply.Status == IPStatus.Success && reply.Options is { } o) ttls[h] = InitialTtl(o.Ttl);
+            }
             catch (PingException) { }
             finally { gate.Release(); }
         }));
@@ -57,22 +66,45 @@ public sealed class DeviceScanner(Database db, ServiceState state, ILogger<Devic
             .DistinctBy(d => Convert.ToHexString(d.Mac))
             .ToList();
 
-        await Parallel.ForEachAsync(seen, new ParallelOptions { MaxDegreeOfParallelism = 16, CancellationToken = ct }, async (d, token) =>
+        var others = seen.Select(d => d.Address).Where(a => !a.Equals(ip)).ToList();
+        var probe = DeviceProbe.Run(ip, others, ct);
+        var reverse = new System.Collections.Concurrent.ConcurrentDictionary<IPAddress, string>();
+        await Parallel.ForEachAsync(others, new ParallelOptions { MaxDegreeOfParallelism = 16, CancellationToken = ct }, async (a, token) =>
         {
-            var name = d.Address.Equals(ip) ? Environment.MachineName : await HostName(d.Address, token);
+            if (await HostName(a, token) is { } name) reverse[a] = name;
+        });
+        var evidence = await probe;
+        var hints = db.DeviceHints();
+
+        foreach (var d in seen)
+        {
             var mac = string.Join(":", d.Mac.Select(b => b.ToString("X2")));
-            var device = new DeviceInfo(mac, d.Address.ToString(), name, (d.Mac[0] & 0x02) != 0, d.Address.Equals(gateway),
-                d.Address.Equals(ip), now, now);
+            var e = evidence.GetValueOrDefault(d.Address) ?? new DeviceEvidence();
+            if (hints.TryGetValue(mac, out var heard)) e.AddHints(heard);
+            e.ReverseDns = reverse.GetValueOrDefault(d.Address);
+            e.Ttl = ttls.TryGetValue(d.Address, out var ttl) ? ttl : null;
+            e.Vendor = Oui.Vendor(d.Mac);
+            e.Randomized = (d.Mac[0] & 0x02) != 0;
+            e.IsGateway = d.Address.Equals(gateway);
+            e.IsThisPc = d.Address.Equals(ip);
+            var id = DeviceClassifier.Classify(e);
+            var device = new DeviceInfo(mac, d.Address.ToString(), e.IsThisPc ? Environment.MachineName : id.Name, e.Randomized, e.IsGateway,
+                e.IsThisPc, now, now, e.Vendor, id.Model, id.Kind, id.Os);
             if (db.SaveDevice(device) && !firstScan && state.Flag(SettingKeys.AlertNewDevice))
             {
-                var (title, body) = AlertText.NewDevice(name, device.Ip, mac);
+                var (title, body) = AlertText.NewDevice(DeviceLabel.For(device), device.Ip, mac);
                 db.AddAlert("new_device", title, body, now);
             }
-        });
+        }
+        db.PruneDeviceHints(now);
         Interlocked.Exchange(ref state.LastDeviceScan, now);
     }
 
-    private static (NetworkInterface Nic, IPAddress Ip, IPAddress Mask, IPAddress Gateway)? PickInterface()
+    /// <summary>Systems start at 64, 128 or 255 and each router hop takes one off; a LAN reply is usually untouched.</summary>
+    public static int InitialTtl(int ttl) => ttl <= 64 ? 64 : ttl <= 128 ? 128 : 255;
+
+    /// <summary>The Wi-Fi or Ethernet adapter that reaches the router, skipping VPN and virtual adapters.</summary>
+    internal static (NetworkInterface Nic, IPAddress Ip, IPAddress Mask, IPAddress Gateway)? PickInterface()
     {
         foreach (var nic in NetworkInterface.GetAllNetworkInterfaces())
         {

@@ -14,9 +14,13 @@ using Windows.Foundation;
 namespace GlassRea.App.Controls;
 
 /// <summary>
-/// Liquid Glass, as far as Windows' compositor allows: the content behind is blurred and saturated, a thin rim
-/// catches light from above, a soft highlight follows the pointer, and pressing sends a glow out from the touch point.
-/// Windows can't bend light through a shape (Apple's lensing), so the glass reads through blur, rim and highlight.
+/// Liquid Glass: the content behind is blurred and saturated, the bezel refracts it (the edge shows what sits a
+/// little further in, worked out with Snell's law over a squircle-shaped rim, see <see cref="Core.Look.LiquidGlass"/>),
+/// the rim catches a highlight top left and a glint bottom right, a small light follows the pointer, and pressing
+/// sends a glow out from the touch point.
+/// Windows' compositor can't displace pixels, so the refraction is built from <see cref="GlassLens.Levels"/> copies of
+/// the blurred backdrop, each magnified so the edge samples one step further in, and each masked to the part of the
+/// bezel whose computed shift reaches that step; neighbouring steps blend, so the bend reads as continuous.
 /// The blur samples a live copy of <see cref="BlurSource"/> (Windows' backdrop brush can't see through to the
 /// window material and renders a pale wash instead). Used only for the navigation layer, never glass on glass.
 /// </summary>
@@ -25,28 +29,53 @@ public sealed class Glass : ContentControl
     public static readonly DependencyProperty PressableProperty =
         DependencyProperty.Register(nameof(Pressable), typeof(bool), typeof(Glass), new PropertyMetadata(false));
 
+    public static readonly DependencyProperty SmoothWidthProperty =
+        DependencyProperty.Register(nameof(SmoothWidth), typeof(bool), typeof(Glass), new PropertyMetadata(false));
+
     /// <summary>Squeezes slightly when pressed, like a button made of gel.</summary>
     public bool Pressable { get => (bool)GetValue(PressableProperty); set => SetValue(PressableProperty, value); }
 
-    private Border? _backdrop;
-    private RadialGradientBrush? _highlight;
-    private Canvas? _glow;
-    private SpriteVisual? _sprite;
-    private CompositionEffectBrush? _brush;
-    private CompositionRoundedRectangleGeometry? _shape;
-    private bool _capsule;
-    private CompositionVisualSurface? _surface;
+    /// <summary>
+    /// Width follows the content smoothly instead of jumping: it grows at once (quickly), and shrinks only after the
+    /// narrower content has held for a moment, so figures flickering between widths don't make it breathe.
+    /// </summary>
+    public bool SmoothWidth { get => (bool)GetValue(SmoothWidthProperty); set => SetValue(SmoothWidthProperty, value); }
 
     /// <summary>The element this glass floats over; what's under the glass is copied from it and blurred.</summary>
     public UIElement? BlurSource { get; set; }
 
+    private Border? _backdrop, _rimHost;
+    private Canvas? _glow;
+    private Ellipse? _spot;
+    private RadialGradientBrush? _spotBrush;
+    private SpriteVisual? _sprite, _rim;
+    private CompositionEffectBrush? _brush;
+    private CompositionRoundedRectangleGeometry? _shape;
+    private CompositionVisualSurface? _surface, _blurred;
+    private readonly List<(SpriteVisual Sprite, CompositionSurfaceBrush Copy, CompositionMaskBrush Mask)> _bands = [];
+    private (float Radius, float Scale, bool Dark) _lensFor;
+    private bool _capsule;
+
     public Glass()
     {
-        Loaded += (_, _) => { Build(); Appearance.Changed += OnAppearance; LayoutUpdated += Track; };
-        Unloaded += (_, _) => { Appearance.Changed -= OnAppearance; LayoutUpdated -= Track; };
+        Loaded += (_, _) =>
+        {
+            Build();
+            Appearance.Changed += OnAppearance;
+            GlassLens.Lost += OnLensLost;
+            LayoutUpdated += Track;
+        };
+        Unloaded += (_, _) =>
+        {
+            Appearance.Changed -= OnAppearance;
+            GlassLens.Lost -= OnLensLost;
+            LayoutUpdated -= Track;
+            CompositionTarget.Rendering -= OnTweenFrame;
+        };
         SizeChanged += (_, _) => Resize();
+        PointerEntered += OnPointerEntered;
         PointerMoved += OnPointerMoved;
-        PointerExited += (_, _) => { if (_highlight is not null) _highlight.Center = _highlight.GradientOrigin = new Point(0.25, -0.1); };
+        PointerExited += (_, _) => { if (_spot is not null) _spot.Opacity = 0; };
         AddHandler(PointerPressedEvent, new PointerEventHandler(OnPointerPressed), true);
         AddHandler(PointerReleasedEvent, new PointerEventHandler((_, _) => Squeeze(false)), true);
         AddHandler(PointerCaptureLostEvent, new PointerEventHandler((_, _) => Squeeze(false)), true);
@@ -56,8 +85,9 @@ public sealed class Glass : ContentControl
     {
         base.OnApplyTemplate();
         _backdrop = GetTemplateChild("Backdrop") as Border;
-        _highlight = (GetTemplateChild("Highlight") as Border)?.Background as RadialGradientBrush;
+        _rimHost = GetTemplateChild("Rim") as Border;
         _glow = GetTemplateChild("GlowLayer") as Canvas;
+        BuildSpot();
         Build();
     }
 
@@ -83,7 +113,32 @@ public sealed class Glass : ContentControl
         _sprite = c.CreateSpriteVisual();
         _sprite.Brush = _brush;
         _sprite.Clip = c.CreateGeometricClip(_shape);
-        ElementCompositionPreview.SetElementChildVisual(_backdrop, _sprite);
+
+        // The refraction steps sample the blurred backdrop itself, so the blur runs once, not once per step.
+        _blurred = c.CreateVisualSurface();
+        _blurred.SourceVisual = _sprite;
+        var root = c.CreateContainerVisual();
+        root.Children.InsertAtTop(_sprite);
+        for (var level = 1; level <= GlassLens.Levels; level++)
+        {
+            var bandCopy = c.CreateSurfaceBrush(_blurred);
+            bandCopy.Stretch = CompositionStretch.None;
+            bandCopy.HorizontalAlignmentRatio = 0;
+            bandCopy.VerticalAlignmentRatio = 0;
+            var mask = c.CreateMaskBrush();
+            mask.Source = bandCopy;
+            var band = c.CreateSpriteVisual();
+            band.Brush = mask;
+            root.Children.InsertAtTop(band);
+            _bands.Add((band, bandCopy, mask));
+        }
+        ElementCompositionPreview.SetElementChildVisual(_backdrop, root);
+
+        if (_rimHost is not null)
+        {
+            _rim = c.CreateSpriteVisual();
+            ElementCompositionPreview.SetElementChildVisual(_rimHost, _rim);
+        }
         Resize();
         Track(null, null);
     }
@@ -106,21 +161,100 @@ public sealed class Glass : ContentControl
             var half = ActualHeight / 2;
             if (half > 0 && CornerRadius.TopLeft != half) CornerRadius = new CornerRadius(half);
         }
-        if (_sprite is null || _shape is null) return;
-        var size = new Vector2((float)ActualWidth, (float)ActualHeight);
+        if (_sprite is null || _shape is null || _blurred is null || ActualWidth == 0) return;
+        float w = (float)ActualWidth, h = (float)ActualHeight;
+        var size = new Vector2(w, h);
         _sprite.Size = size;
         _shape.Size = size;
-        var r = (float)Math.Min(CornerRadius.TopLeft, Math.Min(ActualWidth, ActualHeight) / 2);
+        _blurred.SourceSize = size;
+        var r = (float)Math.Min(CornerRadius.TopLeft, Math.Min(w, h) / 2);
         _shape.CornerRadius = new Vector2(r, r);
+        if (_rim is not null) _rim.Size = size;
+        RefreshLens(r);
+
+        // Each step magnifies the backdrop about the centre so the edge samples its shift further in.
+        var centre = size / 2;
+        for (var i = 0; i < _bands.Count; i++)
+        {
+            var (band, copy, _) = _bands[i];
+            band.Size = size;
+            var shift = GlassLens.StepShift(r, i + 1);
+            copy.CenterPoint = centre;
+            copy.Scale = new Vector2(centre.X / Math.Max(1, centre.X - shift), centre.Y / Math.Max(1, centre.Y - shift));
+        }
     }
 
-    private void OnAppearance() => _brush?.Properties.InsertScalar("Blur.BlurAmount", Appearance.GlassBlur);
+    /// <summary>Hands out the lens images for the current radius, screen scale and theme (drawn once, then shared).</summary>
+    private void RefreshLens(float radius)
+    {
+        var scale = (float)(XamlRoot?.RasterizationScale ?? 1);
+        var key = (MathF.Round(radius, 1), scale, Appearance.IsDark);
+        if (key == _lensFor || _sprite is null || radius < 2) return;
+        _lensFor = key;
+        var c = _sprite.Compositor;
+        for (var i = 0; i < _bands.Count; i++) _bands[i].Mask.Mask = GlassLens.Mask(c, radius, scale, i + 1);
+        if (_rim is not null) _rim.Brush = GlassLens.Rim(c, radius, scale, Appearance.IsDark);
+    }
+
+    private void OnLensLost() { _lensFor = default; Resize(); }
+
+    private void OnAppearance()
+    {
+        _brush?.Properties.InsertScalar("Blur.BlurAmount", Appearance.GlassBlur);
+        if (_spotBrush is not null) SpotColours(_spotBrush);
+        Resize();
+    }
+
+    // ---------- the pointer light ----------
+
+    private const double SpotSize = 56;
+
+    /// <summary>A soft light about two cursors wide, trailing the pointer and fading in and out.</summary>
+    private void BuildSpot()
+    {
+        if (_glow is null || _spot is not null) return;
+        _spotBrush = new RadialGradientBrush();
+        SpotColours(_spotBrush);
+        _spot = new Ellipse
+        {
+            Width = SpotSize, Height = SpotSize, IsHitTestVisible = false, Opacity = 0, Fill = _spotBrush,
+            OpacityTransition = new ScalarTransition { Duration = TimeSpan.FromMilliseconds(260) },
+            TranslationTransition = new Vector3Transition { Duration = TimeSpan.FromMilliseconds(140) },
+        };
+        _glow.Children.Add(_spot);
+    }
+
+    private static void SpotColours(RadialGradientBrush b)
+    {
+        var peak = Appearance.IsDark ? 0.16 : 0.42;
+        b.GradientStops.Clear();
+        b.GradientStops.Add(new GradientStop { Offset = 0, Color = Appearance.WithAlpha(Microsoft.UI.Colors.White, peak) });
+        b.GradientStops.Add(new GradientStop { Offset = 0.45, Color = Appearance.WithAlpha(Microsoft.UI.Colors.White, peak * 0.45) });
+        b.GradientStops.Add(new GradientStop { Offset = 1, Color = Appearance.WithAlpha(Microsoft.UI.Colors.White, 0) });
+    }
+
+    private Vector3 SpotAt(PointerRoutedEventArgs e)
+    {
+        var p = e.GetCurrentPoint(_glow).Position;
+        return new Vector3((float)(p.X - SpotSize / 2), (float)(p.Y - SpotSize / 2), 0);
+    }
+
+    private void OnPointerEntered(object sender, PointerRoutedEventArgs e)
+    {
+        if (_spot is null) return;
+        // Appear where the pointer came in, not slide over from where it last left.
+        var move = _spot.TranslationTransition;
+        _spot.TranslationTransition = null;
+        _spot.Translation = SpotAt(e);
+        _spot.TranslationTransition = move;
+        _spot.Opacity = 1;
+    }
 
     private void OnPointerMoved(object sender, PointerRoutedEventArgs e)
     {
-        if (_highlight is null || ActualWidth == 0) return;
-        var p = e.GetCurrentPoint(this).Position;
-        _highlight.Center = _highlight.GradientOrigin = new Point(p.X / ActualWidth, p.Y / ActualHeight);
+        if (_spot is null) return;
+        if (!Motion.Enabled) _spot.TranslationTransition = null;
+        _spot.Translation = SpotAt(e);
     }
 
     private void OnPointerPressed(object sender, PointerRoutedEventArgs e)
@@ -168,83 +302,61 @@ public sealed class Glass : ContentControl
         a.Duration = TimeSpan.FromMilliseconds(down ? 120 : 480);
         v.StartAnimation("Scale", a);
     }
-}
 
-/// <summary>
-/// Scroll edge effect: content sliding under the floating tab bar softens into blur and fades into the window
-/// colour, so the bar stays legible without a hard divider.
-/// </summary>
-public sealed class EdgeBlur : Grid
-{
-    private ContainerVisual? _root;
-    private SpriteVisual? _blurred, _tint;
-    private CompositionEffectBrush? _blur;
-    private CompositionColorGradientStop? _tintStop;
-    private CompositionVisualSurface? _surface;
+    // ---------- smooth width ----------
 
-    /// <summary>The content that slides underneath.</summary>
-    public UIElement? BlurSource { get; set; }
+    private double _shownWidth = double.NaN, _fromWidth, _targetWidth, _naturalWidth;
+    private long _tweenStart, _narrowerSince;
+    private double _tweenMs;
 
-    public EdgeBlur()
+    protected override Size MeasureOverride(Size available)
     {
-        IsHitTestVisible = false;
-        Loaded += (_, _) => { Build(); OnAppearance(); Appearance.Changed += OnAppearance; LayoutUpdated += Track; };
-        Unloaded += (_, _) => { Appearance.Changed -= OnAppearance; LayoutUpdated -= Track; };
-        SizeChanged += (_, _) => Track(null, null);
+        var natural = base.MeasureOverride(available);
+        if (!SmoothWidth) return natural;
+        _naturalWidth = natural.Width;
+        if (double.IsNaN(_shownWidth) || !Motion.Enabled)
+        {
+            _shownWidth = _targetWidth = natural.Width;
+            return natural;
+        }
+        if (natural.Width > _targetWidth + 0.5) TweenTo(natural.Width, 220);          // grow now, quickly
+        else if (natural.Width < _targetWidth - 0.5) WaitToShrink();                   // shrink once it has settled
+        else _narrowerSince = 0;
+        return new Size(_shownWidth, natural.Height);
     }
 
-    private void Build()
+    private void TweenTo(double width, double ms)
     {
-        if (_root is not null || BlurSource is null) return;
-        var c = ElementCompositionPreview.GetElementVisual(this).Compositor;
-        _surface = c.CreateVisualSurface();
-        _surface.SourceVisual = ElementCompositionPreview.GetElementVisual(BlurSource);
-        var copy = c.CreateSurfaceBrush(_surface);
-        copy.Stretch = CompositionStretch.None;
-        copy.HorizontalAlignmentRatio = 0;
-        copy.VerticalAlignmentRatio = 0;
-        var effect = new GaussianBlurEffect { Name = "Blur", BlurAmount = 8, BorderMode = EffectBorderMode.Hard, Source = new CompositionEffectSourceParameter("behind") };
-        _blur = c.CreateEffectFactory(effect, ["Blur.BlurAmount"]).CreateBrush();
-        _blur.SetSourceParameter("behind", copy);
-        var fade = c.CreateLinearGradientBrush();
-        fade.StartPoint = new Vector2(0, 0);
-        fade.EndPoint = new Vector2(0, 1);
-        fade.ColorStops.Add(c.CreateColorGradientStop(0, Microsoft.UI.Colors.Transparent));
-        fade.ColorStops.Add(c.CreateColorGradientStop(0.55f, Microsoft.UI.Colors.White));
-        var mask = c.CreateMaskBrush();
-        mask.Source = _blur;
-        mask.Mask = fade;
-        _blurred = c.CreateSpriteVisual();
-        _blurred.Brush = mask;
-        var tint = c.CreateLinearGradientBrush();
-        tint.StartPoint = new Vector2(0, 0);
-        tint.EndPoint = new Vector2(0, 1);
-        tint.ColorStops.Add(c.CreateColorGradientStop(0, Microsoft.UI.Colors.Transparent));
-        _tintStop = c.CreateColorGradientStop(1, Microsoft.UI.Colors.Transparent);
-        tint.ColorStops.Add(_tintStop);
-        _tint = c.CreateSpriteVisual();
-        _tint.Brush = tint;
-        _root = c.CreateContainerVisual();
-        _root.Children.InsertAtTop(_blurred);
-        _root.Children.InsertAtTop(_tint);
-        ElementCompositionPreview.SetElementChildVisual(this, _root);
-        Track(null, null);
+        _narrowerSince = 0;
+        _fromWidth = _shownWidth;
+        _targetWidth = width;
+        _tweenMs = ms;
+        _tweenStart = Environment.TickCount64;
+        CompositionTarget.Rendering -= OnTweenFrame;
+        CompositionTarget.Rendering += OnTweenFrame;
     }
 
-    private void Track(object? sender, object? e)
+    private void WaitToShrink()
     {
-        if (_surface is null || BlurSource is null || _blurred is null || _tint is null) return;
-        var size = new Vector2((float)ActualWidth, (float)ActualHeight);
-        var at = TransformToVisual(BlurSource).TransformPoint(default);
-        _surface.SourceOffset = new Vector2((float)at.X, (float)at.Y);
-        _surface.SourceSize = size;
-        _blurred.Size = size;
-        _tint.Size = size;
+        if (_narrowerSince == 0) _narrowerSince = Environment.TickCount64;
+        CompositionTarget.Rendering -= OnTweenFrame;
+        CompositionTarget.Rendering += OnTweenFrame;
     }
 
-    private void OnAppearance()
+    private void OnTweenFrame(object? sender, object e)
     {
-        _blur?.Properties.InsertScalar("Blur.BlurAmount", Math.Max(2, Appearance.GlassBlur * 0.4f));
-        if (_tintStop is not null) _tintStop.Color = ((SolidColorBrush)Application.Current.Resources["EdgeBrush"]).Color;
+        var now = Environment.TickCount64;
+        if (_narrowerSince != 0)
+        {
+            if (_naturalWidth >= _targetWidth - 0.5) _narrowerSince = 0; // the content grew back in time
+            else if (now - _narrowerSince >= 1500) { TweenTo(_naturalWidth, 420); return; }
+        }
+        if (_shownWidth != _targetWidth)
+        {
+            var p = Math.Min(1, (now - _tweenStart) / _tweenMs);
+            _shownWidth = p >= 1 ? _targetWidth : _fromWidth + (_targetWidth - _fromWidth) * (1 - Math.Pow(1 - p, 3));
+            InvalidateMeasure();
+        }
+        if (_shownWidth == _targetWidth && _narrowerSince == 0) CompositionTarget.Rendering -= OnTweenFrame;
     }
 }

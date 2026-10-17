@@ -19,7 +19,6 @@
             <SolidColorBrush x:Key="RowBrush" Color="#8CFFFFFF" />
             <SolidColorBrush x:Key="GlassTintBrush" Color="#4DFFFFFF" />
             <SolidColorBrush x:Key="InkBrush" Color="#BFFFFFFF" />
-            <SolidColorBrush x:Key="EdgeBrush" Color="#99F3F3F3" />
             <SolidColorBrush x:Key="GlowBrush" Color="#66FFFFFF" />
             <!-- Text and selection for controls built in code; Fluent's own theme brushes resolve against the app's
                  theme there, not the window's, so these follow Appearance instead. -->
@@ -127,16 +126,9 @@
                             <Grid CornerRadius="{TemplateBinding CornerRadius}" Shadow="{StaticResource GlassShadow}" Translation="0,0,24">
                                 <Border x:Name="Backdrop" />
                                 <Border Background="{StaticResource GlassTintBrush}" />
-                                <Border x:Name="Highlight" IsHitTestVisible="False">
-                                    <Border.Background>
-                                        <RadialGradientBrush Center="0.25,-0.1" GradientOrigin="0.25,-0.1" RadiusX="0.6" RadiusY="1.1">
-                                            <GradientStop Offset="0" Color="#38FFFFFF" />
-                                            <GradientStop Offset="1" Color="#00FFFFFF" />
-                                        </RadialGradientBrush>
-                                    </Border.Background>
-                                </Border>
                                 <Canvas x:Name="GlowLayer" IsHitTestVisible="False" />
-                                <Border BorderThickness="1" BorderBrush="{StaticResource GlassRimBrush}" CornerRadius="{TemplateBinding CornerRadius}" IsHitTestVisible="False" />
+                                <!-- Rim light, drawn per pixel from the glass optics (Controls/GlassLens.cs). -->
+                                <Border x:Name="Rim" IsHitTestVisible="False" />
                                 <ContentPresenter Padding="{TemplateBinding Padding}"
                                                   HorizontalContentAlignment="{TemplateBinding HorizontalContentAlignment}"
                                                   VerticalContentAlignment="{TemplateBinding VerticalContentAlignment}" />

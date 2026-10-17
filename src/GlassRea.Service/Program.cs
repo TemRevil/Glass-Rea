@@ -11,7 +11,7 @@ CultureInfo.DefaultThreadCurrentCulture = CultureInfo.InvariantCulture;
 CultureInfo.CurrentCulture = CultureInfo.InvariantCulture;
 
 var builder = Host.CreateApplicationBuilder(args);
-builder.Services.AddWindowsService(o => o.ServiceName = "GlassRea");
+builder.Services.AddWindowsService(o => o.ServiceName = FirewallManager.ServiceName);
 builder.Logging.AddEventLog(o => o.SourceName = "Glass-Rea");
 
 builder.Services.AddSingleton(_ => Database.OpenFile(Path.Combine(ServiceState.DataDirectory, "data.db")));
@@ -27,6 +27,7 @@ builder.Services.AddHostedService<FlushService>();
 builder.Services.AddHostedService<LimitWatcher>();
 builder.Services.AddHostedService<SrumImporter>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<DeviceScanner>());
+builder.Services.AddHostedService<DeviceListener>();
 builder.Services.AddHostedService<PipeServer>();
 
 var host = builder.Build();

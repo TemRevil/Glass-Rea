@@ -85,8 +85,8 @@ public class NumbersTests
 {
     [Theory]
     [InlineData("12.5", 12.5)]
-    [InlineData("١٢٫٥", 12.5)]
-    [InlineData("۳۰", 30)]
+    [InlineData("\u0661\u0662٫\u0665", 12.5)]
+    [InlineData("\u06F3\u06F0", 30)]
     [InlineData(" 7,25 ", 7.25)]
     public void ParsesAnyDigits(string text, double expected)
     {

@@ -73,10 +73,15 @@ public sealed partial class ConnectionsPage : UserControl, IPage
 
         var to = Math.Min(_period.To, DateTimeOffset.Now.ToUnixTimeSeconds());
         var hosts = await Service.Call<List<HostUsage>>("hosts", _period.From, to, appId: app.Id);
+        Scope ScopeOf(HostUsage h) => System.Net.IPAddress.TryParse(h.Ip, out var ip) ? AddressScope.Classify(ip) : Scope.Internet;
+        // Devices on the network are named as the Devices page names them.
+        var lan = hosts.Any(h => h.Name is null && ScopeOf(h) == Scope.Lan)
+            ? (await Service.Call<List<DeviceInfo>>("devices")).GroupBy(d => d.Ip).ToDictionary(g => g.Key, g => DeviceLabel.For(g.MaxBy(d => d.LastSeen)!))
+            : [];
         Hosts.ItemsSource = hosts.Select(h =>
         {
-            var scope = System.Net.IPAddress.TryParse(h.Ip, out var ip) ? AddressScope.Classify(ip) : Scope.Internet;
-            var name = h.Name ?? (scope == Scope.Lan ? "Device on your network" : h.Ip);
+            var scope = ScopeOf(h);
+            var name = h.Name ?? (scope == Scope.Lan ? lan.GetValueOrDefault(h.Ip) ?? "Device on your network" : h.Ip);
             return new HostRow(name, h.Ip, Fmt.Bytes(h.In), Fmt.Bytes(h.Out), Fmt.Ago(h.LastSeen));
         }).ToList();
         NoHosts.Visibility = hosts.Count == 0 ? Visibility.Visible : Visibility.Collapsed;

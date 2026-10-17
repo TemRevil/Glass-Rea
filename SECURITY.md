@@ -15,3 +15,13 @@ The install folder holds the service's files and is locked to Administrators and
 Setup is signed with a self-signed "Tem Revil" certificate that is trusted only on the PC that made it (`scripts\make-cert.ps1`). On any other PC, Windows shows an unknown publisher; check the source and build it yourself if that matters to you.
 
 There is no independent security audit. Host names come from DNS answers seen on the PC and device names from the local network, so both can be spoofed by anyone on that network.
+
+## Local network discovery
+
+To name the devices on your network, the service, every few minutes and only on the network adapter that reaches your router:
+
+- pings each address in the subnet (capped at 1022 addresses);
+- asks each device that answered for its name over Bonjour (UDP 5353), NetBIOS (UDP 137) and UPnP (UDP 1900), and fetches a UPnP description only from the device that offered it, over plain HTTP, with no redirects and at most 512 KB;
+- tries to connect to a few TCP ports (62078, 7000, 9100, 631, 515, 445, 139, 8008, 8009, 8060, 1400, 554, 5555) and closes the connection at once, sending nothing.
+
+It also listens, without sending, for the DHCP requests (UDP 67) and Bonjour announcements (UDP 5353) devices broadcast. For that it adds one inbound Windows Firewall rule, "Glass-Rea device discovery", limited to the Glass-Rea service, UDP, those two ports and the local subnet; uninstall removes it. Everything received is parsed as untrusted input (bounds-checked, size-capped, XML without DTDs), only ever shown as text, and kept per device on this PC (at most 64 facts per device, forgotten after 30 days). On a network you don't trust, the alerts and names it shows are only as honest as the devices on it.

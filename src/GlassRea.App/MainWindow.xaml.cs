@@ -43,6 +43,7 @@ public sealed partial class MainWindow : Window
     private string _current = "";
     private DateTime _lastRefresh = DateTime.MinValue;
     private bool _refreshing, _closing, _shown;
+    private readonly AutoScroll _autoScroll = new();
 
     public static MainWindow? Instance { get; private set; }
     /// <summary>The newest live sample, shared with pages that show "right now".</summary>
@@ -72,8 +73,13 @@ public sealed partial class MainWindow : Window
         WatchMinimize();
 
         foreach (var t in _tabs) Tabs.Children.Add(MakeTab(t));
-        TabsGlass.BlurSource = ThemeGlass.BlurSource = Edge.BlurSource = PageHost;
+        TabsGlass.BlurSource = ThemeGlass.BlurSource = PageHost;
         RatesGlass.BlurSource = Pulse;
+        Pulse.TipAvoid = RatesGlass;
+        Grid.SetRowSpan(_autoScroll, 3);
+        Root.Children.Add(_autoScroll);
+        _autoScroll.Attach(Root);
+        Activated += (_, e) => { if (e.WindowActivationState == WindowActivationState.Deactivated) _autoScroll.Stop(); };
         Appearance.Attach(Root, _backdrop, UpdateCaptionButtons);
         Appearance.Changed += UpdateThemeIcon;
         UpdateThemeIcon();
@@ -282,8 +288,13 @@ public sealed partial class MainWindow : Window
         sb.Begin();
     }
 
+    private bool? _captionDark;
+
+    /// <summary>Each caption colour is a round trip to the window manager (about 30 ms for the set), so only on a theme change.</summary>
     private void UpdateCaptionButtons(bool dark)
     {
+        if (_captionDark == dark) return;
+        _captionDark = dark;
         var tb = AppWindow.TitleBar;
         tb.ButtonBackgroundColor = Colors.Transparent;
         tb.ButtonInactiveBackgroundColor = Colors.Transparent;
@@ -309,7 +320,7 @@ public sealed partial class MainWindow : Window
             var last = Math.Max(0, live.In.Length - 2);
             DownRate.Text = Fmt.Rate(live.In.Length > 0 ? live.In[last] : 0);
             UpRate.Text = Fmt.Rate(live.Out.Length > 0 ? live.Out[last] : 0);
-            if (live.In.Length > 1) Pulse.SetData(live.In[..^1], live.Out[..^1]);
+            if (live.In.Length > 1) Pulse.SetData(live.In[..^1], live.Out[..^1], live.Now - 1);
             Offline.IsOpen = false;
 
             if (_pages.TryGetValue(_current, out var view) && view is IPage page && DateTime.UtcNow - _lastRefresh >= page.RefreshEvery)
@@ -319,6 +330,7 @@ public sealed partial class MainWindow : Window
                 StatusText.Text = status.Capturing
                     ? $"Recording since {Fmt.Date(status.TrackingSince)}"
                     : $"Not recording: {status.CaptureError ?? "starting"}";
+                Periods.Use(await Service.Call<Dictionary<string, string>>("settings")); // the reset day shapes "this month"
                 await page.Refresh();
             }
         }

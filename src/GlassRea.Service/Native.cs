@@ -24,6 +24,12 @@ internal static unsafe partial class Native
     [LibraryImport("iphlpapi.dll")]
     private static partial uint GetIpNetTable(nint table, ref int size, [MarshalAs(UnmanagedType.Bool)] bool order);
 
+    [LibraryImport("iphlpapi.dll")]
+    private static partial uint GetExtendedTcpTable(nint table, ref int size, [MarshalAs(UnmanagedType.Bool)] bool order, int family, int tableClass, int reserved);
+
+    [LibraryImport("iphlpapi.dll")]
+    private static partial uint GetExtendedUdpTable(nint table, ref int size, [MarshalAs(UnmanagedType.Bool)] bool order, int family, int tableClass, int reserved);
+
     [LibraryImport("userenv.dll", StringMarshalling = StringMarshalling.Utf16)]
     private static partial int DeriveAppContainerSidFromAppContainerName(string name, out nint sid);
 
@@ -96,6 +102,47 @@ internal static unsafe partial class Native
         }
         finally { Marshal.FreeHGlobal(buffer); }
         return list;
+    }
+
+    /// <summary>Every listening TCP socket and every UDP socket on this PC, with the process that owns it.</summary>
+    public static List<(bool Tcp, IPAddress Address, int Port, int Pid)> LocalSockets()
+    {
+        const int Inet = 2, Inet6 = 23, TcpOwnerPidListener = 3, UdpOwnerPid = 1;
+        var list = new List<(bool, IPAddress, int, int)>();
+        // Row layouts: MIB_TCPROW_OWNER_PID (24 bytes), MIB_TCP6ROW_OWNER_PID (56), MIB_UDPROW_OWNER_PID (12), MIB_UDP6ROW_OWNER_PID (28).
+        Read(true, Inet, TcpOwnerPidListener, 24, row => (new IPAddress(unchecked((uint)Marshal.ReadInt32(row, 4))), Marshal.ReadInt32(row, 8), Marshal.ReadInt32(row, 20)));
+        Read(true, Inet6, TcpOwnerPidListener, 56, row => (Address6(row), Marshal.ReadInt32(row, 20), Marshal.ReadInt32(row, 52)));
+        Read(false, Inet, UdpOwnerPid, 12, row => (new IPAddress(unchecked((uint)Marshal.ReadInt32(row, 0))), Marshal.ReadInt32(row, 4), Marshal.ReadInt32(row, 8)));
+        Read(false, Inet6, UdpOwnerPid, 28, row => (Address6(row), Marshal.ReadInt32(row, 20), Marshal.ReadInt32(row, 24)));
+        return list;
+
+        void Read(bool tcp, int family, int tableClass, int rowSize, Func<nint, (IPAddress Address, int Port, int Pid)> parse)
+        {
+            var size = 0;
+            _ = tcp ? GetExtendedTcpTable(0, ref size, false, family, tableClass, 0) : GetExtendedUdpTable(0, ref size, false, family, tableClass, 0);
+            if (size == 0) return;
+            size += 4096; // sockets come and go between the two calls
+            var buffer = Marshal.AllocHGlobal(size);
+            try
+            {
+                var result = tcp ? GetExtendedTcpTable(buffer, ref size, false, family, tableClass, 0) : GetExtendedUdpTable(buffer, ref size, false, family, tableClass, 0);
+                if (result != 0) return;
+                var count = Marshal.ReadInt32(buffer);
+                for (var i = 0; i < count && 4 + (i + 1) * rowSize <= size; i++)
+                {
+                    var (address, port, pid) = parse(buffer + 4 + i * rowSize);
+                    list.Add((tcp, address, (ushort)IPAddress.NetworkToHostOrder((short)port), pid));
+                }
+            }
+            finally { Marshal.FreeHGlobal(buffer); }
+        }
+
+        static IPAddress Address6(nint row)
+        {
+            var bytes = new byte[16];
+            Marshal.Copy(row, bytes, 0, 16);
+            return new IPAddress(bytes);
+        }
     }
 
     /// <summary>The AppContainer SID string Windows Firewall uses to target a Store app, e.g. S-1-15-2-...</summary>
