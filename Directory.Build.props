@@ -4,7 +4,7 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
-    <Version>1.2.5</Version>
+    <Version>1.2.6</Version>
     <Company>Tem Revil</Company>
     <Product>Glass-Rea</Product>
     <!-- The product version is the plain release number (no "+commit"): SignPath checks it on what it signs. -->
