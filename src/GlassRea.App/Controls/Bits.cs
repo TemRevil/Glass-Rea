@@ -1,4 +1,5 @@
 using GlassRea.App.Support;
+using GlassRea.Core.Protocol;
 using Microsoft.UI.Text;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
@@ -195,5 +196,99 @@ public sealed class PeriodPicker : StackPanel
         (From, To, Label) = Periods.Range(Kind, _anchor);
         _next.IsEnabled = Periods.Range(Kind, Periods.Step(Kind, _anchor, 1)).From <= DateTimeOffset.Now.ToUnixTimeSeconds();
         if (raise) Changed?.Invoke();
+    }
+}
+
+/// <summary>
+/// All networks, or one of them (see <see cref="Networks"/>); the same choice on every page that has one. Shown once
+/// there are two networks to tell apart.
+/// </summary>
+public sealed class NetworkPicker : ComboBox
+{
+    private readonly List<long?> _ids = [];
+    private bool _filling;
+
+    public NetworkPicker()
+    {
+        MinWidth = 150;
+        VerticalAlignment = VerticalAlignment.Center;
+        AutomationProperties.SetName(this, "Network");
+        ToolTipService.SetToolTip(this, "Which network to count");
+        SelectionChanged += (_, _) =>
+        {
+            if (!_filling && SelectedIndex >= 0 && SelectedIndex < _ids.Count) Networks.Select(_ids[SelectedIndex]);
+        };
+        // Pages live as long as the app, so these subscriptions do too.
+        Networks.ListChanged += Fill;
+        Networks.Changed += ShowSelected;
+        Fill();
+    }
+
+    private void Fill()
+    {
+        _filling = true;
+        _ids.Clear();
+        _ids.Add(null);
+        _ids.AddRange(Networks.Known.Select(n => (long?)n.Id));
+        ItemsSource = new[] { "All networks" }.Concat(Networks.Known.Select(n => NetworkLabel.For(n) + (n.Current ? " (now)" : ""))).ToList();
+        Visibility = Networks.Known.Count >= 2 ? Visibility.Visible : Visibility.Collapsed;
+        _filling = false;
+        ShowSelected();
+    }
+
+    private void ShowSelected()
+    {
+        _filling = true;
+        SelectedIndex = Math.Max(0, _ids.IndexOf(Networks.Selected));
+        _filling = false;
+    }
+}
+
+/// <summary>
+/// Your own name for something the service keeps (a device, a network): a box, Save, and a button back to its own
+/// name. Errors from the service are shown in the flyout.
+/// </summary>
+public static class RenameFlyout
+{
+    /// <param name="custom">The name you gave it, or "".</param>
+    /// <param name="own">What it's called without your name, shown in the empty box.</param>
+    /// <param name="save">Saves a name; "" goes back to its own.</param>
+    /// <param name="saved">Runs once it's saved and the flyout has closed, to show the new name.</param>
+    public static void Show(FrameworkElement at, string custom, string own, string resetLabel, int maxLength, Func<string, Task> save, Func<Task> saved)
+    {
+        var box = new TextBox { Header = "Name", Text = custom, PlaceholderText = own, MaxLength = maxLength, Width = 240 };
+        var error = new TextBlock { Style = (Style)Application.Current.Resources["Caption"], TextWrapping = TextWrapping.Wrap, Visibility = Visibility.Collapsed };
+        var ok = new Button { Content = "Save", Style = (Style)Application.Current.Resources["AccentButtonStyle"] };
+        var reset = new Button { Content = resetLabel, IsEnabled = custom.Length > 0 };
+        var flyout = new Flyout
+        {
+            Content = new StackPanel
+            {
+                Spacing = 12, Width = 240,
+                Children = { box, error, new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, Children = { ok, reset } } },
+            },
+        };
+        async Task Apply(string name)
+        {
+            ok.IsEnabled = reset.IsEnabled = false;
+            try
+            {
+                await save(name);
+                flyout.Hide();
+                await saved();
+            }
+            catch (Exception ex) when (Service.IsOffline(ex) || ex is ServiceException)
+            {
+                error.Text = ex is ServiceException ? ex.Message : "The Glass-Rea service isn't answering. Try again in a moment.";
+                error.Visibility = Visibility.Visible;
+                ok.IsEnabled = true;
+                reset.IsEnabled = custom.Length > 0;
+            }
+        }
+        ok.Click += async (_, _) => await Apply(box.Text);
+        reset.Click += async (_, _) => await Apply("");
+        box.KeyDown += async (_, k) => { if (k.Key == Windows.System.VirtualKey.Enter) { k.Handled = true; await Apply(box.Text); } };
+        flyout.Opened += (_, _) => { box.Focus(FocusState.Programmatic); box.SelectAll(); };
+        flyout.ShowAt(at);
     }
 }

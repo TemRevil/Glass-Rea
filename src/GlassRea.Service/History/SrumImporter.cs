@@ -5,6 +5,7 @@ using GlassRea.Core.Protocol;
 using GlassRea.Core.Storage;
 using GlassRea.Core.Usage;
 using GlassRea.Service.Capture;
+using GlassRea.Service.Networks;
 using Microsoft.Isam.Esent.Interop;
 
 namespace GlassRea.Service.History;
@@ -14,38 +15,50 @@ namespace GlassRea.Service.History;
 /// before live capture started. SRUM counts per network adapter, so traffic through a VPN adapter is still
 /// attributed to the real app, and is marked as having gone through the VPN (the VPN's own row carries it over the
 /// connection). It cannot tell local-network from internet traffic, so it all counts as internet.
-/// History imported before that marking existed gets it once, in a second pass.
+/// It also names the Wi-Fi each row was on (see <see cref="NetworkList.WifiByHistoryProfile"/>), so history counts on
+/// its networks too; a wired network it doesn't name.
+/// History imported before VPN traffic was marked, or before networks were recorded, gets that once, in a second pass.
 /// </summary>
 public sealed class SrumImporter(Database db, ServiceState state, ProcessResolver resolver, ILogger<SrumImporter> log) : BackgroundService
 {
     private const string SruFolder = @"C:\Windows\System32\sru";
     private const string NetworkUsageTable = "{973F5D5C-1D90-4944-BE8E-24B94231A174}";
 
-    private record struct Row(long In, long Out, long TunIn, long TunOut);
+    /// <summary>Windows' history, every hour of it, and the networks its rows name, by key.</summary>
+    private sealed record History(List<HistoryRow> Rows, Dictionary<string, WindowsNetwork> Networks);
 
     protected override async Task ExecuteAsync(CancellationToken ct)
     {
         var imported = (db.GetSetting(SettingKeys.SrumState) ?? "").StartsWith("Imported", StringComparison.Ordinal);
-        if (imported && db.GetSetting(SettingKeys.SrumTunnelSplit) == "done") return;
+        var tunnelsMarked = db.GetSetting(SettingKeys.SrumTunnelSplit) == "done";
+        var networksMarked = db.GetSetting(SettingKeys.SrumNetworks) == "done";
+        if (imported && tunnelsMarked && networksMarked) return;
         while (state.FirstLiveHour == 0) await Task.Delay(TimeSpan.FromSeconds(5), ct);
         await Task.Delay(TimeSpan.FromSeconds(15), ct);
         if (imported)
         {
             try
             {
-                await Task.Run(() => WithCopy(path => Split(Read(path, state.FirstLiveHour, ct))), ct);
-                db.SetSetting(SettingKeys.SrumTunnelSplit, "done");
+                await Task.Run(() => WithCopy(path =>
+                {
+                    var history = Read(path, ct);
+                    // VPN traffic first: it's marked on the rows as imported, which the networks pass then divides up.
+                    if (!tunnelsMarked) { Split(history); db.SetSetting(SettingKeys.SrumTunnelSplit, "done"); }
+                    if (!networksMarked) { PlaceOnNetworks(history); db.SetSetting(SettingKeys.SrumNetworks, "done"); }
+                    return true;
+                }), ct);
             }
             catch (OperationCanceledException) { }
-            catch (Exception ex) { log.LogWarning(ex, "Couldn't mark VPN traffic in imported Windows history"); }
+            catch (Exception ex) { log.LogWarning(ex, "Couldn't go over imported Windows history again"); }
             return;
         }
         try
         {
             db.SetSetting(SettingKeys.SrumState, "Importing Windows history...");
-            var summary = await Task.Run(() => WithCopy(path => Save(Read(path, state.FirstLiveHour, ct))), ct);
+            var summary = await Task.Run(() => WithCopy(path => Save(Read(path, ct))), ct);
             db.SetSetting(SettingKeys.SrumState, summary);
             db.SetSetting(SettingKeys.SrumTunnelSplit, "done");
+            db.SetSetting(SettingKeys.SrumNetworks, "done");
             log.LogInformation("{Summary}", summary);
         }
         catch (OperationCanceledException) { db.SetSetting(SettingKeys.SrumState, "pending"); }
@@ -94,9 +107,10 @@ public sealed class SrumImporter(Database db, ServiceState state, ProcessResolve
         if (p.ExitCode != 0 && !allowFailure) throw new InvalidOperationException($"esentutl {args.Split(' ')[0]} failed: {output.Trim().Split('\n').LastOrDefault()}");
     }
 
-    private static Dictionary<(string App, long Hour), Row> Read(string dbPath, long beforeHour, CancellationToken ct)
+    private History Read(string dbPath, CancellationToken ct)
     {
         var tunnelIndexes = TunnelIndexes();
+        var wifi = WifiProfiles();
         Api.JetGetDatabaseFileInfo(dbPath, out int pageSize, JET_DbInfo.PageSize);
         SystemParameters.DatabasePageSize = pageSize;
         var esentDir = Path.Combine(Path.GetDirectoryName(dbPath)!, "esent") + Path.DirectorySeparatorChar;
@@ -131,7 +145,7 @@ public sealed class SrumImporter(Database db, ServiceState state, ProcessResolve
             }
         }
 
-        var rows = new Dictionary<(string, long), Row>();
+        var rows = new Dictionary<(string App, long Hour, bool ViaTunnel, string? Network), (long In, long Out)>();
         var tunnelByLuid = new Dictionary<long, bool>();
         using (var usage = new Table(session, dbid, NetworkUsageTable, OpenTableGrbit.ReadOnly))
         {
@@ -144,7 +158,6 @@ public sealed class SrumImporter(Database db, ServiceState state, ProcessResolve
                     if (Api.RetrieveColumnAsDateTime(session, usage, cols["TimeStamp"]) is not { } stamp) continue;
                     var end = new DateTimeOffset(DateTime.SpecifyKind(stamp, DateTimeKind.Utc)).ToUnixTimeSeconds();
                     var hour = (end - 1) / 3600; // each row covers the interval ending at its timestamp
-                    if (hour >= beforeHour) continue;
                     var appId = Api.RetrieveColumnAsInt32(session, usage, cols["AppId"]) ?? -1;
                     var app = names.GetValueOrDefault(appId, "System");
                     var sent = Api.RetrieveColumnAsInt64(session, usage, cols["BytesSent"]) ?? 0;
@@ -152,12 +165,33 @@ public sealed class SrumImporter(Database db, ServiceState state, ProcessResolve
                     var luid = cols.TryGetValue("InterfaceLuid", out var luidColumn) ? Api.RetrieveColumnAsInt64(session, usage, luidColumn) ?? 0 : 0;
                     if (!tunnelByLuid.TryGetValue(luid, out var viaTunnel))
                         viaTunnel = tunnelByLuid[luid] = luid != 0 && (TunnelAdapters.IsTunnelType((int)((ulong)luid >> 48)) || tunnelIndexes.Contains(Native.InterfaceIndex(luid)));
-                    rows.TryGetValue((app, hour), out var acc);
-                    rows[(app, hour)] = new Row(acc.In + recv, acc.Out + sent, acc.TunIn + (viaTunnel ? recv : 0), acc.TunOut + (viaTunnel ? sent : 0));
+                    // The Wi-Fi profile the adapter was on; none on a VPN's adapter or a wired one.
+                    var profile = cols.TryGetValue("L2ProfileId", out var profileColumn) ? Api.RetrieveColumn(session, usage, profileColumn) : null;
+                    var network = profile switch
+                    {
+                        { Length: 4 } => wifi.GetValueOrDefault(BitConverter.ToUInt32(profile)),
+                        { Length: 8 } => wifi.GetValueOrDefault(BitConverter.ToInt64(profile)),
+                        _ => null,
+                    };
+                    var key = (app, hour, viaTunnel, network?.Key);
+                    rows.TryGetValue(key, out var acc);
+                    rows[key] = (acc.In + recv, acc.Out + sent);
                 } while (Api.TryMoveNext(session, usage));
             }
         }
-        return rows;
+        return new History(rows.Select(kv => new HistoryRow(kv.Key.App, kv.Key.Hour, kv.Key.ViaTunnel, kv.Key.Network, kv.Value.In, kv.Value.Out)).ToList(),
+            wifi.Values.DistinctBy(n => n.Key).ToDictionary(n => n.Key));
+    }
+
+    /// <summary>The Windows network of each Wi-Fi profile the history names; none when Windows won't say.</summary>
+    private Dictionary<long, WindowsNetwork> WifiProfiles()
+    {
+        try { return NetworkList.WifiByHistoryProfile(); }
+        catch (Exception ex) when (ex is System.Security.SecurityException or UnauthorizedAccessException or IOException)
+        {
+            log.LogWarning(ex, "Couldn't read which Wi-Fi Windows' history was on");
+            return [];
+        }
     }
 
     /// <summary>Indexes of this PC's VPN adapters whose type alone doesn't say so (OpenVPN's TAP reports itself as Ethernet).</summary>
@@ -178,27 +212,72 @@ public sealed class SrumImporter(Database db, ServiceState state, ProcessResolve
         return set;
     }
 
-    private string Save(Dictionary<(string App, long Hour), Row> rows)
+    /// <summary>The history from before live capture started: the hours that are imported.</summary>
+    private List<HistoryRow> Earlier(History history) => history.Rows.Where(r => r.Hour < state.FirstLiveHour).ToList();
+
+    private string Save(History history)
     {
+        var rows = Earlier(history);
         if (rows.Count == 0) return "Imported: Windows had no earlier history";
         var ids = new Dictionary<string, long>();
-        var deltas = rows.Select(kv => (AppId(ids, kv.Key.App), new UsageDelta("", kv.Key.Hour, kv.Value.In, kv.Value.Out, 0, 0, kv.Value.TunIn, kv.Value.TunOut))).ToList();
+        var networks = NetworkIds(history);
+        var deltas = HistoryNetworks.Totals(rows).Select(kv => (AppId(ids, kv.Key.App),
+            new UsageDelta("", kv.Key.Hour, kv.Value.In, kv.Value.Out, 0, 0, kv.Value.TunIn, kv.Value.TunOut, networks(kv.Key.Network)))).ToList();
         db.AddUsage(deltas, UsageSource.WindowsHistory);
-        var first = DateTimeOffset.FromUnixTimeSeconds(rows.Keys.Min(k => k.Hour) * 3600).ToLocalTime();
+        var first = DateTimeOffset.FromUnixTimeSeconds(rows.Min(r => r.Hour) * 3600).ToLocalTime();
         return $"Imported: {ids.Count} apps, history from {first:yyyy-MM-dd}";
     }
 
     /// <summary>Marks which of the already imported hours went through a VPN adapter.</summary>
-    private int Split(Dictionary<(string App, long Hour), Row> rows)
+    private void Split(History history)
     {
         var ids = new Dictionary<string, long>();
+        var hours = Earlier(history).GroupBy(r => (r.App, r.Hour)).ToList();
         // Every app, not just those with VPN traffic: this is also when a VPN service known only by name is recognised.
-        foreach (var app in rows.Keys.Select(k => k.App).Distinct()) AppId(ids, app);
-        var marked = rows.Where(kv => kv.Value.TunIn + kv.Value.TunOut > 0)
-            .Select(kv => (AppId(ids, kv.Key.App), kv.Key.Hour, kv.Value.TunIn, kv.Value.TunOut)).ToList();
+        foreach (var app in hours.Select(h => h.Key.App).Distinct()) AppId(ids, app);
+        var marked = hours
+            .Select(h => (AppId(ids, h.Key.App), h.Key.Hour, h.Where(r => r.ViaTunnel).Sum(r => r.In), h.Where(r => r.ViaTunnel).Sum(r => r.Out)))
+            .Where(m => m.Item3 + m.Item4 > 0).ToList();
         db.SetImportedTunnel(marked);
         log.LogInformation("Marked {Count} hours of imported history as sent through a VPN", marked.Count);
-        return marked.Count;
+    }
+
+    /// <summary>
+    /// Puts what was recorded before networks were on the networks Windows' history shows: each imported hour as the
+    /// history splits it, a live hour when the history has this PC on one network all through it, and a day's hosts
+    /// when all of its live hours were. The rest stays on no known network.
+    /// </summary>
+    private void PlaceOnNetworks(History history)
+    {
+        var ids = new Dictionary<string, long>();
+        var networks = NetworkIds(history);
+        var moves = HistoryNetworks.Totals(Earlier(history))
+            .Where(kv => kv.Key.Network is not null)
+            .Select(kv => new NetworkMove(AppId(ids, kv.Key.App), kv.Key.Hour, UsageSource.WindowsHistory, networks(kv.Key.Network),
+                kv.Value.In, kv.Value.Out, kv.Value.TunIn, kv.Value.TunOut))
+            .ToList();
+        var live = HistoryNetworks.LiveHours(HistoryNetworks.HourNetworks(history.Rows)).ToDictionary(kv => kv.Key, kv => networks(kv.Value));
+        var unknown = db.UnknownLive();
+        moves.AddRange(unknown.Where(u => live.ContainsKey(u.Hour)).Select(u => new NetworkMove(u.AppId, u.Hour, UsageSource.Live, live[u.Hour])));
+        var days = HistoryNetworks.WholeDays(unknown.Select(u => u.Hour), live);
+        var moved = db.AssignNetworks(moves);
+        db.AssignHostNetworks(days.Select(kv => (kv.Key, kv.Value)));
+        log.LogInformation("Put {Rows} hours of earlier use and {Days} days of hosts on the networks Windows' history shows", moved, days.Count);
+    }
+
+    /// <summary>The database id of each network the history names, added as they're first asked for; 0 for none.</summary>
+    private Func<string?, long> NetworkIds(History history)
+    {
+        var seen = history.Rows.Where(r => r.Network is not null).GroupBy(r => r.Network!)
+            .ToDictionary(g => g.Key, g => (First: g.Min(r => r.Hour) * 3600, Last: g.Max(r => r.Hour) * 3600));
+        var ids = new Dictionary<string, long>();
+        return key =>
+        {
+            if (key is null || !history.Networks.TryGetValue(key, out var network)) return NetworkLabel.Unknown;
+            if (ids.TryGetValue(key, out var id)) return id;
+            var (first, last) = seen.GetValueOrDefault(key, (0, 0));
+            return ids[key] = db.EnsureNetwork(network.Key, network.Name, network.Kind, first, last);
+        };
     }
 
     private long AppId(Dictionary<string, long> ids, string app)

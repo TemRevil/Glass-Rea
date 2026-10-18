@@ -4,8 +4,10 @@ using GlassRea.Core.Net;
 namespace GlassRea.Core.Usage;
 
 /// <param name="TunIn">Of NetIn, the bytes that came through a VPN (its adapter or its local proxy) rather than straight over the connection.</param>
-public readonly record struct UsageDelta(string AppKey, long Hour, long NetIn, long NetOut, long LanIn, long LanOut, long TunIn = 0, long TunOut = 0);
-public readonly record struct HostDelta(string AppKey, int Day, string Ip, long In, long Out, long LastSeen);
+/// <param name="Network">The network this PC was on (a <see cref="Protocol.NetworkInfo.Id"/>, 0 when not known).</param>
+public readonly record struct UsageDelta(string AppKey, long Hour, long NetIn, long NetOut, long LanIn, long LanOut, long TunIn = 0, long TunOut = 0,
+    long Network = 0);
+public readonly record struct HostDelta(string AppKey, int Day, string Ip, long In, long Out, long LastSeen, long Network = 0);
 public sealed record AppRate(string AppKey, long InPerSec, long OutPerSec);
 
 /// <summary>
@@ -15,12 +17,23 @@ public sealed record AppRate(string AppKey, long InPerSec, long OutPerSec);
 public sealed class UsageAccumulator(int liveSeconds = 300)
 {
     private readonly Lock _gate = new();
-    private readonly Dictionary<(string, long), long[]> _hours = [];
-    private readonly Dictionary<(string, int, string), long[]> _hosts = [];
+    private readonly Dictionary<(string, long, long), long[]> _hours = [];
+    private readonly Dictionary<(string, int, string, long), long[]> _hosts = [];
     private readonly long[] _liveIn = new long[liveSeconds];
     private readonly long[] _liveOut = new long[liveSeconds];
     private readonly Dictionary<string, (long Second, long In, long Out)>[] _liveApps = Enumerable.Range(0, 5).Select(_ => new Dictionary<string, (long, long, long)>()).ToArray();
     private long _liveSecond = -1;
+    private long _network;
+
+    /// <summary>
+    /// The network this PC is on now (a <see cref="Protocol.NetworkInfo.Id"/>, 0 while it isn't known). Traffic counts
+    /// towards it, a VPN's included, since a VPN runs over it.
+    /// </summary>
+    public long Network
+    {
+        get => Interlocked.Read(ref _network);
+        set => Interlocked.Exchange(ref _network, value);
+    }
 
     /// <param name="viaTunnel">The app's end of the traffic was a VPN adapter, so the VPN carries it over the connection.</param>
     public void Add(AppIdentity app, DateTimeOffset time, long bytes, bool outbound, IPAddress remote, bool viaTunnel = false)
@@ -42,16 +55,17 @@ public sealed class UsageAccumulator(int liveSeconds = 300)
         if (bytes <= 0) return;
         var unix = time.ToUnixTimeSeconds();
         var hour = unix / 3600;
+        var network = Network;
         lock (_gate)
         {
-            var h = Bucket(_hours, (app.Key, hour), 6);
+            var h = Bucket(_hours, (app.Key, hour, network), 6);
             var slot = (scope == Scope.Internet ? 0 : 2) + (outbound ? 1 : 0);
             h[slot] += bytes;
             if (viaTunnel && scope == Scope.Internet) h[4 + (outbound ? 1 : 0)] += bytes;
 
             if (ip is not null)
             {
-                var host = Bucket(_hosts, (app.Key, LocalDay(time), ip), 3);
+                var host = Bucket(_hosts, (app.Key, LocalDay(time), ip, network), 3);
                 host[outbound ? 1 : 0] += bytes;
                 host[2] = unix;
             }
@@ -103,8 +117,8 @@ public sealed class UsageAccumulator(int liveSeconds = 300)
     {
         lock (_gate)
         {
-            var usage = _hours.Select(kv => new UsageDelta(kv.Key.Item1, kv.Key.Item2, kv.Value[0], kv.Value[1], kv.Value[2], kv.Value[3], kv.Value[4], kv.Value[5])).ToList();
-            var hosts = _hosts.Select(kv => new HostDelta(kv.Key.Item1, kv.Key.Item2, kv.Key.Item3, kv.Value[0], kv.Value[1], kv.Value[2])).ToList();
+            var usage = _hours.Select(kv => new UsageDelta(kv.Key.Item1, kv.Key.Item2, kv.Value[0], kv.Value[1], kv.Value[2], kv.Value[3], kv.Value[4], kv.Value[5], kv.Key.Item3)).ToList();
+            var hosts = _hosts.Select(kv => new HostDelta(kv.Key.Item1, kv.Key.Item2, kv.Key.Item3, kv.Value[0], kv.Value[1], kv.Value[2], kv.Key.Item4)).ToList();
             _hours.Clear();
             _hosts.Clear();
             return (usage, hosts);

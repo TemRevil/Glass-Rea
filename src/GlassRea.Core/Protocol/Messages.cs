@@ -13,8 +13,10 @@ public static class Pipe
 }
 
 /// <summary>One request per line over the named pipe. Times are unix seconds.</summary>
+/// <param name="Network">For "usage" and "hosts", only what was used on this network (a <see cref="NetworkInfo.Id"/>, 0 for
+/// use on no known network); null for every network. For "network.rename", the network to rename.</param>
 public sealed record Request(string Op, long From = 0, long To = 0, long AppId = 0, bool Value = false, long AfterId = 0,
-    Dictionary<string, string>? Settings = null);
+    Dictionary<string, string>? Settings = null, long? Network = null);
 
 public sealed record Response(bool Ok, JsonElement? Data = null, string? Error = null);
 
@@ -47,6 +49,15 @@ public sealed record DeviceInfo(string Mac, string Ip, string? Name, bool Random
     long FirstSeen, long LastSeen, string? Vendor = null, string? Model = null, string? Kind = null, string? Os = null,
     string? CustomName = null, bool Away = false, string? Network = null);
 
+/// <summary>A network this PC has been on, as Windows knows it (its network profile).</summary>
+/// <param name="Id">0 is the use that has no known network: recorded before networks were, or Windows' own history of a
+/// wired network, which doesn't say which one.</param>
+/// <param name="Name">What Windows calls it: the Wi-Fi's name, or "Network 2" for a wired one.</param>
+/// <param name="CustomName">The name you gave it in Settings > Data; shown instead.</param>
+/// <param name="Kind">One of <see cref="NetworkKinds"/>, when known.</param>
+/// <param name="Current">This PC is on it now.</param>
+public sealed record NetworkInfo(long Id, string Name, string? CustomName, string? Kind, long FirstSeen, long LastSeen, bool Current = false);
+
 public sealed record AlertInfo(long Id, long Time, string Kind, string Title, string Body);
 
 /// <param name="NetworkPublic">Windows has the scanned network marked Public, so devices can't be heard saying their names.</param>
@@ -67,6 +78,8 @@ public static class SettingKeys
     public const string FirstEtwHour = "first_etw_hour";
     public const string SrumState = "srum_state";
     public const string SrumTunnelSplit = "srum_tunnel_split";
+    /// <summary>"done" once the use recorded before networks were has been put on its networks, where Windows' history tells.</summary>
+    public const string SrumNetworks = "srum_networks";
     /// <summary>The first hour live capture marked what went through a VPN; earlier live hours predate the marking.</summary>
     public const string TunnelMarkedFrom = "tunnel_marked_from";
 }

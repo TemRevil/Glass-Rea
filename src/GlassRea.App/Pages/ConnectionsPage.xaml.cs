@@ -30,8 +30,10 @@ public sealed partial class ConnectionsPage : UserControl, IPage
         InitializeComponent();
         Apps.ItemsSource = _apps;
         Hosts.ItemsSource = _hosts;
-        PickerHost.Content = _period;
+        // The list is narrow: the network goes under the period.
+        PickerHost.Content = new StackPanel { Spacing = 8, Children = { _period, new NetworkPicker { HorizontalAlignment = HorizontalAlignment.Left } } };
         _period.Changed += () => _ = Refresh();
+        Networks.Changed += () => { if (IsLoaded) _ = Refresh(); };
     }
 
     public TimeSpan RefreshEvery => TimeSpan.FromSeconds(15);
@@ -40,7 +42,7 @@ public sealed partial class ConnectionsPage : UserControl, IPage
     {
         if (PendingAppId != 0) { _selected = PendingAppId; PendingAppId = 0; }
         var to = Math.Min(_period.To, DateTimeOffset.Now.ToUnixTimeSeconds() + 1);
-        var report = await Service.Call<UsageReport>("usage", _period.From, to);
+        var report = await Service.Call<UsageReport>("usage", _period.From, to, network: Networks.Selected);
         _periodTotal = report.NetIn + report.NetOut;
         _connectionTotal = report.ConnectionIn + report.ConnectionOut;
         await AppFaces.Prepare(report.Apps);
@@ -96,7 +98,7 @@ public sealed partial class ConnectionsPage : UserControl, IPage
         var to = Math.Min(_period.To, DateTimeOffset.Now.ToUnixTimeSeconds());
         // Every row of the app (each version, each sign-in's copy of a service), as one list of hosts.
         var hosts = new List<HostUsage>();
-        foreach (var id in _rowsOf.GetValueOrDefault(app.Id) ?? [app.Id]) hosts.AddRange(await Service.Call<List<HostUsage>>("hosts", _period.From, to, appId: id));
+        foreach (var id in _rowsOf.GetValueOrDefault(app.Id) ?? [app.Id]) hosts.AddRange(await Service.Call<List<HostUsage>>("hosts", _period.From, to, appId: id, network: Networks.Selected));
         if (Apps.SelectedItem is not ConnItem { Row.Id: var still } || still != app.Id) return; // another app was picked meanwhile
         hosts = hosts.GroupBy(h => h.Ip).Select(g => new HostUsage(g.Key, g.Select(h => h.Name).FirstOrDefault(n => n is not null),
             g.Sum(h => h.In), g.Sum(h => h.Out), g.Max(h => h.LastSeen))).OrderByDescending(h => h.In + h.Out).ToList();

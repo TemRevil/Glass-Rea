@@ -85,7 +85,7 @@ public sealed class PipeServer(Database db, UsageAccumulator usage, ProcessResol
             case "status":
                 return state.Snapshot();
             case "usage":
-                return db.Report(r.From, r.To > 0 ? r.To : now.ToUnixTimeSeconds() + 1, firewall.BlockedAppIds());
+                return db.Report(r.From, r.To > 0 ? r.To : now.ToUnixTimeSeconds() + 1, firewall.BlockedAppIds(), r.Network);
             case "live":
                 var (inn, outt) = usage.Live(now, 120);
                 var top = usage.TopRates(now, 8).Select(rate =>
@@ -96,7 +96,7 @@ public sealed class PipeServer(Database db, UsageAccumulator usage, ProcessResol
                 return new LiveSnapshot(now.ToUnixTimeSeconds(), inn, outt, top);
             case "hosts":
                 return db.Hosts(r.AppId, UsageAccumulator.LocalDay(DateTimeOffset.FromUnixTimeSeconds(r.From)),
-                    UsageAccumulator.LocalDay(DateTimeOffset.FromUnixTimeSeconds(r.To > 0 ? r.To : now.ToUnixTimeSeconds())));
+                    UsageAccumulator.LocalDay(DateTimeOffset.FromUnixTimeSeconds(r.To > 0 ? r.To : now.ToUnixTimeSeconds())), r.Network);
             case "block":
                 firewall.SetBlocked(r.AppId, r.Value);
                 return null;
@@ -111,6 +111,14 @@ public sealed class PipeServer(Database db, UsageAccumulator usage, ProcessResol
             case "device.forget":
                 var gone = r.Settings?.GetValueOrDefault("mac") ?? throw new InvalidOperationException("Which device?");
                 if (!db.ForgetDevice(gone, DateTimeOffset.UtcNow.ToUnixTimeSeconds())) throw new InvalidOperationException("That device isn't in the list any more.");
+                return null;
+            case "networks":
+                return db.Networks(usage.Network);
+            case "network.rename":
+                if (r.Network is not > 0) throw new InvalidOperationException("Which network?");
+                if (!NetworkLabel.TryCleanName(r.Settings?.GetValueOrDefault("name"), out var networkName))
+                    throw new InvalidOperationException($"A network name can be up to {NetworkLabel.MaxNameLength} characters, with no line breaks.");
+                if (!db.RenameNetwork(r.Network.Value, networkName)) throw new InvalidOperationException("That network isn't in the list any more.");
                 return null;
             case "scan":
                 devices.RequestScan();

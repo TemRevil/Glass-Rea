@@ -11,11 +11,11 @@ public static class Service
     private static bool _offline;
 
     public static Task<T> Call<T>(string op, long from = 0, long to = 0, long appId = 0, bool value = false, long afterId = 0,
-        Dictionary<string, string>? settings = null) =>
-        Logged<T>(new Request(op, from, to, appId, value, afterId, settings));
+        Dictionary<string, string>? settings = null, long? network = null) =>
+        Logged<T>(new Request(op, from, to, appId, value, afterId, settings, network));
 
-    public static Task Do(string op, long appId = 0, bool value = false, Dictionary<string, string>? settings = null) =>
-        Logged<object?>(new Request(op, AppId: appId, Value: value, Settings: settings));
+    public static Task Do(string op, long appId = 0, bool value = false, Dictionary<string, string>? settings = null, long? network = null) =>
+        Logged<object?>(new Request(op, AppId: appId, Value: value, Settings: settings, Network: network));
 
     /// <summary>Every call, timed: slow ones, failures and the service going away or coming back are logged.</summary>
     private static async Task<T> Logged<T>(Request request)
@@ -76,6 +76,47 @@ public static class Fmt
     public static string Number(double v) => v.ToString("0.##", Inv);
 
     public static string Percent(double share) => Math.Round(share * 100).ToString(Inv) + "%";
+}
+
+/// <summary>
+/// The network Overview, Apps and Connections count: every network together (null, the default each time the app
+/// starts) or one of them. Limits always count every network.
+/// </summary>
+public static class Networks
+{
+    public static long? Selected { get; private set; }
+    /// <summary>The networks the service knows, as it last listed them.</summary>
+    public static IReadOnlyList<NetworkInfo> Known { get; private set; } = [];
+
+    /// <summary>Raised when another network is picked, so the pages count it.</summary>
+    public static event Action? Changed;
+    /// <summary>Raised when the list or a name in it changed, so pickers show it.</summary>
+    public static event Action? ListChanged;
+
+    /// <summary>Takes the service's list. A picked network that's no longer in it goes back to all networks.</summary>
+    public static void Use(List<NetworkInfo> list)
+    {
+        static string Shape(IEnumerable<NetworkInfo> l) => string.Join("\n", l.Select(n => $"{n.Id}\t{NetworkLabel.For(n)}\t{n.Kind}\t{n.Current}"));
+        if (Shape(list) == Shape(Known)) return;
+        Known = list;
+        ListChanged?.Invoke();
+        if (Selected is { } id && list.All(n => n.Id != id)) Select(null);
+    }
+
+    public static void Select(long? id)
+    {
+        if (id == Selected) return;
+        Selected = id;
+        Changed?.Invoke();
+    }
+
+    /// <summary>The picked network for a sentence ("used today on Home"); "" for all networks.</summary>
+    public static string On => Selected switch
+    {
+        null => "",
+        NetworkLabel.Unknown => " on an unknown network",
+        var id => " on " + (Known.FirstOrDefault(n => n.Id == id) is { } n ? NetworkLabel.For(n) : "this network"),
+    };
 }
 
 public static class Periods

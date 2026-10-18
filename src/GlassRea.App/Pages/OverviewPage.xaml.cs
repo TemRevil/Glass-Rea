@@ -19,8 +19,9 @@ public sealed partial class OverviewPage : UserControl, IPage
     public OverviewPage()
     {
         InitializeComponent();
-        PickerHost.Content = _period;
+        PickerHost.Content = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, Children = { new NetworkPicker(), _period } };
         _period.Changed += () => _ = Refresh();
+        Networks.Changed += () => { if (IsLoaded) _ = Refresh(); };
     }
 
     public TimeSpan RefreshEvery => TimeSpan.FromSeconds(10);
@@ -29,9 +30,10 @@ public sealed partial class OverviewPage : UserControl, IPage
     {
         var from = _period.From;
         var to = Math.Min(_period.To, DateTimeOffset.Now.ToUnixTimeSeconds() + 1);
-        var r = await Service.Call<UsageReport>("usage", from, to);
+        var network = Networks.Selected;
+        var r = await Service.Call<UsageReport>("usage", from, to, network: network);
         var total = r.NetIn + r.NetOut;
-        var phrase = Phrase();
+        var phrase = Phrase() + Networks.On;
         PeriodText.Text = _period.Label;
 
         var appRows = await AppRow.From(r);
@@ -49,7 +51,7 @@ public sealed partial class OverviewPage : UserControl, IPage
             else HeadTotal.Text = Fmt.Bytes(total);
         }
 
-        var key = $"{_period.Kind}:{from}";
+        var key = $"{_period.Kind}:{from}:{network}";
         Chart.SetBars(Bars.For(r, _period.Kind, _period.From, _period.To), animate: key != _shownKey);
         _shownKey = key;
         DownText.Text = $"Download {Fmt.Bytes(r.NetIn)}";
@@ -71,7 +73,7 @@ public sealed partial class OverviewPage : UserControl, IPage
         NoApps.Visibility = rows.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
 
         ShowNow();
-        await ShowMonth(r);
+        await ShowMonth(r, network);
         await ShowAlerts();
     }
 
@@ -121,10 +123,11 @@ public sealed partial class OverviewPage : UserControl, IPage
             : $"{tunnel.Name} tunnel {Fmt.Bytes(r.TunnelIn + r.TunnelOut)}, not counted twice";
     }
 
-    private async Task ShowMonth(UsageReport current)
+    /// <summary>This month on every network, whichever one the page shows: that's what the monthly limit counts.</summary>
+    private async Task ShowMonth(UsageReport current, long? network)
     {
         var (from, to, _) = Periods.Range(Periods.Kind.Month, DateTime.Today);
-        var month = _period.Kind == Periods.Kind.Month && _period.From == from
+        var month = network is null && _period.Kind == Periods.Kind.Month && _period.From == from
             ? current
             : await Service.Call<UsageReport>("usage", from, DateTimeOffset.Now.ToUnixTimeSeconds() + 1);
         var used = month.NetIn + month.NetOut;
@@ -140,14 +143,14 @@ public sealed partial class OverviewPage : UserControl, IPage
             LeftText.Text = used < limit
                 ? $"{Fmt.Bytes(limit - used)} left, {daysLeft} day{(daysLeft == 1 ? "" : "s")} to go"
                 : $"Over by {Fmt.Bytes(used - limit)}";
-            MonthNote.Text = "You'll be told at 80% and 100%.";
+            MonthNote.Text = network is null ? "You'll be told at 80% and 100%." : "All networks together, as the limit counts. You'll be told at 80% and 100%.";
         }
         else
         {
             LimitText.Text = "";
             LeftText.Text = $"{daysLeft} day{(daysLeft == 1 ? "" : "s")} to go";
             MonthBar.Visibility = Visibility.Collapsed;
-            MonthNote.Text = "No monthly limit. Set one in Settings to get a warning before you run out.";
+            MonthNote.Text = (network is null ? "" : "All networks together. ") + "No monthly limit. Set one in Settings to get a warning before you run out.";
         }
     }
 

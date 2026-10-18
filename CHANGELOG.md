@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.2.6
+
+- Usage per network: the Overview, Apps and Connections pages have a network picker, so you can see what went over one network ("this month on Home") or all of them together, as before. Wi-Fi, wired and mobile networks are each counted, and use over a VPN counts on the network the VPN runs over. The picker shows once there's more than one network to choose from.
+- Each network is shown by the name Windows gives it, and you can rename it in Settings > Data > Networks, as with devices.
+- Earlier use is placed on its network from what Windows already keeps, where Windows says which Wi-Fi it was. Use Windows can't place, such as over a cable before this version, is shown as "Unknown network". Nothing is lost: all networks together add up to the same totals as before.
+- Limits and their alerts still count every network together, as your provider does. With a network picked, the Overview's month card says so.
+
 ## 1.2.5
 
 - Ultra performance, in Settings > General: solid glass, a plain window and no animations, for the least processor while the window is open (about 4% of one core on the Overview instead of 14%, on the PC this was measured on).

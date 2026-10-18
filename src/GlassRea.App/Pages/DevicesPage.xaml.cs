@@ -1,3 +1,4 @@
+using GlassRea.App.Controls;
 using GlassRea.App.Support;
 using GlassRea.Core.Look;
 using GlassRea.Core.Protocol;
@@ -81,43 +82,8 @@ public sealed partial class DevicesPage : UserControl, IPage
     private void OnRename(object sender, RoutedEventArgs e)
     {
         if (sender is not Button { Tag: DeviceItem { Row: var row } } button) return;
-        var box = new TextBox
-        {
-            Header = "Name", Text = row.Custom, PlaceholderText = row.Own, MaxLength = DeviceLabel.MaxNameLength, Width = 240,
-        };
-        var error = new TextBlock { Style = (Style)Application.Current.Resources["Caption"], TextWrapping = TextWrapping.Wrap, Visibility = Visibility.Collapsed };
-        var save = new Button { Content = "Save", Style = (Style)Application.Current.Resources["AccentButtonStyle"] };
-        var reset = new Button { Content = "Use its own name", IsEnabled = row.Custom.Length > 0 };
-        var flyout = new Flyout
-        {
-            Content = new StackPanel
-            {
-                Spacing = 12, Width = 240,
-                Children = { box, error, new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, Children = { save, reset } } },
-            },
-        };
-        async Task Apply(string name)
-        {
-            save.IsEnabled = reset.IsEnabled = false;
-            try
-            {
-                await Service.Do("device.rename", settings: new() { ["mac"] = row.Mac, ["name"] = name });
-                flyout.Hide();
-                await Refresh();
-            }
-            catch (Exception ex) when (Service.IsOffline(ex) || ex is ServiceException)
-            {
-                error.Text = ex is ServiceException ? ex.Message : "The Glass-Rea service isn't answering. Try again in a moment.";
-                error.Visibility = Visibility.Visible;
-                save.IsEnabled = true;
-                reset.IsEnabled = row.Custom.Length > 0;
-            }
-        }
-        save.Click += async (_, _) => await Apply(box.Text);
-        reset.Click += async (_, _) => await Apply("");
-        box.KeyDown += async (_, k) => { if (k.Key == Windows.System.VirtualKey.Enter) { k.Handled = true; await Apply(box.Text); } };
-        flyout.Opened += (_, _) => { box.Focus(FocusState.Programmatic); box.SelectAll(); };
-        flyout.ShowAt(button);
+        RenameFlyout.Show(button, row.Custom, row.Own, "Use its own name", DeviceLabel.MaxNameLength,
+            name => Service.Do("device.rename", settings: new() { ["mac"] = row.Mac, ["name"] = name }), Refresh);
     }
 
     /// <summary>Takes a device off the list, after asking. It comes back by itself if it's still on the network.</summary>

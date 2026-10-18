@@ -473,6 +473,7 @@ public sealed partial class SettingsPage : UserControl, IPage
             (status.Capturing ? $"Recording since {Fmt.DateTime(status.TrackingSince)}." : $"Not recording: {status.CaptureError ?? "starting"}.") + "\n" +
             $"Windows history: {status.HistoryImport}.\n" +
             "Data is kept in C:\\ProgramData\\Glass-Rea.";
+        ShowNetworks();
         if (_loaded) return; // load once per visit so typing is never overwritten
 
         var s = await Service.Call<Dictionary<string, string>>("settings");
@@ -490,6 +491,59 @@ public sealed partial class SettingsPage : UserControl, IPage
         MonthlyResetText.Text = $"Starts again on the {Cycle.Ordinal(day)}";
         _loading = false;
         _loaded = true;
+    }
+
+    // ---------- networks ----------
+
+    private string _networksShown = "";
+
+    /// <summary>Each network use was counted on, by the name you gave it or Windows' name; rebuilt only when that changed.</summary>
+    private void ShowNetworks()
+    {
+        var known = Networks.Known.Where(n => n.Id != NetworkLabel.Unknown).ToList();
+        var rows = known.Select(n => (Network: n, Note: NetworkNote(n))).ToList();
+        var shape = string.Join("\n", rows.Select(r => $"{r.Network.Id}\t{NetworkLabel.For(r.Network)}\t{r.Note}"));
+        if (shape == _networksShown) return;
+        _networksShown = shape;
+        NetworkRows.Children.Clear();
+        foreach (var (network, note) in rows) NetworkRows.Children.Add(NetworkRow(network, note));
+        NoNetworks.Visibility = known.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    private static string NetworkNote(NetworkInfo n)
+    {
+        var notes = new List<string>();
+        if (NetworkKinds.Display(n.Kind) is { } kind) notes.Add(kind);
+        notes.Add(n.Current ? "connected now" : $"last used {Fmt.Ago(n.LastSeen)}");
+        if (!string.IsNullOrWhiteSpace(n.CustomName) && n.Name.Length > 0) notes.Add($"Windows calls it {n.Name}");
+        var text = string.Join(", ", notes);
+        return char.ToUpperInvariant(text[0]) + text[1..];
+    }
+
+    private Border NetworkRow(NetworkInfo n, string note)
+    {
+        var name = NetworkLabel.For(n);
+        var rename = new Button
+        {
+            Width = 30, Height = 30, Padding = new Thickness(0), BorderThickness = new Thickness(0), VerticalAlignment = VerticalAlignment.Center,
+            Background = new SolidColorBrush(Microsoft.UI.Colors.Transparent),
+            Content = new FontIcon { Glyph = "\uE70F", FontSize = 13, Foreground = (Brush)Application.Current.Resources["TextSecondaryBrush"] },
+        };
+        AutomationProperties.SetName(rename, $"Rename {name}");
+        ToolTipService.SetToolTip(rename, "Rename");
+        rename.Click += (_, _) => RenameFlyout.Show(rename, n.CustomName ?? "", n.Name, "Use Windows' name", NetworkLabel.MaxNameLength,
+            text => Service.Do("network.rename", settings: new() { ["name"] = text }, network: n.Id),
+            async () => { Networks.Use(await Service.Call<List<NetworkInfo>>("networks")); ShowNetworks(); });
+        var words = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
+        words.Children.Add(new TextBlock { Text = name, TextTrimming = TextTrimming.CharacterEllipsis });
+        words.Children.Add(new TextBlock { Text = note, Style = (Style)Application.Current.Resources["Caption"] });
+        var grid = new Grid { ColumnSpacing = 12 };
+        grid.ColumnDefinitions.Add(new ColumnDefinition());
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        Grid.SetColumn(rename, 1);
+        grid.Children.Add(words);
+        grid.Children.Add(rename);
+        return new Border { Style = (Style)Application.Current.Resources["Row"], Child = grid };
     }
 
     private async void OnCycle(object sender, SelectionChangedEventArgs e)
@@ -528,7 +582,7 @@ public sealed partial class SettingsPage : UserControl, IPage
         DailyBox.Text = ToGb(daily);
         MonthlyBox.Text = ToGb(monthly);
         LimitsNote.Text = await Save(new() { [SettingKeys.DailyLimit] = daily!, [SettingKeys.MonthlyLimit] = monthly! })
-            ?? "Saved. Counted as your internet provider counts it, a VPN's overhead included; leave empty for no limit.";
+            ?? "Saved. Counted as your internet provider counts it, a VPN's overhead included, on every network together; leave empty for no limit.";
     }
 
     private async void OnAlerts(object sender, RoutedEventArgs e)

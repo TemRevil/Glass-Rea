@@ -88,13 +88,13 @@ The glass is the expensive part: it copies and blurs what's behind it every fram
 
 | | Page | What you see |
 | :---: | :--- | :--- |
-| 📊 | **Overview** | The top apps for a day, week (starting Saturday) or month, what's moving right now, this month's total and the latest alerts. Older history is imported once from what Windows already keeps (about 30 to 60 days). |
-| 📱 | **Apps** | Every app that used the internet in the period, with downloaded, uploaded and total. |
-| 🌐 | **Connections** | Per app: the remote hosts it talked to, with their DNS names, bytes in and out, and when last seen. |
+| 📊 | **Overview** | The top apps for a day, week (starting Saturday) or month, on one network or all of them, what's moving right now, this month's total and the latest alerts. Older history is imported once from what Windows already keeps (about 30 to 60 days). |
+| 📱 | **Apps** | Every app that used the internet in the period, on one network or all of them, with downloaded, uploaded and total. |
+| 🌐 | **Connections** | Per app: the remote hosts it talked to, with their DNS names, bytes in and out, and when last seen, on one network or all of them. |
 | 🛡️ | **Firewall** | Block or unblock any app's internet access in one click. They're Windows Firewall rules, so blocks hold even when the app is closed. |
 | 📡 | **Devices** | Devices on your network, named and recognised: the name each gives itself (or one you give it), its maker, what it is (phone, TV, printer...) and its system (iOS, Android, Windows...), with IP, MAC, whether the MAC is a randomized private one, and first and last seen. |
 | 🔔 | **Alerts** | An app going online for the first time, a new device joining your network, a device leaving or coming back (optional), and 80% and 100% of a daily or monthly limit. Each also pops up as a Windows notification. |
-| ⚙️ | **Settings** | **General** (startup, tray, Ultra performance, priority), **Notifications**, **Data** (limits, when the month and week start, VPN tunnels), **Appearance** (theme, accent, and the glass itself: frosting, opacity, chromatic aberration, light, shininess, refraction, thickness, edge softness, corner radius, tint) and **About** (version, service state, updates, logs). |
+| ⚙️ | **Settings** | **General** (startup, tray, Ultra performance, priority), **Notifications**, **Data** (limits, when the month and week start, VPN tunnels, your networks and their names), **Appearance** (theme, accent, and the glass itself: frosting, opacity, chromatic aberration, light, shininess, refraction, thickness, edge softness, corner radius, tint) and **About** (version, service state, updates, logs). |
 
 A live strip of the last two minutes runs along the top of every page.
 
@@ -105,6 +105,16 @@ A live strip of the last two minutes runs along the top of every page.
 VPN tunnels (Cloudflare WARP, WireGuard, OpenVPN, Proton, Nord) are listed but left out of totals and the live graph, because the traffic they carry is already counted under the apps that sent it, including apps that reach the VPN through its local proxy or DNS.
 
 Limits are different: they count what crossed your internet connection, as your provider does, so with a VPN on they include its overhead (the Overview shows how much).
+
+</details>
+
+<details>
+<summary><b>📶 How networks are told apart</b></summary>
+<br/>
+
+Each hour's use is kept with the network it went over: the one Windows names in its network settings ("Home", "Network 2"), which you can rename. Windows tells networks apart by the router and, on Wi-Fi, the network's name, so a cafe's Wi-Fi and your home Wi-Fi are separate even if they share a name. Wired and mobile networks count too. A VPN isn't a network of its own: its use counts on the Wi-Fi or cable it runs over.
+
+History imported from Windows is placed on its Wi-Fi network where Windows recorded which one. Use it can't place, such as over a cable before Glass-Rea counted per network, is shown as "Unknown network". Limits always count every network together.
 
 </details>
 

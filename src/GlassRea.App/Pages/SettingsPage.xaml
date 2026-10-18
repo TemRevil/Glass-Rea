@@ -158,7 +158,7 @@
                                     <TextBlock Grid.Column="2" Text="GB" VerticalAlignment="Center" Style="{StaticResource Muted}" />
                                 </Grid>
                             </Border>
-                            <TextBlock x:Name="LimitsNote" Style="{StaticResource Caption}" Text="Counts internet traffic only. Leave empty for no limit." />
+                            <TextBlock x:Name="LimitsNote" Style="{StaticResource Caption}" Text="Counts internet traffic on every network together. Leave empty for no limit." />
                         </StackPanel>
                     </Border>
 
@@ -190,6 +190,18 @@
                                 </Grid>
                             </Border>
                             <TextBlock x:Name="CycleNote" Style="{StaticResource Caption}" TextWrapping="Wrap" Text="Days start at midnight. A reset day of 29 to 31 falls on the last day of shorter months." />
+                        </StackPanel>
+                    </Border>
+
+                    <!-- The networks use is counted on. Rows are built in code (SettingsPage.xaml.cs). -->
+                    <Border Grid.Row="1" Grid.Column="1" Style="{StaticResource Card}">
+                        <StackPanel Spacing="10">
+                            <StackPanel Orientation="Horizontal" Spacing="8"><FontIcon Glyph="&#xE701;" FontSize="15" /><TextBlock Text="Networks" Style="{StaticResource CardTitle}" /></StackPanel>
+                            <TextBlock Style="{StaticResource Caption}" TextWrapping="Wrap"
+                                       Text="Use is counted on the network this PC was on, Wi-Fi or wired; with a VPN on, on the network underneath it. Pick one at the top of Overview, Apps or Connections to see only its share." />
+                            <StackPanel x:Name="NetworkRows" Spacing="8" />
+                            <TextBlock x:Name="NoNetworks" Style="{StaticResource Caption}" TextWrapping="Wrap" Visibility="Collapsed"
+                                       Text="No network yet. The one this PC is on shows here within a few seconds." />
                         </StackPanel>
                     </Border>
                 </Grid>

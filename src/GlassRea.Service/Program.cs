@@ -5,6 +5,7 @@ using GlassRea.Core.Usage;
 using GlassRea.Service;
 using GlassRea.Service.Capture;
 using GlassRea.Service.History;
+using GlassRea.Service.Networks;
 
 // Numbers, dates and file names are always written in invariant form (Latin digits, Gregorian calendar).
 CultureInfo.DefaultThreadCurrentCulture = CultureInfo.InvariantCulture;
@@ -30,6 +31,8 @@ builder.Services.AddSingleton<DnsCache>();
 builder.Services.AddSingleton<FirewallManager>();
 builder.Services.AddSingleton<DeviceScanner>();
 
+// First, so capture starts out counting on the right network.
+builder.Services.AddHostedService<NetworkWatcher>();
 builder.Services.AddHostedService<EtwCapture>();
 builder.Services.AddHostedService<FlushService>();
 builder.Services.AddHostedService<LimitWatcher>();

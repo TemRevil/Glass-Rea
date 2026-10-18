@@ -31,6 +31,39 @@ internal static unsafe partial class Native
     private static partial uint GetIpNetTable(nint table, ref int size, [MarshalAs(UnmanagedType.Bool)] bool order);
 
     [LibraryImport("iphlpapi.dll")]
+    private static partial uint GetIpForwardTable(nint table, ref int size, [MarshalAs(UnmanagedType.Bool)] bool order);
+
+    /// <summary>
+    /// The lowest metric of each interface's IPv4 default route, by interface index. The metric includes the
+    /// interface's own, so the lowest one is the adapter Windows sends internet traffic through.
+    /// </summary>
+    public static Dictionary<int, int> DefaultRouteMetrics()
+    {
+        var map = new Dictionary<int, int>();
+        var size = 0;
+        GetIpForwardTable(0, ref size, false);
+        if (size == 0) return map;
+        size += 1024; // routes can come and go between the two calls
+        var buffer = Marshal.AllocHGlobal(size);
+        try
+        {
+            if (GetIpForwardTable(buffer, ref size, false) != 0) return map;
+            var count = Marshal.ReadInt32(buffer);
+            const int rowSize = 56; // MIB_IPFORWARDROW: dest, mask, policy, next hop, index, type, proto, age, next hop AS, metric 1-5
+            for (var i = 0; i < count && 4 + (i + 1) * rowSize <= size; i++)
+            {
+                var row = buffer + 4 + i * rowSize;
+                if (Marshal.ReadInt32(row) != 0 || Marshal.ReadInt32(row, 4) != 0) continue; // 0.0.0.0/0 only
+                var index = Marshal.ReadInt32(row, 16);
+                var metric = Marshal.ReadInt32(row, 36);
+                map[index] = map.TryGetValue(index, out var known) ? Math.Min(known, metric) : metric;
+            }
+        }
+        finally { Marshal.FreeHGlobal(buffer); }
+        return map;
+    }
+
+    [LibraryImport("iphlpapi.dll")]
     private static partial uint GetExtendedTcpTable(nint table, ref int size, [MarshalAs(UnmanagedType.Bool)] bool order, int family, int tableClass, int reserved);
 
     [LibraryImport("iphlpapi.dll")]

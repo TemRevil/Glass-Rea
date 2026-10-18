@@ -16,6 +16,8 @@ A personal network monitor for Windows by Tem Revil: per-app internet use, live 
 
 The lists show one row per app: `Core/Usage/AppKinds.cs` tells apps, Store apps, services, Windows, VPN tunnels and unknown programs apart and adds an app's rows together (each version, Windows' history rows, each sign-in's copy of a service); `App/Support/AppFaces.cs` gives each its name, icon and kind label from Windows (services from the registry, packages from `PackageManager`); `App/Support/AppIcons.cs` draws icons one at a time on its own thread, because the shell answers "pending" to several at once.
 
+Use is kept per network: `usage` and `hosts` rows carry a `network` (an id in `networks`, 0 for unknown) in their key, and `Service/Networks/NetworkWatcher.cs` sets `UsageAccumulator.Network` from `NetworkList.Current()`, Windows' Network List Manager profile of the physical adapter traffic goes out on (never a VPN's, so a VPN's use counts on the network under it). Requests take `Network` (null for all networks, the default); limits, alerts and the month card always count every network together. Older rows were moved to network 0 by a table rebuild, and `SrumImporter` places earlier use on Wi-Fi networks once (`srum_networks`) from SRUM's `L2ProfileId`, never changing the all-networks total (`Core/Usage/HistoryNetworks.cs`).
+
 ## Build and check
 
 ```powershell

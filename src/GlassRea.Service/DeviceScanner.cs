@@ -3,6 +3,7 @@ using System.Net.NetworkInformation;
 using System.Net.Sockets;
 using System.Management;
 using GlassRea.Core.Alerts;
+using GlassRea.Core.Net;
 using GlassRea.Core.Protocol;
 using GlassRea.Core.Storage;
 using GlassRea.Service.Devices;
@@ -211,10 +212,7 @@ public sealed partial class DeviceScanner(Database db, ServiceState state, ILogg
     {
         foreach (var nic in NetworkInterface.GetAllNetworkInterfaces())
         {
-            if (nic.OperationalStatus != OperationalStatus.Up) continue;
-            if (nic.NetworkInterfaceType is not (NetworkInterfaceType.Wireless80211 or NetworkInterfaceType.Ethernet or NetworkInterfaceType.GigabitEthernet)) continue;
-            var label = (nic.Description + " " + nic.Name).ToLowerInvariant();
-            if (SkipAdapters.Any(label.Contains)) continue;
+            if (nic.OperationalStatus != OperationalStatus.Up || !IsOwnAdapter(nic, mobile: false)) continue;
             var props = nic.GetIPProperties();
             var gateway = props.GatewayAddresses.Select(g => g.Address).FirstOrDefault(a => a.AddressFamily == AddressFamily.InterNetwork && !a.Equals(IPAddress.Any));
             var addr = props.UnicastAddresses.FirstOrDefault(u => u.Address.AddressFamily == AddressFamily.InterNetwork);
@@ -222,6 +220,18 @@ public sealed partial class DeviceScanner(Database db, ServiceState state, ILogg
             return (nic, addr.Address, addr.IPv4Mask, gateway);
         }
         return null;
+    }
+
+    /// <summary>
+    /// A Wi-Fi or Ethernet adapter of this PC's own (with <paramref name="mobile"/>, a mobile broadband one too), not a
+    /// VPN's or a virtual machine's.
+    /// </summary>
+    internal static bool IsOwnAdapter(NetworkInterface nic, bool mobile)
+    {
+        if (nic.NetworkInterfaceType is not (NetworkInterfaceType.Wireless80211 or NetworkInterfaceType.Ethernet or NetworkInterfaceType.GigabitEthernet)
+            && !(mobile && nic.NetworkInterfaceType is NetworkInterfaceType.Wwanpp or NetworkInterfaceType.Wwanpp2)) return false;
+        var label = (nic.Description + " " + nic.Name).ToLowerInvariant();
+        return !SkipAdapters.Any(label.Contains) && !TunnelAdapters.IsTunnel(nic.Name, nic.Description, (int)nic.NetworkInterfaceType);
     }
 
     /// <summary>All host addresses in the subnet, capped at a /22 (1022 hosts) around our own address.</summary>

@@ -362,6 +362,7 @@ public sealed partial class MainWindow : Window
                     ? $"Recording since {Fmt.Date(status.TrackingSince)}"
                     : $"Not recording: {status.CaptureError ?? "starting"}";
                 Periods.Use(await Service.Call<Dictionary<string, string>>("settings")); // the reset day shapes "this month"
+                Networks.Use(await Service.Call<List<NetworkInfo>>("networks")); // for the network pickers
                 var started = System.Diagnostics.Stopwatch.GetTimestamp();
                 await page.Refresh();
                 Log.IfSlow("Window", $"Refreshing the {_current} page", System.Diagnostics.Stopwatch.GetElapsedTime(started));

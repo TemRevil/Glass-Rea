@@ -18,8 +18,9 @@ public sealed partial class AppsPage : UserControl, IPage
     {
         InitializeComponent();
         List.ItemsSource = _rows;
-        PickerHost.Content = _period;
+        PickerHost.Content = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, Children = { new NetworkPicker(), _period } };
         _period.Changed += () => _ = Refresh();
+        Networks.Changed += () => { if (IsLoaded) _ = Refresh(); };
         foreach (var (kind, title, text) in AppFaces.Kinds)
         {
             var entry = new Grid { ColumnSpacing = 12 };
@@ -40,17 +41,19 @@ public sealed partial class AppsPage : UserControl, IPage
     public async Task Refresh()
     {
         var to = Math.Min(_period.To, DateTimeOffset.Now.ToUnixTimeSeconds() + 1);
-        var r = await Service.Call<UsageReport>("usage", _period.From, to);
-        PeriodText.Text = _period.Label;
+        var network = Networks.Selected;
+        var r = await Service.Call<UsageReport>("usage", _period.From, to, network: network);
+        PeriodText.Text = _period.Label + Networks.On;
         TotalText.Text = Fmt.Bytes(r.NetIn + r.NetOut);
         DownText.Text = Fmt.Bytes(r.NetIn);
         UpText.Text = Fmt.Bytes(r.NetOut);
         var rows = await AppRow.From(r);
         // A refresh changes only the figures that moved; a new period starts again from the top.
-        var key = $"{_period.Kind}:{_period.From}";
+        var key = $"{_period.Kind}:{_period.From}:{network}";
         _rows.Sync(rows);
         if (key != _shown && _rows.Count > 0) List.ScrollIntoView(_rows[0]);
         _shown = key;
+        Empty.Text = network is null ? "No app has used the internet in this period." : "No app has used the internet on this network in this period.";
         Empty.Visibility = rows.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
     }
 
