@@ -1,11 +1,10 @@
 # Changelog
 
-## Unreleased
+## 1.2.5
 
 - Ultra performance, in Settings > General: solid glass, a plain window and no animations, for the least processor while the window is open (about 4% of one core on the Overview instead of 14%, on the PC this was measured on).
 - Lighter with the glass on too: about 14% of one core on the Overview instead of 20%. The glass no longer redraws its blur when nothing behind it moved, and the dot by "Live" no longer breathes, which kept the whole window redrawing.
 - Much less memory in the tray: hidden, the app hands its memory back to Windows, about 20 to 40 MB in use instead of 200.
-- The README lists minimum and recommended requirements, with what the app uses, measured.
 
 ## 1.2.4
 
