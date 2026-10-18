@@ -128,7 +128,7 @@ public class DatabaseTests
     public void AForgottenDeviceComesBackWhenSeenButNotAsNew()
     {
         using var db = Database.InMemory();
-        var d = new DeviceInfo("AA:BB:CC:DD:EE:FF", "192.168.1.9", "Tems-iPhone", true, false, false, 1, 1);
+        var d = new DeviceInfo("AA:BB:CC:DD:EE:FF", "192.168.1.9", "Omars-iPhone", true, false, false, 1, 1);
         Assert.True(db.SaveDevice(d));
         db.RenameDevice(d.Mac, "Mum's phone");
         Assert.True(db.ForgetDevice(d.Mac, 10));
@@ -147,16 +147,16 @@ public class DatabaseTests
     public void MergingKeepsYourNameAndWhenItWasFirstSeen()
     {
         using var db = Database.InMemory();
-        db.SaveDevice(new DeviceInfo("AA:00:00:00:00:01", "192.168.1.9", "Tems-iPhone", true, false, false, 100, 200));
-        db.RenameDevice("AA:00:00:00:00:01", "Tem's phone");
+        db.SaveDevice(new DeviceInfo("AA:00:00:00:00:01", "192.168.1.9", "Omars-iPhone", true, false, false, 100, 200));
+        db.RenameDevice("AA:00:00:00:00:01", "Omar's phone");
         db.MergeDevice("AA:00:00:00:00:01", "AA:00:00:00:00:02"); // the new address isn't listed yet: the row moves
         var moved = Assert.Single(db.Devices());
-        Assert.Equal(("AA:00:00:00:00:02", "Tem's phone", 100L), (moved.Mac, moved.CustomName, moved.FirstSeen));
+        Assert.Equal(("AA:00:00:00:00:02", "Omar's phone", 100L), (moved.Mac, moved.CustomName, moved.FirstSeen));
 
-        db.SaveDevice(new DeviceInfo("AA:00:00:00:00:03", "192.168.1.10", "Tems-iPhone", true, false, false, 300, 300));
+        db.SaveDevice(new DeviceInfo("AA:00:00:00:00:03", "192.168.1.10", "Omars-iPhone", true, false, false, 300, 300));
         db.MergeDevice("AA:00:00:00:00:02", "AA:00:00:00:00:03"); // both listed: the old one folds into the new
         var merged = Assert.Single(db.Devices());
-        Assert.Equal(("AA:00:00:00:00:03", "Tem's phone", 100L), (merged.Mac, merged.CustomName, merged.FirstSeen));
+        Assert.Equal(("AA:00:00:00:00:03", "Omar's phone", 100L), (merged.Mac, merged.CustomName, merged.FirstSeen));
     }
 
     [Fact]

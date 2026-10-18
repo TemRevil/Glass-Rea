@@ -191,11 +191,11 @@ public class PresenceTests
     {
         var known = new[]
         {
-            P("AA:00:00:00:00:01", "Tems-iPhone", lastSeen: Now - 86400),
-            P("AA:00:00:00:00:02", "Tems-iPhone", lastSeen: Now - 3600),   // the newest earlier address wins
+            P("AA:00:00:00:00:01", "Omars-iPhone", lastSeen: Now - 86400),
+            P("AA:00:00:00:00:02", "Omars-iPhone", lastSeen: Now - 3600),   // the newest earlier address wins
             P("AA:00:00:00:00:03", "Sara's iPad"),
         };
-        var incoming = P("AA:00:00:00:00:09", "tems-iphone");
+        var incoming = P("AA:00:00:00:00:09", "omars-iphone");
         Assert.Equal("AA:00:00:00:00:02", DeviceScanner.Previous(incoming, known, new HashSet<string> { "AA:00:00:00:00:09" })?.Mac);
     }
 
@@ -203,13 +203,13 @@ public class PresenceTests
     public void TwoDevicesAreNeverTakenForOne()
     {
         var here = new HashSet<string> { "AA:00:00:00:00:01", "AA:00:00:00:00:09" };
-        var known = new[] { P("AA:00:00:00:00:01", "Tems-iPhone") };
-        Assert.Null(DeviceScanner.Previous(P("AA:00:00:00:00:09", "Tems-iPhone"), known, here));              // both here at once
+        var known = new[] { P("AA:00:00:00:00:01", "Omars-iPhone") };
+        Assert.Null(DeviceScanner.Previous(P("AA:00:00:00:00:09", "Omars-iPhone"), known, here));              // both here at once
         var gone = new HashSet<string> { "AA:00:00:00:00:09" };
         Assert.Null(DeviceScanner.Previous(P("AA:00:00:00:00:09", "iPhone"), [P("AA:00:00:00:00:01", "iPhone")], gone)); // a maker's default name
         Assert.Null(DeviceScanner.Previous(P("AA:00:00:00:00:09", null), [P("AA:00:00:00:00:01", null)], gone));         // no name at all
-        Assert.Null(DeviceScanner.Previous(P("AA:00:00:00:00:09", "Tems-iPhone", randomized: false), known, gone));     // a fixed address is its own device
-        Assert.Null(DeviceScanner.Previous(P("AA:00:00:00:00:09", "Tems-iPhone", network: Cafe), known, gone));         // another network
+        Assert.Null(DeviceScanner.Previous(P("AA:00:00:00:00:09", "Omars-iPhone", randomized: false), known, gone));     // a fixed address is its own device
+        Assert.Null(DeviceScanner.Previous(P("AA:00:00:00:00:09", "Omars-iPhone", network: Cafe), known, gone));         // another network
     }
 
     [Fact]
@@ -221,10 +221,10 @@ public class PresenceTests
         Assert.Equal("2 hours 5 minutes", AlertText.Span(2 * 3600 + 5 * 60));
         Assert.Equal("1 day 3 hours", AlertText.Span(27 * 3600 + 59));
         Assert.Equal("2 days", AlertText.Span(2 * 86400));
-        var (title, body) = AlertText.DeviceBack("Tems-iPhone", "192.168.1.13", 3 * 3600);
-        Assert.Equal("Tems-iPhone is back on your network", title);
+        var (title, body) = AlertText.DeviceBack("Omars-iPhone", "192.168.1.13", 3 * 3600);
+        Assert.Equal("Omars-iPhone is back on your network", title);
         Assert.Equal("Away for 3 hours, now at 192.168.1.13.", body);
-        Assert.Equal("Tems-iPhone left your network", AlertText.DeviceLeft("Tems-iPhone", "192.168.1.13", 900).Title);
+        Assert.Equal("Omars-iPhone left your network", AlertText.DeviceLeft("Omars-iPhone", "192.168.1.13", 900).Title);
     }
 }
 

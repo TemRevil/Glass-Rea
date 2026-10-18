@@ -267,8 +267,8 @@ public class AlertTextTests
     public void ADeviceOnANewAddressIsStillReported()
     {
         // Anyone can give a device a known phone's name, so taking it for that phone is said out loud.
-        var (title, body) = AlertText.DeviceNewAddress("Tems-iPhone", "192.168.1.40", "AA:00:00:00:00:09");
-        Assert.Equal("Tems-iPhone is on a new private address", title);
+        var (title, body) = AlertText.DeviceNewAddress("Omars-iPhone", "192.168.1.40", "AA:00:00:00:00:09");
+        Assert.Equal("Omars-iPhone is on a new private address", title);
         Assert.Contains("192.168.1.40", body);
         Assert.Contains("AA:00:00:00:00:09", body);
         Assert.Contains("Forget", body);

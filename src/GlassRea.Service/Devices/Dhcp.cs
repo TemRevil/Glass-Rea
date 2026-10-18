@@ -7,7 +7,7 @@ public sealed record DhcpRequest(byte[] Mac, string? HostName, string? VendorCla
 
 /// <summary>
 /// DHCP client messages (RFC 2131). A phone or laptop joining the network broadcasts a DISCOVER and a REQUEST that
-/// carry its name ("Tems-iPhone", "Galaxy-S23") and often its system ("android-dhcp-14", "MSFT 5.0"). That name is
+/// carry its name ("Omars-iPhone", "Galaxy-S23") and often its system ("android-dhcp-14", "MSFT 5.0"). That name is
 /// what routers show in their client list. Packets come from any device on the network, so parsing is strict.
 /// </summary>
 public static class Dhcp

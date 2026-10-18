@@ -170,8 +170,8 @@ public class DhcpTests
     [Fact]
     public void ReadsTheNameAPhoneJoinsWith()
     {
-        var r = Dhcp.ParseRequest(Packet(1, (53, [3]), (12, Ascii("Tems-iPhone")), (55, [1, 3, 6])))!;
-        Assert.Equal("Tems-iPhone", r.HostName);
+        var r = Dhcp.ParseRequest(Packet(1, (53, [3]), (12, Ascii("Omars-iPhone")), (55, [1, 3, 6])))!;
+        Assert.Equal("Omars-iPhone", r.HostName);
         Assert.Equal("449E8B010203", Convert.ToHexString(r.Mac));
         var android = Dhcp.ParseRequest(Packet(1, (53, [1]), (60, Ascii("android-dhcp-14")), (12, Ascii("Galaxy-S23"))))!;
         Assert.Equal(("Galaxy-S23", "android-dhcp-14"), (android.HostName, android.VendorClass));
@@ -194,7 +194,7 @@ public class DhcpTests
         Assert.Null(Dhcp.ParseRequest(new byte[100]));
         var bad = Packet(1, (53, [3]), (12, [0x41, 0x01, 0x42]));                    // control characters
         Assert.Null(Dhcp.ParseRequest(bad)!.HostName);
-        var cut = Packet(1, (53, [3]), (12, Ascii("Tems-iPhone")));
+        var cut = Packet(1, (53, [3]), (12, Ascii("Omars-iPhone")));
         Assert.Null(Dhcp.ParseRequest(cut[..^6])!.HostName);                         // option runs past the end
     }
 }
@@ -231,8 +231,8 @@ public class DeviceClassifierTests
     [Fact]
     public void AppleModelsSayExactlyWhatTheyAre()
     {
-        var phone = Of(e => { e.Txt["rpMd"] = "iPhone15,2"; e.InstanceNames.Add("Tem's iPhone"); });
-        Assert.Equal(new DeviceIdentity("Tem's iPhone", "iPhone", DeviceKinds.Phone, DeviceOs.Ios), phone);
+        var phone = Of(e => { e.Txt["rpMd"] = "iPhone15,2"; e.InstanceNames.Add("Omar's iPhone"); });
+        Assert.Equal(new DeviceIdentity("Omar's iPhone", "iPhone", DeviceKinds.Phone, DeviceOs.Ios), phone);
         Assert.Equal((DeviceKinds.Computer, DeviceOs.MacOs, "MacBook Pro"), Of(e => e.Txt["model"] = "MacBookPro18,3") is var m ? (m.Kind, m.Os, m.Model) : default);
         Assert.Equal(DeviceKinds.Tv, Of(e => e.Txt["model"] = "AppleTV11,1").Kind);
     }
@@ -244,7 +244,7 @@ public class DeviceClassifierTests
         Assert.Equal("Kitchen speaker", Of(e => { e.Txt["fn"] = "Kitchen speaker"; e.HostNames.Add("abc.local"); }).Name);
         Assert.Null(Of(e => e.InstanceNames.Add("3f2a9c1b7d6e5f40a1b2")).Name);
         Assert.Equal("Google Nest Mini", Of(e => e.InstanceNames.Add("Google Nest Mini-3f2a9c1b7d6e5f40a1b2")).Name);
-        Assert.Equal("Tems-iPhone", Of(e => { e.DhcpName = "Tems-iPhone"; e.ReverseDns = "192-168-1-3.lan"; }).Name);
+        Assert.Equal("Omars-iPhone", Of(e => { e.DhcpName = "Omars-iPhone"; e.ReverseDns = "192-168-1-3.lan"; }).Name);
         Assert.Null(Of(e => e.ReverseDns = "192-168-1-3.lan").Name);
     }
 
@@ -260,7 +260,7 @@ public class DeviceClassifierTests
     [Fact]
     public void NamesAndDhcpTellTheKind()
     {
-        Assert.Equal((DeviceKinds.Phone, DeviceOs.Ios), Of(e => e.DhcpName = "Tems-iPhone") is var i ? (i.Kind, i.Os) : default);
+        Assert.Equal((DeviceKinds.Phone, DeviceOs.Ios), Of(e => e.DhcpName = "Omars-iPhone") is var i ? (i.Kind, i.Os) : default);
         Assert.Equal(DeviceKinds.Printer, Of(e => e.HostNames.Add("HP3F2A9C.local")).Kind);
         Assert.Equal((DeviceKinds.Phone, DeviceOs.Android), Of(e => e.DhcpVendor = "android-dhcp-14") is var d ? (d.Kind, d.Os) : default);
         Assert.Equal((DeviceKinds.Computer, DeviceOs.Windows), Of(e => e.DhcpVendor = "MSFT 5.0") is var w ? (w.Kind, w.Os) : default);
@@ -308,8 +308,8 @@ public class DeviceClassifierTests
     [Fact]
     public void HintsSurviveStorage()
     {
-        var e = new DeviceEvidence { DhcpName = "Tems-iPhone", DhcpVendor = "x" };
-        e.HostNames.Add("tems.local"); e.InstanceNames.Add("Tem's iPhone"); e.Services.Add("_companion-link._tcp"); e.Txt["rpMd"] = "iPhone15,2";
+        var e = new DeviceEvidence { DhcpName = "Omars-iPhone", DhcpVendor = "x" };
+        e.HostNames.Add("omars.local"); e.InstanceNames.Add("Omar's iPhone"); e.Services.Add("_companion-link._tcp"); e.Txt["rpMd"] = "iPhone15,2";
         var back = new DeviceEvidence();
         back.AddHints(e.Hints());
         Assert.Equal(e.Hints().OrderBy(h => h.Key), back.Hints().OrderBy(h => h.Key));
@@ -363,7 +363,7 @@ public class DeviceLabelTests
     [Fact]
     public void FallsBackFromNameToWhatItIs()
     {
-        Assert.Equal("Tems-iPhone", DeviceLabel.For(D("Tems-iPhone", "Apple", DeviceKinds.Phone, DeviceOs.Ios)));
+        Assert.Equal("Omars-iPhone", DeviceLabel.For(D("Omars-iPhone", "Apple", DeviceKinds.Phone, DeviceOs.Ios)));
         Assert.Equal("iPhone", DeviceLabel.For(D(kind: DeviceKinds.Phone, os: DeviceOs.Ios, randomized: true)));
         Assert.Equal("Samsung phone", DeviceLabel.For(D(vendor: "Samsung", kind: DeviceKinds.Phone, os: DeviceOs.Android)));
         Assert.Equal("Android phone", DeviceLabel.For(D(kind: DeviceKinds.Phone, os: DeviceOs.Android)));
@@ -383,11 +383,11 @@ public class DeviceStorageTests
     public void KeepsWhatWasLearnedWhenAScanKnowsLess()
     {
         using var db = Database.InMemory();
-        var d = new DeviceInfo("AA:BB:CC:DD:EE:FF", "192.168.1.9", "Tems-iPhone", false, false, false, 1, 1, "Apple", "iPhone", DeviceKinds.Phone, DeviceOs.Ios);
+        var d = new DeviceInfo("AA:BB:CC:DD:EE:FF", "192.168.1.9", "Omars-iPhone", false, false, false, 1, 1, "Apple", "iPhone", DeviceKinds.Phone, DeviceOs.Ios);
         db.SaveDevice(d);
         db.SaveDevice(d with { Name = null, Model = null, Kind = DeviceKinds.Unknown, Os = null, LastSeen = 9 });
         var back = Assert.Single(db.Devices());
-        Assert.Equal(("Tems-iPhone", "iPhone", DeviceKinds.Phone, DeviceOs.Ios, 9L), (back.Name, back.Model, back.Kind, back.Os, back.LastSeen));
+        Assert.Equal(("Omars-iPhone", "iPhone", DeviceKinds.Phone, DeviceOs.Ios, 9L), (back.Name, back.Model, back.Kind, back.Os, back.LastSeen));
         db.SaveDevice(d with { Kind = DeviceKinds.Tablet, Os = DeviceOs.IpadOs });
         Assert.Equal(DeviceKinds.Tablet, Assert.Single(db.Devices()).Kind);
     }
@@ -397,7 +397,7 @@ public class DeviceStorageTests
     {
         using var db = Database.InMemory();
         db.SaveDeviceHints("AA:BB:CC:DD:EE:01", Enumerable.Range(0, 100).Select(i => ($"host:h{i}.local", "")), 1000);
-        db.SaveDeviceHints("AA:BB:CC:DD:EE:01", [("dhcp_name", "Tems-iPhone")], 1000);
+        db.SaveDeviceHints("AA:BB:CC:DD:EE:01", [("dhcp_name", "Omars-iPhone")], 1000);
         Assert.Equal(64, db.DeviceHints()["AA:BB:CC:DD:EE:01"].Count);
         db.SaveDeviceHints("AA:BB:CC:DD:EE:01", [("host:h0.local", "updated")], 2000);
         Assert.Contains(("host:h0.local", "updated"), db.DeviceHints()["AA:BB:CC:DD:EE:01"]);

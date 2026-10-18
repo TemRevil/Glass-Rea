@@ -7,11 +7,11 @@ namespace GlassRea.Service.Devices;
 public sealed class DeviceEvidence
 {
     public HashSet<string> HostNames { get; } = new(StringComparer.OrdinalIgnoreCase);   // Bonjour, NetBIOS, DNS
-    public List<string> InstanceNames { get; } = [];                                        // "Tem's iPhone", from Bonjour services
+    public List<string> InstanceNames { get; } = [];                                        // "Omar's iPhone", from Bonjour services
     public HashSet<string> Services { get; } = new(StringComparer.OrdinalIgnoreCase);     // "_googlecast._tcp"
     public Dictionary<string, string> Txt { get; } = new(StringComparer.OrdinalIgnoreCase); // model=, md=, fn=, ty=
     public string? NetBiosName { get; set; }
-    public string? DhcpName { get; set; }    // what the device sends when it joins the network: "Tems-iPhone"
+    public string? DhcpName { get; set; }    // what the device sends when it joins the network: "Omars-iPhone"
     public string? DhcpVendor { get; set; }  // DHCP option 60: "android-dhcp-14", "MSFT 5.0"
     public HashSet<int> OpenPorts { get; } = [];
     public UpnpDescription? Upnp { get; set; }
@@ -73,7 +73,7 @@ public static partial class DeviceClassifier
 
     public static string? BestName(DeviceEvidence e)
     {
-        // A name someone gave it ("Living Room TV", "Tem's iPhone") beats a host name.
+        // A name someone gave it ("Living Room TV", "Omar's iPhone") beats a host name.
         var given = new[] { e.Txt.GetValueOrDefault("fn"), e.Upnp?.FriendlyName }.Concat(e.InstanceNames)
             .Select(Tidy).FirstOrDefault(n => n is not null && !LooksLikeId(n));
         if (given is not null) return given;
@@ -82,7 +82,7 @@ public static partial class DeviceClassifier
         return host;
     }
 
-    /// <summary>"Tems-iPhone.local" → "Tems-iPhone"; "galaxy-s23.lan" → "galaxy-s23"; drops router-made names like "192-168-1-5".</summary>
+    /// <summary>"Omars-iPhone.local" → "Omars-iPhone"; "galaxy-s23.lan" → "galaxy-s23"; drops router-made names like "192-168-1-5".</summary>
     public static string? HostLabel(string? host)
     {
         if (string.IsNullOrWhiteSpace(host)) return null;

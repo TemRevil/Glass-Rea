@@ -7,7 +7,7 @@ namespace GlassRea.Service;
 
 /// <summary>
 /// Listens for devices introducing themselves: the DHCP request a device broadcasts when it joins (carrying the name
-/// routers show, like "Tems-iPhone") and the Bonjour announcements phones and Macs multicast when they wake. Nothing
+/// routers show, like "Omars-iPhone") and the Bonjour announcements phones and Macs multicast when they wake. Nothing
 /// is sent. What's heard is stored per hardware address for <see cref="DeviceScanner"/>, and a device joining
 /// triggers a scan straight away.
 /// </summary>
