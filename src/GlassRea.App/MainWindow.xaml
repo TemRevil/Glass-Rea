@@ -71,7 +71,8 @@
                          Message="Nothing is being recorded right now. It starts with Windows; if it stays stopped, run the installer again." />
             </Grid>
 
-            <!-- The floating bar: one glass capsule of tabs, and a separate round button for light and dark. -->
+            <!-- The floating bar: one glass capsule of tabs, the network every page counts (once there are two), and a
+                 separate round button for light and dark. -->
             <StackPanel x:Name="Dock" Orientation="Horizontal" Spacing="10" HorizontalAlignment="Center" VerticalAlignment="Bottom" Margin="0,0,0,18">
                 <c:Glass x:Name="TabsGlass" Padding="4">
                     <Grid>
@@ -79,6 +80,9 @@
                         <Border x:Name="LensHost" IsHitTestVisible="False" />
                         <StackPanel x:Name="Tabs" Orientation="Horizontal" Spacing="2" />
                     </Grid>
+                </c:Glass>
+                <c:Glass x:Name="NetworkGlass" Height="46" Padding="0" Pressable="True" Visibility="Collapsed">
+                    <c:NetworkSwitch x:Name="NetworkSwitch" Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
                 </c:Glass>
                 <c:Glass x:Name="ThemeGlass" Width="46" Height="46" Padding="0" Pressable="True">
                     <Button x:Name="ThemeButton" Style="{StaticResource TabButton}" Padding="0" Width="46" Height="46"

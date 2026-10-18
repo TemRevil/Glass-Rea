@@ -30,8 +30,7 @@ public sealed partial class ConnectionsPage : UserControl, IPage
         InitializeComponent();
         Apps.ItemsSource = _apps;
         Hosts.ItemsSource = _hosts;
-        // The list is narrow: the network goes under the period.
-        PickerHost.Content = new StackPanel { Spacing = 8, Children = { _period, new NetworkPicker { HorizontalAlignment = HorizontalAlignment.Left } } };
+        PickerHost.Content = _period;
         _period.Changed += () => _ = Refresh();
         Networks.Changed += () => { if (IsLoaded) _ = Refresh(); };
     }

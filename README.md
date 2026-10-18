@@ -112,7 +112,9 @@ Limits are different: they count what crossed your internet connection, as your 
 <summary><b>📶 How networks are told apart</b></summary>
 <br/>
 
-Each hour's use is kept with the network it went over: the one Windows names in its network settings ("Home", "Network 2"), which you can rename. Windows tells networks apart by the router and, on Wi-Fi, the network's name, so a cafe's Wi-Fi and your home Wi-Fi are separate even if they share a name. Wired and mobile networks count too. A VPN isn't a network of its own: its use counts on the Wi-Fi or cable it runs over.
+Each hour's use is kept with the network it went over. A Wi-Fi goes by its own name, hidden or not, so it stays one network even when Windows remembers it twice ("Home" and "Home 2", as it does when the same Wi-Fi comes from a new router or another access point). Wired and mobile networks go by the name Windows gives them ("Network 2"). You can rename any of them. A VPN isn't a network of its own: its use counts on the Wi-Fi or cable it runs over.
+
+The network switch in the floating bar, next to the light and dark button, picks the network every page counts: all of them, or one. It shows once there's more than one network, and keeps your choice.
 
 History imported from Windows is placed on its Wi-Fi network where Windows recorded which one. Use it can't place, such as over a cable before Glass-Rea counted per network, is shown as "Unknown network". Limits always count every network together.
 

@@ -34,6 +34,10 @@ public static class HistoryNetworks
         return totals;
     }
 
+    /// <summary>What of an hour's <paramref name="total"/> on a network isn't on it yet, when <paramref name="placed"/> already is.</summary>
+    public static HistoryTotal Rest(HistoryTotal total, HistoryTotal placed) => new(
+        Math.Max(0, total.In - placed.In), Math.Max(0, total.Out - placed.Out), Math.Max(0, total.TunIn - placed.TunIn), Math.Max(0, total.TunOut - placed.TunOut));
+
     /// <summary>The network of each history hour in which this PC's own adapters (not a VPN's) used one known network and no other.</summary>
     public static Dictionary<long, string> HourNetworks(IEnumerable<HistoryRow> rows)
     {

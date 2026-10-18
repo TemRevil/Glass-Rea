@@ -84,7 +84,8 @@ public static class Fmt
 /// </summary>
 public static class Networks
 {
-    public static long? Selected { get; private set; }
+    /// <summary>The network the pages count, null for all of them; kept for next time (<see cref="PreferencesState.Network"/>).</summary>
+    public static long? Selected { get; private set; } = Preferences.State.Network;
     /// <summary>The networks the service knows, as it last listed them.</summary>
     public static IReadOnlyList<NetworkInfo> Known { get; private set; } = [];
 
@@ -93,20 +94,21 @@ public static class Networks
     /// <summary>Raised when the list or a name in it changed, so pickers show it.</summary>
     public static event Action? ListChanged;
 
-    /// <summary>Takes the service's list. A picked network that's no longer in it goes back to all networks.</summary>
+    /// <summary>Takes the service's list. A picked network that's no longer in it, or the only one, goes back to all networks.</summary>
     public static void Use(List<NetworkInfo> list)
     {
         static string Shape(IEnumerable<NetworkInfo> l) => string.Join("\n", l.Select(n => $"{n.Id}\t{NetworkLabel.For(n)}\t{n.Kind}\t{n.Current}"));
         if (Shape(list) == Shape(Known)) return;
         Known = list;
         ListChanged?.Invoke();
-        if (Selected is { } id && list.All(n => n.Id != id)) Select(null);
+        if (Selected is { } id && (list.Count < 2 || list.All(n => n.Id != id))) Select(null);
     }
 
     public static void Select(long? id)
     {
         if (id == Selected) return;
         Selected = id;
+        Preferences.Update(s => s.Network = id);
         Changed?.Invoke();
     }
 

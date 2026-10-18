@@ -31,7 +31,7 @@ public sealed class SrumImporter(Database db, ServiceState state, ProcessResolve
     {
         var imported = (db.GetSetting(SettingKeys.SrumState) ?? "").StartsWith("Imported", StringComparison.Ordinal);
         var tunnelsMarked = db.GetSetting(SettingKeys.SrumTunnelSplit) == "done";
-        var networksMarked = db.GetSetting(SettingKeys.SrumNetworks) == "done";
+        var networksMarked = db.GetSetting(SettingKeys.SrumNetworks) == SettingKeys.SrumNetworksDone;
         if (imported && tunnelsMarked && networksMarked) return;
         while (state.FirstLiveHour == 0) await Task.Delay(TimeSpan.FromSeconds(5), ct);
         await Task.Delay(TimeSpan.FromSeconds(15), ct);
@@ -44,7 +44,7 @@ public sealed class SrumImporter(Database db, ServiceState state, ProcessResolve
                     var history = Read(path, ct);
                     // VPN traffic first: it's marked on the rows as imported, which the networks pass then divides up.
                     if (!tunnelsMarked) { Split(history); db.SetSetting(SettingKeys.SrumTunnelSplit, "done"); }
-                    if (!networksMarked) { PlaceOnNetworks(history); db.SetSetting(SettingKeys.SrumNetworks, "done"); }
+                    if (!networksMarked) { PlaceOnNetworks(history); db.SetSetting(SettingKeys.SrumNetworks, SettingKeys.SrumNetworksDone); }
                     return true;
                 }), ct);
             }
@@ -58,7 +58,7 @@ public sealed class SrumImporter(Database db, ServiceState state, ProcessResolve
             var summary = await Task.Run(() => WithCopy(path => Save(Read(path, ct))), ct);
             db.SetSetting(SettingKeys.SrumState, summary);
             db.SetSetting(SettingKeys.SrumTunnelSplit, "done");
-            db.SetSetting(SettingKeys.SrumNetworks, "done");
+            db.SetSetting(SettingKeys.SrumNetworks, SettingKeys.SrumNetworksDone);
             log.LogInformation("{Summary}", summary);
         }
         catch (OperationCanceledException) { db.SetSetting(SettingKeys.SrumState, "pending"); }
@@ -243,18 +243,22 @@ public sealed class SrumImporter(Database db, ServiceState state, ProcessResolve
     }
 
     /// <summary>
-    /// Puts what was recorded before networks were on the networks Windows' history shows: each imported hour as the
+    /// Puts what was recorded on no known network on the networks Windows' history shows: each imported hour as the
     /// history splits it, a live hour when the history has this PC on one network all through it, and a day's hosts
-    /// when all of its live hours were. The rest stays on no known network.
+    /// when all of its live hours were. The rest stays on no known network. Run again (once Wi-Fi was named better), it
+    /// puts only what isn't there yet.
     /// </summary>
     private void PlaceOnNetworks(History history)
     {
         var ids = new Dictionary<string, long>();
         var networks = NetworkIds(history);
+        var placed = db.ImportedOnNetworks();
         var moves = HistoryNetworks.Totals(Earlier(history))
             .Where(kv => kv.Key.Network is not null)
-            .Select(kv => new NetworkMove(AppId(ids, kv.Key.App), kv.Key.Hour, UsageSource.WindowsHistory, networks(kv.Key.Network),
-                kv.Value.In, kv.Value.Out, kv.Value.TunIn, kv.Value.TunOut))
+            .Select(kv => (App: AppId(ids, kv.Key.App), kv.Key.Hour, Network: networks(kv.Key.Network), Total: kv.Value))
+            .Select(m => (m.App, m.Hour, m.Network, Left: HistoryNetworks.Rest(m.Total, placed.GetValueOrDefault((m.App, m.Hour, m.Network)))))
+            .Where(m => m.Left.In + m.Left.Out > 0)
+            .Select(m => new NetworkMove(m.App, m.Hour, UsageSource.WindowsHistory, m.Network, m.Left.In, m.Left.Out, m.Left.TunIn, m.Left.TunOut))
             .ToList();
         var live = HistoryNetworks.LiveHours(HistoryNetworks.HourNetworks(history.Rows)).ToDictionary(kv => kv.Key, kv => networks(kv.Value));
         var unknown = db.UnknownLive();
@@ -262,7 +266,8 @@ public sealed class SrumImporter(Database db, ServiceState state, ProcessResolve
         var days = HistoryNetworks.WholeDays(unknown.Select(u => u.Hour), live);
         var moved = db.AssignNetworks(moves);
         db.AssignHostNetworks(days.Select(kv => (kv.Key, kv.Value)));
-        log.LogInformation("Put {Rows} hours of earlier use and {Days} days of hosts on the networks Windows' history shows", moved, days.Count);
+        log.LogInformation("Put {Rows} hours of use and {Days} days of hosts on the networks Windows' history shows; {Live} of {Unknown} live hours on no known network were placed",
+            moved, days.Count, unknown.Select(u => u.Hour).Distinct().Count(live.ContainsKey), unknown.Select(u => u.Hour).Distinct().Count());
     }
 
     /// <summary>The database id of each network the history names, added as they're first asked for; 0 for none.</summary>

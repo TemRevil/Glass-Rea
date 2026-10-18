@@ -352,6 +352,77 @@ public sealed class Database : IDisposable
         }
     }
 
+    /// <summary>
+    /// Gives the network listed as <paramref name="oldKey"/> the key <paramref name="key"/> and Windows' name
+    /// <paramref name="name"/>. When <paramref name="key"/> is listed already, the two are one network from now on: the
+    /// old one's use and hosts join it, keeping every total, and a name you gave either stays. False when
+    /// <paramref name="oldKey"/> isn't listed.
+    /// </summary>
+    public bool Rekey(string oldKey, string key, string name)
+    {
+        lock (_gate)
+        {
+            using var tx = _db.BeginTransaction();
+            using var find = Cmd("SELECT id FROM networks WHERE key=$k", ("$k", oldKey));
+            if (find.ExecuteScalar() is not long from) return false;
+            using var target = Cmd("SELECT id FROM networks WHERE key=$k", ("$k", key));
+            if (target.ExecuteScalar() is long into)
+            {
+                foreach (var sql in new[]
+                {
+                    """
+                    INSERT INTO usage(app_id,hour,source,network,net_in,net_out,lan_in,lan_out,tun_in,tun_out)
+                    SELECT app_id,hour,source,$into,net_in,net_out,lan_in,lan_out,tun_in,tun_out FROM usage WHERE network=$from
+                    ON CONFLICT(app_id,hour,source,network) DO UPDATE SET net_in=net_in+excluded.net_in, net_out=net_out+excluded.net_out,
+                      lan_in=lan_in+excluded.lan_in, lan_out=lan_out+excluded.lan_out, tun_in=tun_in+excluded.tun_in, tun_out=tun_out+excluded.tun_out
+                    """,
+                    """
+                    INSERT INTO hosts(app_id,day,ip,network,bytes_in,bytes_out,last_seen)
+                    SELECT app_id,day,ip,$into,bytes_in,bytes_out,last_seen FROM hosts WHERE network=$from
+                    ON CONFLICT(app_id,day,ip,network) DO UPDATE SET bytes_in=bytes_in+excluded.bytes_in, bytes_out=bytes_out+excluded.bytes_out,
+                      last_seen=max(last_seen,excluded.last_seen)
+                    """,
+                    """
+                    UPDATE networks SET custom_name=coalesce(custom_name,(SELECT custom_name FROM networks WHERE id=$from)),
+                      first_seen=min(first_seen,(SELECT first_seen FROM networks WHERE id=$from)),
+                      last_seen=max(last_seen,(SELECT last_seen FROM networks WHERE id=$from))
+                    WHERE id=$into
+                    """,
+                    "DELETE FROM usage WHERE network=$from",
+                    "DELETE FROM hosts WHERE network=$from",
+                    "DELETE FROM networks WHERE id=$from",
+                })
+                {
+                    // Each statement binds the ids it names.
+                    using var c = Cmd(sql, new (string, object?)[] { ("$from", from), ("$into", into) }.Where(p => sql.Contains(p.Item1)).ToArray());
+                    c.ExecuteNonQuery();
+                }
+                from = into;
+            }
+            using var rename = Cmd("UPDATE networks SET key=$k, name=$n WHERE id=$i", ("$k", key), ("$n", name), ("$i", from));
+            rename.ExecuteNonQuery();
+            tx.Commit();
+            return true;
+        }
+    }
+
+    /// <summary>
+    /// What each app's imported hours already hold on each known network: a later pass over Windows' history puts only
+    /// the rest there.
+    /// </summary>
+    public Dictionary<(long AppId, long Hour, long Network), HistoryTotal> ImportedOnNetworks()
+    {
+        lock (_gate)
+        {
+            using var c = Cmd("SELECT app_id,hour,network,net_in,net_out,tun_in,tun_out FROM usage WHERE source=$s AND network<>0",
+                ("$s", (long)UsageSource.WindowsHistory));
+            using var r = c.ExecuteReader();
+            var map = new Dictionary<(long, long, long), HistoryTotal>();
+            while (r.Read()) map[(r.GetInt64(0), r.GetInt64(1), r.GetInt64(2))] = new HistoryTotal(r.GetInt64(3), r.GetInt64(4), r.GetInt64(5), r.GetInt64(6));
+            return map;
+        }
+    }
+
     /// <summary>Each app and hour holding live use on no known network.</summary>
     public List<(long AppId, long Hour)> UnknownLive()
     {

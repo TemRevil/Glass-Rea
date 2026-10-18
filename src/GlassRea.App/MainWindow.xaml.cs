@@ -77,7 +77,8 @@ public sealed partial class MainWindow : Window
         _lens = new TabLens(LensHost);
         // The tabs change width when one turns bold, and with the text size; the pill follows to wherever the tab is now.
         Tabs.SizeChanged += (_, _) => { if (_current != "") MoveLens(animate: true); };
-        TabsGlass.BlurSource = ThemeGlass.BlurSource = Stage;
+        TabsGlass.BlurSource = NetworkGlass.BlurSource = ThemeGlass.BlurSource = Stage;
+        NetworkSwitch.ShownChanged += shown => NetworkGlass.Visibility = shown ? Visibility.Visible : Visibility.Collapsed;
         RatesGlass.BlurSource = Pulse;
         Pulse.TipAvoid = RatesGlass;
         Grid.SetRowSpan(_autoScroll, 3);
@@ -362,7 +363,7 @@ public sealed partial class MainWindow : Window
                     ? $"Recording since {Fmt.Date(status.TrackingSince)}"
                     : $"Not recording: {status.CaptureError ?? "starting"}";
                 Periods.Use(await Service.Call<Dictionary<string, string>>("settings")); // the reset day shapes "this month"
-                Networks.Use(await Service.Call<List<NetworkInfo>>("networks")); // for the network pickers
+                Networks.Use(await Service.Call<List<NetworkInfo>>("networks")); // for the network switch
                 var started = System.Diagnostics.Stopwatch.GetTimestamp();
                 await page.Refresh();
                 Log.IfSlow("Window", $"Refreshing the {_current} page", System.Diagnostics.Stopwatch.GetElapsedTime(started));

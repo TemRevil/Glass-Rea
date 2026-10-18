@@ -18,7 +18,7 @@ public sealed partial class AppsPage : UserControl, IPage
     {
         InitializeComponent();
         List.ItemsSource = _rows;
-        PickerHost.Content = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, Children = { new NetworkPicker(), _period } };
+        PickerHost.Content = _period;
         _period.Changed += () => _ = Refresh();
         Networks.Changed += () => { if (IsLoaded) _ = Refresh(); };
         foreach (var (kind, title, text) in AppFaces.Kinds)

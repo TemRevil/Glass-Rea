@@ -6,20 +6,22 @@ using Microsoft.Win32;
 
 namespace GlassRea.Service.Networks;
 
-/// <param name="Key">The id of Windows' profile for it, which stays the same for as long as Windows remembers the network.</param>
-/// <param name="Name">What Windows calls it ("Home", "Network 2").</param>
+/// <param name="Key">A Wi-Fi's name (<see cref="NetworkList.WifiKey"/>), or else the id of Windows' profile for it, which stays the
+/// same for as long as Windows remembers the network.</param>
+/// <param name="Name">The Wi-Fi's name, or what Windows calls a wired network ("Network 2").</param>
 /// <param name="Kind">One of <see cref="NetworkKinds"/>, when known.</param>
 public sealed record WindowsNetwork(string Key, string Name, string? Kind);
 
 /// <summary>
 /// Windows' own list of networks: the Network List Manager, and the profiles it keeps in the registry. Windows tells
 /// networks apart by the router's hardware address and, on Wi-Fi, the network's name, and remembers each one as a
-/// profile with the name shown in its Settings. That profile is what use is counted on.
+/// profile. A Wi-Fi is counted by its name (SSID): Windows makes a new profile ("Home 2") whenever the same Wi-Fi comes
+/// from another router or access point, and those are all the one Wi-Fi to whoever uses it. A wired or mobile network
+/// has no such name, so it's counted on its profile.
 /// </summary>
 public static class NetworkList
 {
     private const string ProfilesKey = @"SOFTWARE\Microsoft\Windows NT\CurrentVersion\NetworkList\Profiles";
-    private const string SignaturesKey = @"SOFTWARE\Microsoft\Windows NT\CurrentVersion\NetworkList\Signatures";
     private const string WlanKey = @"SOFTWARE\Microsoft\WlanSvc\Interfaces";
     private const int Internet = 0x40 | 0x400; // NLM_CONNECTIVITY_IPV4_INTERNET | NLM_CONNECTIVITY_IPV6_INTERNET
     private const int WirelessProfile = 71, WiredProfile = 6, MobileProfile = 243; // a profile's NameType
@@ -28,6 +30,11 @@ public static class NetworkList
         Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), @"Microsoft\Wlansvc\Profiles\Interfaces");
 
     public static string Key(Guid profile) => profile.ToString("B");
+
+    /// <summary>The key of the Wi-Fi named <paramref name="ssid"/>; never mistaken for a profile's id, which starts with "{".</summary>
+    public static string WifiKey(string ssid) => "wifi:" + ssid;
+
+    public static WindowsNetwork Wifi(string ssid) => new(WifiKey(ssid), ssid, NetworkKinds.WiFi);
 
     /// <summary>
     /// The network this PC's traffic goes out on now. Of the Wi-Fi, Ethernet and mobile adapters on a network Windows
@@ -61,15 +68,33 @@ public static class NetworkList
             .First();
         // Until Windows has identified a network it has no profile, and what it reports is a stand-in.
         if (Profile(best.Network) is not { } profile) return null;
+        var kind = KindOf(profile.NameType) ?? KindOf(best.Nic.NetworkInterfaceType);
+        if (kind == NetworkKinds.WiFi && profile.Ssid is { Length: > 0 } ssid) return Wifi(ssid);
         var name = string.IsNullOrWhiteSpace(best.Name) ? profile.Name : best.Name.Trim();
-        return new WindowsNetwork(Key(best.Network), name, KindOf(profile.NameType) ?? KindOf(best.Nic.NetworkInterfaceType));
+        return new WindowsNetwork(Key(best.Network), name, kind);
     }
 
-    private static (string Name, int NameType)? Profile(Guid id)
+    /// <summary>A profile's name, type and, for a Wi-Fi, the Wi-Fi's own name, which Windows keeps as its description.</summary>
+    private static (string Name, int NameType, string? Ssid)? Profile(Guid id)
     {
         using var key = Registry.LocalMachine.OpenSubKey($@"{ProfilesKey}\{id:B}");
         if (key is null) return null;
-        return ((key.GetValue("ProfileName") as string ?? "").Trim(), key.GetValue("NameType") is int type ? type : 0);
+        var type = key.GetValue("NameType") is int t ? t : 0;
+        var description = key.GetValue("Description") as string;
+        return ((key.GetValue("ProfileName") as string ?? "").Trim(), type, type == WirelessProfile && !string.IsNullOrEmpty(description) ? description : null);
+    }
+
+    /// <summary>
+    /// The Wi-Fi each of Windows' Wi-Fi profiles is, by the profile's key (<see cref="Key"/>): where use counted on a
+    /// profile, before Wi-Fi was counted by its name, belongs.
+    /// </summary>
+    public static Dictionary<string, WindowsNetwork> WifiByProfile()
+    {
+        var map = new Dictionary<string, WindowsNetwork>(StringComparer.OrdinalIgnoreCase);
+        using var profiles = Registry.LocalMachine.OpenSubKey(ProfilesKey);
+        foreach (var name in profiles?.GetSubKeyNames() ?? [])
+            if (Guid.TryParse(name, out var id) && Profile(id) is { Ssid: { } ssid }) map[Key(id)] = Wifi(ssid);
+        return map;
     }
 
     private static string? KindOf(int nameType) => nameType switch
@@ -89,58 +114,23 @@ public static class NetworkList
     };
 
     /// <summary>
-    /// The Windows network of each Wi-Fi profile number in Windows' usage history (its L2ProfileId). The history names
-    /// the Wi-Fi profile, which names the network's SSID; that SSID is matched to the one network Windows remembers by it.
+    /// The Wi-Fi of each Wi-Fi profile number in Windows' usage history (its L2ProfileId): the history names the saved
+    /// Wi-Fi profile, and the profile names the Wi-Fi, hidden or not.
     /// </summary>
     public static Dictionary<long, WindowsNetwork> WifiByHistoryProfile()
     {
-        var wlan = new List<(long Index, string Ssid)>();
-        using (var interfaces = Registry.LocalMachine.OpenSubKey(WlanKey))
-        {
-            foreach (var adapter in interfaces?.GetSubKeyNames() ?? [])
-            {
-                using var profiles = interfaces!.OpenSubKey($@"{adapter}\Profiles");
-                foreach (var profile in profiles?.GetSubKeyNames() ?? [])
-                {
-                    using var key = profiles!.OpenSubKey(profile);
-                    if (key?.GetValue("ProfileIndex") is not int index) continue;
-                    if (Ssid(Path.Combine(WlanProfiles, adapter, profile + ".xml")) is { } ssid) wlan.Add((unchecked((uint)index), ssid));
-                }
-            }
-        }
-
-        var signatures = new List<(string Ssid, Guid Profile)>();
-        var profilesById = new Dictionary<Guid, (string Name, int NameType)>();
-        foreach (var kind in new[] { "Managed", "Unmanaged" })
-        {
-            using var group = Registry.LocalMachine.OpenSubKey($@"{SignaturesKey}\{kind}");
-            foreach (var name in group?.GetSubKeyNames() ?? [])
-            {
-                using var signature = group!.OpenSubKey(name);
-                if (signature?.GetValue("FirstNetwork") is not string ssid || !Guid.TryParse(signature.GetValue("ProfileGuid") as string, out var id)) continue;
-                signatures.Add((ssid, id));
-                if (!profilesById.ContainsKey(id) && Profile(id) is { } p) profilesById[id] = p;
-            }
-        }
-        return MatchWifi(wlan, signatures, profilesById);
-    }
-
-    /// <summary>
-    /// Pairs Wi-Fi profiles with Windows networks by SSID. An SSID Windows remembers as more than one network (the same
-    /// name behind another router) is left unpaired, since the history doesn't say which.
-    /// </summary>
-    public static Dictionary<long, WindowsNetwork> MatchWifi(IEnumerable<(long Index, string Ssid)> wlan, IEnumerable<(string Ssid, Guid Profile)> signatures,
-        IReadOnlyDictionary<Guid, (string Name, int NameType)> profiles)
-    {
-        var bySsid = signatures
-            .Where(s => profiles.TryGetValue(s.Profile, out var p) && p.NameType == WirelessProfile)
-            .GroupBy(s => s.Ssid, StringComparer.Ordinal)
-            .Where(g => g.Select(s => s.Profile).Distinct().Count() == 1)
-            .ToDictionary(g => g.Key, g => g.First().Profile, StringComparer.Ordinal);
         var map = new Dictionary<long, WindowsNetwork>();
-        foreach (var (index, ssid) in wlan)
-            if (bySsid.TryGetValue(ssid, out var id))
-                map[index] = new WindowsNetwork(Key(id), profiles[id].Name is { Length: > 0 } name ? name : ssid, NetworkKinds.WiFi);
+        using var interfaces = Registry.LocalMachine.OpenSubKey(WlanKey);
+        foreach (var adapter in interfaces?.GetSubKeyNames() ?? [])
+        {
+            using var profiles = interfaces!.OpenSubKey($@"{adapter}\Profiles");
+            foreach (var profile in profiles?.GetSubKeyNames() ?? [])
+            {
+                using var key = profiles!.OpenSubKey(profile);
+                if (key?.GetValue("ProfileIndex") is not int index) continue;
+                if (Ssid(Path.Combine(WlanProfiles, adapter, profile + ".xml")) is { } ssid) map[unchecked((uint)index)] = Wifi(ssid);
+            }
+        }
         return map;
     }
 

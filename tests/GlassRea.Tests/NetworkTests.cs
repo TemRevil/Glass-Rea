@@ -200,6 +200,69 @@ public class NetworkDatabaseTests
     }
 
     [Fact]
+    public void TheProfilesOfOneWifiBecomeOneNetwork()
+    {
+        using var db = Database.InMemory();
+        var browser = db.EnsureApp(Browser, 0, out _);
+        var home = db.EnsureNetwork("{home}", "Home", NetworkKinds.WiFi, 100, 200);
+        var again = db.EnsureNetwork("{home-2}", "Home 2", NetworkKinds.WiFi, 50, 300);
+        var cafe = db.EnsureNetwork("{cafe}", "Cafe", NetworkKinds.WiFi, 1, 1);
+        Assert.True(db.RenameNetwork(again, "Flat"));
+        db.AddUsage([(browser, D(Hour, home, 100, 10)), (browser, D(Hour, again, 50, 5, lanIn: 3)), (browser, D(Hour + 1, again, 7, 1))], UsageSource.Live);
+        db.AddUsage([(browser, D(Hour, cafe, 1000, 100))], UsageSource.Live);
+        db.AddHosts([(browser, new HostDelta("", 20261016, "142.250.1.1", 10, 1, 99, home)), (browser, new HostDelta("", 20261016, "142.250.1.1", 20, 2, 120, again))]);
+        var before = db.Report(From, To, new HashSet<long>());
+
+        Assert.True(db.Rekey("{home}", "wifi:Home", "Home")); // the first profile just takes the Wi-Fi's key
+        Assert.True(db.Rekey("{home-2}", "wifi:Home", "Home")); // the second joins it
+        Assert.False(db.Rekey("{gone}", "wifi:Gone", "Gone"));
+
+        Assert.Equal(home, db.EnsureNetwork("wifi:Home", "Home", NetworkKinds.WiFi, 400, 400));
+        var listed = db.Networks(0);
+        Assert.Equal([home, cafe], listed.Select(n => n.Id).Order());
+        var h = listed.Single(n => n.Id == home);
+        Assert.Equal(("Home", "Flat", 50L, 400L), (h.Name, h.CustomName, h.FirstSeen, h.LastSeen));
+        var after = db.Report(From, To, new HashSet<long>());
+        Assert.Equal((before.NetIn, before.NetOut, before.Apps.Sum(a => a.LanIn)), (after.NetIn, after.NetOut, after.Apps.Sum(a => a.LanIn)));
+        var atHome = db.Report(From, To, new HashSet<long>(), home);
+        Assert.Equal((157L, 16L, 3L), (atHome.NetIn, atHome.NetOut, atHome.Apps.Single().LanIn));
+        Assert.Equal(0, db.Report(From, To, new HashSet<long>(), again).NetIn);
+        var host = Assert.Single(db.Hosts(browser, 20261016, 20261016, home));
+        Assert.Equal((30L, 3L, 120L), (host.In, host.Out, host.LastSeen));
+    }
+
+    [Fact]
+    public void ASecondPassOverWindowsHistoryPlacesOnlyWhatIsntPlacedYet()
+    {
+        using var db = Database.InMemory();
+        var browser = db.EnsureApp(Browser, 0, out _);
+        var home = db.EnsureNetwork("wifi:Home", "Home", NetworkKinds.WiFi, 1, 1);
+        var cafe = db.EnsureNetwork("wifi:Cafe", "Cafe", NetworkKinds.WiFi, 1, 1);
+        // The hour was 100 on Home and 50 on Cafe; the first pass knew only Home.
+        db.AddUsage([(browser, D(Hour, 0, 150, 15))], UsageSource.WindowsHistory);
+        db.AssignNetworks([new NetworkMove(browser, Hour, UsageSource.WindowsHistory, home, 100, 10, 0, 0)]);
+
+        var placed = db.ImportedOnNetworks();
+        Assert.Equal(new HistoryTotal(100, 10, 0, 0), placed[(browser, Hour, home)]);
+        var history = new[] { (Network: home, Total: new HistoryTotal(100, 10, 0, 0)), (Network: cafe, Total: new HistoryTotal(50, 5, 0, 0)) };
+        var moves = history
+            .Select(x => (x.Network, Left: HistoryNetworks.Rest(x.Total, placed.GetValueOrDefault((browser, Hour, x.Network)))))
+            .Where(x => x.Left.In + x.Left.Out > 0)
+            .Select(x => new NetworkMove(browser, Hour, UsageSource.WindowsHistory, x.Network, x.Left.In, x.Left.Out, x.Left.TunIn, x.Left.TunOut));
+        db.AssignNetworks(moves);
+
+        Assert.Equal((100L, 10L), Totals(db, home));
+        Assert.Equal((50L, 5L), Totals(db, cafe));
+        Assert.Equal((0L, 0L), Totals(db, NetworkLabel.Unknown));
+
+        static (long, long) Totals(Database db, long network)
+        {
+            var r = db.Report(From, To, new HashSet<long>(), network);
+            return (r.NetIn, r.NetOut);
+        }
+    }
+
+    [Fact]
     public void HostsOfADayMoveOntoItsNetwork()
     {
         using var db = Database.InMemory();
@@ -311,19 +374,13 @@ public class HistoryNetworkTests
     }
 
     [Fact]
-    public void WifiProfilesAreMatchedToTheOneNetworkWindowsKnowsByThatName()
+    public void AWifiIsCountedByItsName()
     {
-        var homeId = Guid.NewGuid();
-        var cafeId = Guid.NewGuid();
-        var cafeAgain = Guid.NewGuid();
-        var wiredId = Guid.NewGuid();
-        var map = NetworkList.MatchWifi(
-            [(268435461, "HomeNet"), (268435462, "CafeNet"), (268435463, "Gone"), (268435464, "Office")],
-            [("HomeNet", homeId), ("CafeNet", cafeId), ("CafeNet", cafeAgain), ("Office", wiredId)],
-            new Dictionary<Guid, (string, int)> { [homeId] = ("Home", 71), [cafeId] = ("Cafe", 71), [cafeAgain] = ("Cafe 2", 71), [wiredId] = ("Office", 6) });
-        var home = Assert.Single(map);
-        Assert.Equal(268435461, home.Key);
-        Assert.Equal(new WindowsNetwork(NetworkList.Key(homeId), "Home", NetworkKinds.WiFi), home.Value);
+        // Windows' "Home" and "Home 2" profiles are the one Wi-Fi.
+        Assert.Equal(NetworkList.Wifi("Home"), NetworkList.Wifi("Home"));
+        Assert.Equal(new WindowsNetwork("wifi:Home", "Home", NetworkKinds.WiFi), NetworkList.Wifi("Home"));
+        Assert.NotEqual(NetworkList.Wifi("Home").Key, NetworkList.Wifi("home").Key);
+        Assert.NotEqual(NetworkList.Key(Guid.Empty), NetworkList.Wifi(NetworkList.Key(Guid.Empty)).Key);
     }
 
     [Fact]
@@ -342,6 +399,12 @@ public class HistoryNetworkTests
             Assert.Equal("Cafe", NetworkList.Ssid(path));
             File.WriteAllText(path, """<WLANProfile xmlns="http://www.microsoft.com/networking/WLAN/profile/v1"><SSIDConfig><SSID><hex>486F6D65</hex></SSID></SSIDConfig></WLANProfile>""");
             Assert.Equal("Home", NetworkList.Ssid(path));
+            File.WriteAllText(path, """
+                <WLANProfile xmlns="http://www.microsoft.com/networking/WLAN/profile/v1">
+                  <SSIDConfig><SSID><hex>466C6174</hex><name>Flat</name></SSID><nonBroadcast>true</nonBroadcast></SSIDConfig>
+                </WLANProfile>
+                """);
+            Assert.Equal("Flat", NetworkList.Ssid(path)); // a hidden Wi-Fi
             File.WriteAllText(path, "not xml");
             Assert.Null(NetworkList.Ssid(path));
         }

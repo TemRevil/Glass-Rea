@@ -23,6 +23,7 @@ public sealed class NetworkWatcher(Database db, UsageAccumulator usage, ILogger<
         try
         {
             var pending = new Queue<TimeSpan>();
+            CountWifiByName();
             Check();
             while (!ct.IsCancellationRequested)
             {
@@ -42,6 +43,26 @@ public sealed class NetworkWatcher(Database db, UsageAccumulator usage, ILogger<
     private void OnChange(object? sender, EventArgs e)
     {
         if (_changed.CurrentCount == 0) _changed.Release();
+    }
+
+    /// <summary>
+    /// Wi-Fi used to be counted per Windows profile, so one Wi-Fi could be listed as "Home" and "Home 2". Each such
+    /// network becomes its Wi-Fi, and the Wi-Fi's profiles one network. Before the first check, so use only ever counts
+    /// on the network's new id.
+    /// </summary>
+    private void CountWifiByName()
+    {
+        try
+        {
+            var merged = 0;
+            foreach (var (key, wifi) in NetworkList.WifiByProfile())
+                if (db.Rekey(key, wifi.Key, wifi.Name)) merged++;
+            if (merged > 0) log.LogInformation("Counted {Count} Windows network profiles by their Wi-Fi's name", merged);
+        }
+        catch (Exception ex) when (ex is System.Security.SecurityException or UnauthorizedAccessException or IOException)
+        {
+            log.LogWarning(ex, "Couldn't read which Wi-Fi Windows' network profiles are");
+        }
     }
 
     private void Check()

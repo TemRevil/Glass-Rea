@@ -19,7 +19,7 @@ public sealed partial class OverviewPage : UserControl, IPage
     public OverviewPage()
     {
         InitializeComponent();
-        PickerHost.Content = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, Children = { new NetworkPicker(), _period } };
+        PickerHost.Content = _period;
         _period.Changed += () => _ = Refresh();
         Networks.Changed += () => { if (IsLoaded) _ = Refresh(); };
     }

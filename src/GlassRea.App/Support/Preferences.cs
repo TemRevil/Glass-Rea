@@ -17,6 +17,8 @@ public sealed class PreferencesState
     public long LastUpdateCheck { get; set; }
     /// <summary>The release tag already announced in a notification, so each new version is announced once.</summary>
     public string? AnnouncedVersion { get; set; }
+    /// <summary>The network the pages count (the floating bar's network switch); null for all of them.</summary>
+    public long? Network { get; set; }
 }
 
 public static class Preferences

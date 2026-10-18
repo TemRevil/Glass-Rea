@@ -200,25 +200,31 @@ public sealed class PeriodPicker : StackPanel
 }
 
 /// <summary>
-/// All networks, or one of them (see <see cref="Networks"/>); the same choice on every page that has one. Shown once
-/// there are two networks to tell apart.
+/// The network every page counts (see <see cref="Networks"/>): all of them, or one. It sits in the floating bar, so the
+/// choice is made once, for every page, and is always in sight. <see cref="ShownChanged"/> says when there are two
+/// networks to tell apart, the only time it's needed.
 /// </summary>
-public sealed class NetworkPicker : ComboBox
+public sealed class NetworkSwitch : Button
 {
-    private readonly List<long?> _ids = [];
-    private bool _filling;
+    private readonly FontIcon _icon = new() { FontSize = 15 };
+    private readonly TextBlock _name = new() { MaxWidth = 150, TextTrimming = TextTrimming.CharacterEllipsis, VerticalAlignment = VerticalAlignment.Center };
+    private readonly MenuFlyout _menu = new() { Placement = Microsoft.UI.Xaml.Controls.Primitives.FlyoutPlacementMode.Top };
 
-    public NetworkPicker()
+    /// <summary>Raised with true when the switch is worth showing, false when it isn't.</summary>
+    public event Action<bool>? ShownChanged;
+
+    public NetworkSwitch()
     {
-        MinWidth = 150;
-        VerticalAlignment = VerticalAlignment.Center;
-        AutomationProperties.SetName(this, "Network");
-        ToolTipService.SetToolTip(this, "Which network to count");
-        SelectionChanged += (_, _) =>
+        Style = (Style)Application.Current.Resources["TabButton"];
+        Height = 46;
+        Padding = new Thickness(16, 0, 14, 0);
+        Content = new StackPanel
         {
-            if (!_filling && SelectedIndex >= 0 && SelectedIndex < _ids.Count) Networks.Select(_ids[SelectedIndex]);
+            Orientation = Orientation.Horizontal, Spacing = 9,
+            Children = { _icon, _name, new FontIcon { Glyph = "\uE70E", FontSize = 10, Opacity = 0.7, VerticalAlignment = VerticalAlignment.Center } },
         };
-        // Pages live as long as the app, so these subscriptions do too.
+        Flyout = _menu;
+        // The window lives as long as the app, so these subscriptions do too.
         Networks.ListChanged += Fill;
         Networks.Changed += ShowSelected;
         Fill();
@@ -226,22 +232,39 @@ public sealed class NetworkPicker : ComboBox
 
     private void Fill()
     {
-        _filling = true;
-        _ids.Clear();
-        _ids.Add(null);
-        _ids.AddRange(Networks.Known.Select(n => (long?)n.Id));
-        ItemsSource = new[] { "All networks" }.Concat(Networks.Known.Select(n => NetworkLabel.For(n) + (n.Current ? " (now)" : ""))).ToList();
-        Visibility = Networks.Known.Count >= 2 ? Visibility.Visible : Visibility.Collapsed;
-        _filling = false;
+        _menu.Items.Clear();
+        _menu.Items.Add(Item(null, "All networks", "\uE81E", null));
+        _menu.Items.Add(new MenuFlyoutSeparator());
+        foreach (var n in Networks.Known) _menu.Items.Add(Item(n.Id, NetworkLabel.For(n), Glyph(n), n.Current ? "Now" : null));
         ShowSelected();
+        ShownChanged?.Invoke(Networks.Known.Count >= 2);
+    }
+
+    private static RadioMenuFlyoutItem Item(long? id, string text, string glyph, string? note)
+    {
+        var item = new RadioMenuFlyoutItem { Text = text, GroupName = "network", Icon = new FontIcon { Glyph = glyph }, Tag = id };
+        if (note is not null) item.KeyboardAcceleratorTextOverride = note;
+        item.Click += (_, _) => Networks.Select(id);
+        return item;
     }
 
     private void ShowSelected()
     {
-        _filling = true;
-        SelectedIndex = Math.Max(0, _ids.IndexOf(Networks.Selected));
-        _filling = false;
+        var picked = Networks.Known.FirstOrDefault(n => n.Id == Networks.Selected);
+        var label = picked is null ? "All networks" : NetworkLabel.For(picked);
+        _name.Text = label;
+        _icon.Glyph = picked is null ? "\uE81E" : Glyph(picked);
+        foreach (var item in _menu.Items.OfType<RadioMenuFlyoutItem>()) item.IsChecked = (long?)item.Tag == Networks.Selected;
+        AutomationProperties.SetName(this, $"Network counted: {label}");
+        ToolTipService.SetToolTip(this, picked is null ? "Counting every network. Pick one to count only it." : $"Counting only {label}");
     }
+
+    private static string Glyph(NetworkInfo n) => n.Id == NetworkLabel.Unknown ? "\uE9CE" : n.Kind switch
+    {
+        NetworkKinds.Wired => "\uE839",
+        NetworkKinds.Mobile => "\uE8EA",
+        _ => "\uE701",
+    };
 }
 
 /// <summary>

@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.2.7
+
+- The network switch moved to the floating bar, next to the light and dark button: one choice for every page, always in sight, kept for next time. The pages no longer have their own.
+- A Wi-Fi is shown by its own name, hidden ones too, instead of Windows' profile name ("Home 2"). When Windows remembers the same Wi-Fi more than once, those are now one network, with their use added together.
+- Earlier use is placed again with the better names, so Wi-Fi that Windows had stopped listing is recognised and less shows as "Unknown network". All networks together still add up to the same totals.
+
 ## 1.2.6
 
 - Usage per network: the Overview, Apps and Connections pages have a network picker, so you can see what went over one network ("this month on Home") or all of them together, as before. Wi-Fi, wired and mobile networks are each counted, and use over a VPN counts on the network the VPN runs over. The picker shows once there's more than one network to choose from.

@@ -78,8 +78,12 @@ public static class SettingKeys
     public const string FirstEtwHour = "first_etw_hour";
     public const string SrumState = "srum_state";
     public const string SrumTunnelSplit = "srum_tunnel_split";
-    /// <summary>"done" once the use recorded before networks were has been put on its networks, where Windows' history tells.</summary>
+    /// <summary>
+    /// <see cref="SrumNetworksDone"/> once the use recorded on no known network has been put on its networks, where
+    /// Windows' history tells. "done" was the first pass, before Wi-Fi was counted by its name; it's run again.
+    /// </summary>
     public const string SrumNetworks = "srum_networks";
+    public const string SrumNetworksDone = "wifi-by-name";
     /// <summary>The first hour live capture marked what went through a VPN; earlier live hours predate the marking.</summary>
     public const string TunnelMarkedFrom = "tunnel_marked_from";
 }
