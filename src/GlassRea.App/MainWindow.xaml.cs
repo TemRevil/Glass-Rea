@@ -2,6 +2,7 @@ using System.Runtime.InteropServices;
 using GlassRea.App.Controls;
 using GlassRea.App.Pages;
 using GlassRea.App.Support;
+using GlassRea.Core.Paths;
 using GlassRea.Core.Protocol;
 using Microsoft.UI;
 using Microsoft.UI.Dispatching;
@@ -42,7 +43,7 @@ public sealed partial class MainWindow : Window
     private readonly GlassBackdrop _backdrop = new();
     private string _current = "";
     private DateTime _lastRefresh = DateTime.MinValue;
-    private bool _refreshing, _closing, _shown;
+    private bool _refreshing, _closing, _shown, _twoCopiesClosed;
     private readonly AutoScroll _autoScroll = new();
     private readonly TabLens _lens;
 
@@ -87,6 +88,10 @@ public sealed partial class MainWindow : Window
         Activated += (_, e) => { if (e.WindowActivationState == WindowActivationState.Deactivated) _autoScroll.Stop(); };
         Appearance.Changed += OnAppearance;
         Appearance.Attach(Root, _backdrop, UpdateCaptionButtons);
+
+        if (Packaging.IsPackaged)
+            Offline.Message = "Nothing is being recorded right now. It starts with Windows; if it stays stopped, choose Repair for Glass-Rea in Windows' Settings > Apps > Installed apps > Advanced options.";
+        TwoCopies.Closed += (_, _) => _twoCopiesClosed = true;
 
         _timer = DispatcherQueue.CreateTimer();
         _timer.Interval = TimeSpan.FromSeconds(1);
@@ -337,6 +342,12 @@ public sealed partial class MainWindow : Window
         tb.ButtonPressedForegroundColor = tb.ButtonForegroundColor;
     }
 
+    private async void OnRemoveOtherCopy(object sender, RoutedEventArgs e)
+    {
+        try { await OtherCopy.Remove(); }
+        catch (InvalidOperationException ex) { TwoCopies.Message = ex.Message; }
+    }
+
     // ---------- refresh ----------
 
     private async Task Tick()
@@ -344,6 +355,7 @@ public sealed partial class MainWindow : Window
         // Nothing to show while hidden in the tray or minimized; the first tick after it comes back catches up.
         if (_refreshing || !AppWindow.IsVisible || AppWindow.Presenter is OverlappedPresenter { State: OverlappedPresenterState.Minimized }) return;
         _refreshing = true;
+        TwoCopies.IsOpen = !_twoCopiesClosed && OtherCopy.Present;
         try
         {
             var live = await Service.Call<LiveSnapshot>("live");

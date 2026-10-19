@@ -85,10 +85,18 @@ public static class AppProcess
         {
             using (p)
             {
+                // The Microsoft Store copy runs under the same name; it isn't this one's to close.
+                if (IsStoreCopy(p)) continue;
                 try { p.Kill(); p.WaitForExit(5000); }
                 catch (Exception ex) { Log.Write($"Could not close {name} ({p.Id}): {ex.Message}"); }
             }
         }
+    }
+
+    private static bool IsStoreCopy(Process p)
+    {
+        try { return p.MainModule?.FileName.Contains(@"\WindowsApps\", StringComparison.OrdinalIgnoreCase) == true; }
+        catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException) { return false; }
     }
 
     /// <summary>Starts the app as the user, not with this installer's admin rights.</summary>

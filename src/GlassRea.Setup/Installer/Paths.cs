@@ -8,6 +8,8 @@ public static class Paths
     public const string ProductName = "Glass-Rea";
     public const string Publisher = "Tem Revil";
     public const string ServiceName = "GlassRea";
+    /// <summary>The Microsoft Store copy's service. Setup doesn't install beside it.</summary>
+    public const string StoreServiceName = "GlassReaStore";
     public const string FirewallGroup = "Glass-Rea";
     public const string CaptureSession = "GlassRea-Capture";
 

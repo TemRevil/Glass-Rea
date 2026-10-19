@@ -11,6 +11,11 @@ public sealed class PreferencesState
     public bool CloseToTray { get; set; } = true;
     /// <summary>New alerts pop up as Windows notifications. They're listed on the Alerts page either way.</summary>
     public bool ShowNotifications { get; set; } = true;
+    /// <summary>
+    /// The Store copy, started by Windows at sign-in, stays in the tray. (The copy setup installs keeps this in its
+    /// sign-in command instead, as "--tray".)
+    /// </summary>
+    public bool StartHidden { get; set; } = true;
     /// <summary>Look for a newer release on GitHub once a day.</summary>
     public bool CheckForUpdates { get; set; } = true;
     /// <summary>Unix seconds of the last update check.</summary>

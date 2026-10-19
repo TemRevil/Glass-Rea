@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.IO.Pipes;
+using GlassRea.Core.Paths;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
 
@@ -13,6 +14,9 @@ public static class Program
 {
     public const string InstanceName = "GlassRea-App";
     private static Mutex? _single;
+
+    /// <summary>The Store copy, started by Windows at sign-in (its startup task).</summary>
+    public static bool StartedAtSignIn { get; private set; }
 
     [STAThread]
     private static void Main(string[] args)
@@ -31,6 +35,9 @@ public static class Program
         }
 
         WinRT.ComWrappersSupport.InitializeComWrappers();
+        if (Packaging.IsPackaged)
+            StartedAtSignIn = Microsoft.Windows.AppLifecycle.AppInstance.GetCurrent().GetActivatedEventArgs().Kind
+                is Microsoft.Windows.AppLifecycle.ExtendedActivationKind.StartupTask;
         Application.Start(p =>
         {
             SynchronizationContext.SetSynchronizationContext(new DispatcherQueueSynchronizationContext(DispatcherQueue.GetForCurrentThread()));

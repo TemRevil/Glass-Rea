@@ -1,6 +1,7 @@
 using System.Globalization;
 using GlassRea.App.Controls;
 using GlassRea.App.Support;
+using GlassRea.Core.Paths;
 using GlassRea.Core.Protocol;
 using GlassRea.Core.Updates;
 using GlassRea.Core.Usage;
@@ -19,6 +20,8 @@ public sealed partial class SettingsPage : UserControl, IPage
 {
     private const string RunKey = @"Software\Microsoft\Windows\CurrentVersion\Run";
     private const string RunName = "Glass-Rea";
+    /// <summary>The Store copy's startup task (Store\Package.appxmanifest).</summary>
+    private const string StartupTaskId = "GlassReaAtSignIn";
     private const double Gb = 1024d * 1024 * 1024;
     private static readonly string[] PriorityValues = [Priority.Normal, Priority.AboveNormal, Priority.High];
     private static int _section; // the section stays picked between visits
@@ -27,7 +30,7 @@ public sealed partial class SettingsPage : UserControl, IPage
     private bool _checking, _installing;
     private readonly Dictionary<string, Button> _swatches = [];
     private readonly Grid[] _sections;
-    private bool _loading = true, _loaded;
+    private bool _loading = true, _loaded, _showingStartup;
 
     public SettingsPage()
     {
@@ -49,8 +52,9 @@ public sealed partial class SettingsPage : UserControl, IPage
         ShowAppearance();
         Unloaded += (_, _) => Appearance.Changed -= ShowAppearance;
         Loaded += (_, _) => { ShowAppearance(); Appearance.Changed += ShowAppearance; };
-        VersionText.Text = $"Version {Updater.Current.ToString(3)}";
+        VersionText.Text = $"Version {Updater.Current.ToString(3)}{(Packaging.IsPackaged ? ", from the Microsoft Store" : "")}";
         AutoUpdateBox.IsOn = Preferences.State.CheckForUpdates;
+        if (Packaging.IsPackaged) CheckButton.Visibility = AutoUpdateRow.Visibility = Visibility.Collapsed;
         ShowUpdate();
         // The page is kept between visits: listen only while it's on screen.
         Unloaded += (_, _) => { SectionRequested -= OnSectionRequested; Updater.Checked -= OnUpdateChecked; };
@@ -79,6 +83,11 @@ public sealed partial class SettingsPage : UserControl, IPage
 
     private void ShowUpdate()
     {
+        if (Packaging.IsPackaged)
+        {
+            UpdateText.Text = "The Microsoft Store keeps Glass-Rea up to date: it installs each new version by itself, keeping your history and settings.";
+            return;
+        }
         if (_installing) return;
         var release = Updater.Available;
         if (release is not null)
@@ -165,23 +174,60 @@ public sealed partial class SettingsPage : UserControl, IPage
 
     private void ShowLocalSettings()
     {
-        using (var run = Registry.CurrentUser.OpenSubKey(RunKey))
+        if (Packaging.IsPackaged) _ = ShowStartupTask();
+        else
         {
+            using var run = Registry.CurrentUser.OpenSubKey(RunKey);
             var entry = run?.GetValue(RunName) as string;
             StartupBox.IsOn = entry is not null;
             StartHiddenBox.IsOn = entry is null || entry.Contains("--tray", StringComparison.Ordinal);
+            StartHiddenBox.IsEnabled = StartupBox.IsOn;
         }
-        StartHiddenBox.IsEnabled = StartupBox.IsOn;
         var p = Preferences.State;
         MinimizeTrayBox.IsOn = p.MinimizeToTray;
         CloseTrayBox.IsOn = p.CloseToTray;
         ShowNotifyBox.IsOn = p.ShowNotifications;
     }
 
+    /// <summary>
+    /// The Store copy starts at sign-in through its startup task, which Windows' Settings > Apps > Startup also turns
+    /// on and off. Turned off there, only there can it be turned on again.
+    /// </summary>
+    private async Task ShowStartupTask()
+    {
+        var task = await Windows.ApplicationModel.StartupTask.GetAsync(StartupTaskId);
+        _showingStartup = true;
+        StartupBox.IsOn = task.State is Windows.ApplicationModel.StartupTaskState.Enabled or Windows.ApplicationModel.StartupTaskState.EnabledByPolicy;
+        StartupBox.IsEnabled = task.State is Windows.ApplicationModel.StartupTaskState.Enabled or Windows.ApplicationModel.StartupTaskState.Disabled;
+        StartupCaption.Text = task.State switch
+        {
+            Windows.ApplicationModel.StartupTaskState.DisabledByUser => "Turned off in Windows' Settings > Apps > Startup; turn it on there",
+            Windows.ApplicationModel.StartupTaskState.DisabledByPolicy or Windows.ApplicationModel.StartupTaskState.EnabledByPolicy => "Set by your organization",
+            _ => "Opens when you sign in",
+        };
+        StartHiddenBox.IsOn = Preferences.State.StartHidden;
+        StartHiddenBox.IsEnabled = StartupBox.IsOn;
+        _showingStartup = false;
+    }
+
+    private async Task SetStartupTask(bool on)
+    {
+        var task = await Windows.ApplicationModel.StartupTask.GetAsync(StartupTaskId);
+        if (on) await task.RequestEnableAsync();
+        else task.Disable();
+        await ShowStartupTask();
+    }
+
     private void OnStartup(object sender, RoutedEventArgs e)
     {
-        if (_loading) return;
+        if (_loading || _showingStartup) return;
         StartHiddenBox.IsEnabled = StartupBox.IsOn;
+        if (Packaging.IsPackaged)
+        {
+            Preferences.Update(p => p.StartHidden = StartHiddenBox.IsOn);
+            if (ReferenceEquals(sender, StartupBox)) _ = SetStartupTask(StartupBox.IsOn);
+            return;
+        }
         using var run = Registry.CurrentUser.CreateSubKey(RunKey);
         if (StartupBox.IsOn) run.SetValue(RunName, $"\"{Environment.ProcessPath}\"" + (StartHiddenBox.IsOn ? " --tray" : ""));
         else run.DeleteValue(RunName, false);

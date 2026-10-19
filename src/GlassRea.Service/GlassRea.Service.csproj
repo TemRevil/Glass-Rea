@@ -5,7 +5,7 @@
     <AssemblyName>GlassRea.Service</AssemblyName>
     <OutputType>Exe</OutputType>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
-    <!-- No unsigned GlassRea.Service.exe: the service runs as "dotnet.exe GlassRea.Service.dll", since Smart App Control only lets signed binaries start as services. -->
+    <!-- No unsigned GlassRea.Service.exe: the service runs as "dotnet.exe GlassRea.Service.dll", since Smart App Control only lets signed binaries start as services. The Store package, which the Store signs, builds it with an exe (scripts/build-store.ps1). -->
     <UseAppHost>false</UseAppHost>
   </PropertyGroup>
   <ItemGroup>
@@ -21,5 +21,9 @@
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\GlassRea.Core\GlassRea.Core.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- WfpTests checks the firewall engine's struct layouts. -->
+    <InternalsVisibleTo Include="GlassRea.Tests" />
   </ItemGroup>
 </Project>

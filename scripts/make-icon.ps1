@@ -4,12 +4,12 @@ param([string]$Out = (Join-Path $PSScriptRoot '..\src\GlassRea.App\Assets\app.ic
 Add-Type -AssemblyName System.Drawing
 $out = $Out
 $sizes = 16, 24, 32, 48, 64, 256
-$pngs = foreach ($s in $sizes) {
-    $bmp = New-Object System.Drawing.Bitmap $s, $s
-    $g = [System.Drawing.Graphics]::FromImage($bmp)
+# Draws the mark, $s pixels wide, at ($left, $top) of $g.
+function Draw-Mark($g, [single]$s, [single]$left = 0, [single]$top = 0) {
     $g.SmoothingMode = 'AntiAlias'
     $g.PixelOffsetMode = 'HighQuality'
-    $g.Clear([System.Drawing.Color]::Transparent)
+    $state = $g.Save()
+    $g.TranslateTransform($left, $top)
     $k = [single]($s / 64)          # the SVG is drawn on a 64-unit grid
     $g.ScaleTransform($k, $k)
     $tile = New-Object System.Drawing.Drawing2D.GraphicsPath
@@ -30,6 +30,14 @@ $pngs = foreach ($s in $sizes) {
         $g.DrawLine($pen, $q[0], $q[1], $q[2], $q[3])
         $g.DrawLines($pen, [System.Drawing.PointF[]]@((New-Object System.Drawing.PointF $q[4], $q[5]), (New-Object System.Drawing.PointF $q[6], $q[7]), (New-Object System.Drawing.PointF $q[8], $q[9])))
     }
+    $g.Restore($state)
+}
+
+$pngs = foreach ($s in $sizes) {
+    $bmp = New-Object System.Drawing.Bitmap $s, $s
+    $g = [System.Drawing.Graphics]::FromImage($bmp)
+    $g.Clear([System.Drawing.Color]::Transparent)
+    Draw-Mark $g $s
     $g.Dispose()
     $ms = New-Object System.IO.MemoryStream
     if ($s -ge 256) {
@@ -60,3 +68,26 @@ for ($i = 0; $i -lt $sizes.Count; $i++) {
 foreach ($p in $pngs) { $bw.Write($p) }
 $bw.Close()
 "Wrote $out"
+
+# The Microsoft Store package's logos (src/GlassRea.App/Store/Package.appxmanifest): Start, the taskbar, Settings > Apps
+# and the Store listing. A tile keeps a margin around the mark, as Windows' own tiles do.
+$storeDir = Join-Path (Split-Path $out -Parent) 'Store'
+New-Item -ItemType Directory -Force $storeDir | Out-Null
+function Save-Png([string]$name, [int]$w, [int]$h, [single]$mark) {
+    $bmp = New-Object System.Drawing.Bitmap $w, $h
+    $g = [System.Drawing.Graphics]::FromImage($bmp)
+    $g.Clear([System.Drawing.Color]::Transparent)
+    Draw-Mark $g $mark (($w - $mark) / 2) (($h - $mark) / 2)
+    $g.Dispose()
+    $bmp.Save((Join-Path $storeDir $name), [System.Drawing.Imaging.ImageFormat]::Png)
+    $bmp.Dispose()
+}
+Save-Png 'StoreLogo.png' 50 50 50
+Save-Png 'Square44x44Logo.png' 44 44 44
+foreach ($t in 16, 24, 32, 48, 256) {
+    Save-Png "Square44x44Logo.targetsize-$t.png" $t $t $t
+    Save-Png "Square44x44Logo.targetsize-${t}_altform-unplated.png" $t $t $t
+}
+Save-Png 'Square150x150Logo.png' 150 150 100
+Save-Png 'Wide310x150Logo.png' 310 150 100
+"Wrote the Store logos to $storeDir"

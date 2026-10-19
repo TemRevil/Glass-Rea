@@ -38,4 +38,20 @@
   <ItemGroup>
     <ProjectReference Include="..\GlassRea.Core\GlassRea.Core.csproj" />
   </ItemGroup>
+  <!-- The Microsoft Store package (scripts/build-store.ps1 sets these): the same app as an MSIX, with the service it
+       published self-contained into StoreService packed in Service\. StoreManifest is Store\Package.appxmanifest with
+       the version filled in. -->
+  <PropertyGroup Condition="'$(StorePackage)' == 'true'">
+    <WindowsPackageType>MSIX</WindowsPackageType>
+    <GenerateAppxPackageOnBuild>true</GenerateAppxPackageOnBuild>
+    <AppxPackageSigningEnabled>false</AppxPackageSigningEnabled>
+    <AppxBundle>Never</AppxBundle>
+    <AppxPackageDir>$(StoreOut)\</AppxPackageDir>
+    <GenerateTestArtifacts>false</GenerateTestArtifacts>
+  </PropertyGroup>
+  <ItemGroup Condition="'$(StorePackage)' == 'true'">
+    <AppxManifest Include="$(StoreManifest)" />
+    <Content Include="Assets\Store\*.png" />
+    <Content Include="$(StoreService)\**" Link="Service\%(RecursiveDir)%(Filename)%(Extension)" />
+  </ItemGroup>
 </Project>

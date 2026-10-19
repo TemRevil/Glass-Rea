@@ -1,4 +1,5 @@
 using System.Globalization;
+using GlassRea.Core.Paths;
 using GlassRea.Core.Protocol;
 using GlassRea.Core.Storage;
 using GlassRea.Core.Usage;
@@ -12,8 +13,9 @@ CultureInfo.DefaultThreadCurrentCulture = CultureInfo.InvariantCulture;
 CultureInfo.CurrentCulture = CultureInfo.InvariantCulture;
 
 var builder = Host.CreateApplicationBuilder(args);
-builder.Services.AddWindowsService(o => o.ServiceName = FirewallManager.ServiceName);
-builder.Logging.AddEventLog(o => o.SourceName = "Glass-Rea");
+builder.Services.AddWindowsService(o => o.ServiceName = Packaging.ServiceName);
+// Setup registers the event log source; the Store package can't, and has no way to remove one when it goes.
+if (!Packaging.IsPackaged) builder.Logging.AddEventLog(o => o.SourceName = "Glass-Rea");
 FileLoggerProvider.PrepareFolder();
 builder.Logging.AddProvider(new FileLoggerProvider());
 AppDomain.CurrentDomain.UnhandledException += (_, e) =>
@@ -21,7 +23,19 @@ AppDomain.CurrentDomain.UnhandledException += (_, e) =>
 TaskScheduler.UnobservedTaskException += (_, e) =>
     FileLoggerProvider.File.Write(GlassRea.Core.Logs.LogLevel.Error, "Service", "A background task failed and nobody waited for it", e.Exception);
 FileLoggerProvider.File.Write(GlassRea.Core.Logs.LogLevel.Info, "Service",
-    $"Starting Glass-Rea service {typeof(FileLoggerProvider).Assembly.GetName().Version?.ToString(3)} on {Environment.OSVersion.VersionString}, .NET {Environment.Version}");
+    $"Starting Glass-Rea service {typeof(FileLoggerProvider).Assembly.GetName().Version?.ToString(3)}{(Packaging.IsPackaged ? " (Microsoft Store)" : "")} on {Environment.OSVersion.VersionString}, .NET {Environment.Version}");
+
+if (Packaging.IsPackaged)
+{
+    Standby.RestartOnFailure();
+    // The copy setup installed records until it's removed; two recording would count everything twice.
+    if (Standby.ClassicInstalled())
+    {
+        builder.Services.AddHostedService<Standby>();
+        builder.Build().Run();
+        return;
+    }
+}
 
 builder.Services.AddSingleton(_ => Database.OpenFile(Path.Combine(ServiceState.DataDirectory, "data.db")));
 builder.Services.AddSingleton(_ => new UsageAccumulator());
@@ -44,4 +58,5 @@ builder.Services.AddHostedService<PipeServer>();
 var host = builder.Build();
 // Asks Windows for the processor share chosen in Settings > General, before capture starts.
 Priority.ApplyToSelf(host.Services.GetRequiredService<ServiceState>().Setting(SettingKeys.Priority));
+host.Services.GetRequiredService<FirewallManager>().RestoreBlocks();
 host.Run();

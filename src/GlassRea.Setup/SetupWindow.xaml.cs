@@ -106,6 +106,12 @@ public sealed partial class SetupWindow : Window
         RuntimeText.Text = Runtime.IsInstalled()
             ? "Already on this PC"
             : "Not on this PC yet. Setup downloads it from Microsoft (about 30 MB) and checks it's signed by Microsoft before running it.";
+        if (ServiceSetup.Exists(Paths.StoreServiceName))
+        {
+            WelcomeTitle.Text = "Glass-Rea is already installed";
+            WelcomeBody.Text = "The Microsoft Store copy of Glass-Rea is on this PC, and the Store keeps it up to date. Setup doesn't install a second copy beside it.";
+            InstallButton.IsEnabled = false;
+        }
         if (!Engine.HasPayload)
         {
             WelcomeBody.Text = "This copy of setup was built without the program files, so it can't install. Build it with scripts\\build-setup.ps1.";

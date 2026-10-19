@@ -49,6 +49,7 @@ public sealed class Database : IDisposable
         AddMissing("devices", ("vendor", "TEXT"), ("model", "TEXT"), ("kind", "TEXT"), ("os", "TEXT"), ("custom_name", "TEXT"),
             ("away", "INTEGER NOT NULL DEFAULT 0"), ("network", "TEXT"));
         AddMissing("usage", ("tun_in", "INTEGER NOT NULL DEFAULT 0"), ("tun_out", "INTEGER NOT NULL DEFAULT 0"));
+        AddMissing("apps", ("blocked", "INTEGER NOT NULL DEFAULT 0"));
         KeyByNetwork("usage", UsageTable, "app_id,hour,source,net_in,net_out,lan_in,lan_out,tun_in,tun_out");
         KeyByNetwork("hosts", HostsTable, "app_id,day,ip,bytes_in,bytes_out,last_seen");
         Exec("CREATE INDEX IF NOT EXISTS usage_by_hour ON usage(hour);");
@@ -153,6 +154,43 @@ public sealed class Database : IDisposable
             var list = new List<(long, string, string?)>();
             while (r.Read()) list.Add((r.GetInt64(0), r.GetString(1), r.IsDBNull(2) ? null : r.GetString(2)));
             return list;
+        }
+    }
+
+    /// <summary>
+    /// The Store copy's blocked apps, which it blocks again at every start. The copy setup installs keeps its blocks as
+    /// Windows Firewall rules instead and leaves this unset.
+    /// </summary>
+    public HashSet<long> BlockedApps()
+    {
+        lock (_gate)
+        {
+            using var c = Cmd("SELECT id FROM apps WHERE blocked=1");
+            using var r = c.ExecuteReader();
+            var ids = new HashSet<long>();
+            while (r.Read()) ids.Add(r.GetInt64(0));
+            return ids;
+        }
+    }
+
+    public void SetBlocked(long appId, bool blocked)
+    {
+        lock (_gate) { using var c = Cmd("UPDATE apps SET blocked=$b WHERE id=$i", ("$b", blocked ? 1 : 0), ("$i", appId)); c.ExecuteNonQuery(); }
+    }
+
+    /// <summary>Marks the apps with these keys blocked (the blocks the copy setup installed had, carried over).</summary>
+    public void SetBlocked(IEnumerable<string> appKeys)
+    {
+        lock (_gate)
+        {
+            using var tx = _db.BeginTransaction();
+            using var c = Cmd("UPDATE apps SET blocked=1 WHERE key=$k", ("$k", ""));
+            foreach (var key in appKeys)
+            {
+                c["$k"] = key;
+                c.ExecuteNonQuery();
+            }
+            tx.Commit();
         }
     }
 

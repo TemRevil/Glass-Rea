@@ -1,14 +1,17 @@
 using System.Runtime.InteropServices;
 using GlassRea.Core.Paths;
 using GlassRea.Core.Storage;
+using GlassRea.Service.Blocking;
 
 namespace GlassRea.Service;
 
 /// <summary>
-/// Blocks apps through Windows Firewall (inbound and outbound rules in the "Glass-Rea" group), so a block
-/// keeps working even when this service is stopped. Windows Firewall is the source of truth for what is blocked.
+/// Blocks apps. The copy setup installs does it through Windows Firewall (inbound and outbound rules in the "Glass-Rea"
+/// group), so a block keeps working even when this service is stopped, and Windows Firewall is the source of truth
+/// for what is blocked. The Store copy can't remove rules when it's uninstalled, so it blocks in the firewall engine
+/// for as long as it runs instead (<see cref="WfpBlocker"/>), keeping the list in the database.
 /// </summary>
-public sealed class FirewallManager(Database db, ILogger<FirewallManager> log)
+public sealed class FirewallManager(Database db, ILogger<FirewallManager> log) : IDisposable
 {
     public const string Group = "Glass-Rea";
     public const string DiscoveryRule = Group + " device discovery";
@@ -16,6 +19,7 @@ public sealed class FirewallManager(Database db, ILogger<FirewallManager> log)
     private readonly Lock _gate = new();
     private HashSet<long> _blocked = [];
     private long _syncedAt = long.MinValue;
+    private WfpBlocker? _engine;
 
     public static string RuleName(string appKey, bool outbound) => $"{Group} block {(outbound ? "out" : "in")}: {appKey}";
 
@@ -23,9 +27,43 @@ public sealed class FirewallManager(Database db, ILogger<FirewallManager> log)
     {
         lock (_gate)
         {
-            if (Environment.TickCount64 - _syncedAt > 300_000) Sync();
+            if (!Packaging.IsPackaged && Environment.TickCount64 - _syncedAt > 300_000) Sync();
             return [.. _blocked];
         }
+    }
+
+    /// <summary>The Store copy, at start: blocks again what was blocked when it last stopped.</summary>
+    public void RestoreBlocks()
+    {
+        if (!Packaging.IsPackaged) return;
+        lock (_gate)
+        {
+            foreach (var id in db.BlockedApps())
+            {
+                if (db.GetApp(id) is not { Path: { } path } app) continue;
+                try
+                {
+                    BlockInEngine(db.AllApps().First(a => a.Id == id).Key, path, app.Service, true);
+                    _blocked.Add(id);
+                }
+                catch (Exception ex) { log.LogWarning(ex, "Could not block {App} again", app.Name); }
+            }
+        }
+        if (_blocked.Count > 0) log.LogInformation("Blocked {Count} apps again", _blocked.Count);
+    }
+
+    /// <summary>
+    /// The apps the copy setup installs blocks, by key, read from its Windows Firewall rules (the Store copy carries
+    /// them over when it takes that copy's place).
+    /// </summary>
+    public static List<string> ClassicBlockedKeys()
+    {
+        var prefix = RuleName("", outbound: true);
+        var keys = new List<string>();
+        foreach (dynamic rule in (System.Collections.IEnumerable)Policy().Rules)
+            if (rule.Grouping is string group && group == Group && rule.Name is string name && name.StartsWith(prefix, StringComparison.Ordinal))
+                keys.Add(name[prefix.Length..]);
+        return keys;
     }
 
     /// <summary>Re-reads which known apps have our block rules, in case rules were changed in Windows Firewall directly.</summary>
@@ -53,6 +91,14 @@ public sealed class FirewallManager(Database db, ILogger<FirewallManager> log)
 
         lock (_gate)
         {
+            if (Packaging.IsPackaged)
+            {
+                BlockInEngine(key, app.Path, app.Service, block);
+                db.SetBlocked(appId, block);
+                if (block) _blocked.Add(appId); else _blocked.Remove(appId);
+                log.LogInformation("{Action} {App}", block ? "Blocked" : "Unblocked", app.Name);
+                return;
+            }
             dynamic rules = Policy().Rules;
             foreach (var outbound in new[] { true, false })
             {
@@ -82,6 +128,19 @@ public sealed class FirewallManager(Database db, ILogger<FirewallManager> log)
         log.LogInformation("{Action} {App}", block ? "Blocked" : "Unblocked", app.Name);
     }
 
+    private void BlockInEngine(string key, string path, string? service, bool block)
+    {
+        _engine ??= new WfpBlocker();
+        if (!block) { _engine.Unblock(key); return; }
+        var packageSid = PackagePaths.FamilyName(path) is { } family ? Native.AppContainerSid(family) : null;
+        _engine.Block(key, path, service, packageSid);
+    }
+
+    public void Dispose()
+    {
+        lock (_gate) _engine?.Dispose();
+    }
+
     /// <summary>
     /// Lets this service, and only it, hear devices on the local network introduce themselves (DHCP on UDP 67,
     /// Bonjour on UDP 5353), on private and work networks only: on a network marked Public (a café, a hotel) it
@@ -106,16 +165,14 @@ public sealed class FirewallManager(Database db, ILogger<FirewallManager> log)
                 rule.RemoteAddresses = "LocalSubnet";
                 rule.Profiles = PrivateAndDomain;
                 rule.ApplicationName = Environment.ProcessPath;
-                rule.ServiceName = ServiceName;
+                // The Store package's service exe is its own (and a packaged service's SID type isn't ours to set).
+                if (!Packaging.IsPackaged) rule.ServiceName = Packaging.ClassicService;
                 rule.Enabled = true;
                 rules.Add(rule);
             }
         }
         catch (Exception ex) { log.LogWarning(ex, "Could not add the device discovery firewall rule"); }
     }
-
-    /// <summary>The Windows service name, as registered by the installer.</summary>
-    public const string ServiceName = "GlassRea";
 
     private static dynamic Policy() => Activator.CreateInstance(Type.GetTypeFromProgID("HNetCfg.FwPolicy2", true)!)!;
 

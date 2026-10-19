@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The Microsoft Store package (scripts/build-store.ps1): the app, the recording service beside it in Service\, and the
+     identity Partner Center gave the reserved name. The Store signs it, which Smart App Control trusts. The version is
+     filled in from Directory.Build.props at build time. -->
+<Package
+  xmlns="http://schemas.microsoft.com/appx/manifest/foundation/windows10"
+  xmlns:uap="http://schemas.microsoft.com/appx/manifest/uap/windows10"
+  xmlns:uap5="http://schemas.microsoft.com/appx/manifest/uap/windows10/5"
+  xmlns:desktop6="http://schemas.microsoft.com/appx/manifest/desktop/windows10/6"
+  xmlns:rescap="http://schemas.microsoft.com/appx/manifest/foundation/windows10/restrictedcapabilities"
+  IgnorableNamespaces="uap uap5 desktop6 rescap">
+
+  <Identity Name="TemRevil.Glass-Rea" Publisher="CN=B99259A6-8006-4D29-8939-B5661113C076" Version="0.0.0.0" ProcessorArchitecture="x64" />
+
+  <Properties>
+    <DisplayName>Glass-Rea</DisplayName>
+    <PublisherDisplayName>Tem Revil</PublisherDisplayName>
+    <Logo>Assets\Store\StoreLogo.png</Logo>
+  </Properties>
+
+  <Dependencies>
+    <TargetDeviceFamily Name="Windows.Desktop" MinVersion="10.0.19041.0" MaxVersionTested="10.0.22621.0" />
+  </Dependencies>
+
+  <Resources>
+    <Resource Language="en-us" />
+  </Resources>
+
+  <Applications>
+    <Application Id="App" Executable="GlassRea.exe" EntryPoint="Windows.FullTrustApplication">
+      <uap:VisualElements DisplayName="Glass-Rea" Description="Data use per app, live traffic, connections, blocking and the devices on your network."
+                          BackgroundColor="transparent" Square150x150Logo="Assets\Store\Square150x150Logo.png" Square44x44Logo="Assets\Store\Square44x44Logo.png">
+        <uap:DefaultTile Wide310x150Logo="Assets\Store\Wide310x150Logo.png" />
+      </uap:VisualElements>
+      <Extensions>
+        <!-- Settings > General > Start with Windows (the app starts in the tray). -->
+        <uap5:Extension Category="windows.startupTask">
+          <uap5:StartupTask TaskId="GlassReaAtSignIn" Enabled="true" DisplayName="Glass-Rea" />
+        </uap5:Extension>
+        <!-- The recording service. It runs as SYSTEM: per-app traffic comes from the kernel's network events, and blocking
+             an app's internet means filtering it in Windows' firewall engine, both of which only SYSTEM may do. -->
+        <desktop6:Extension Category="windows.service" Executable="Service\GlassRea.Service.exe" EntryPoint="Windows.FullTrustApplication">
+          <desktop6:Service Name="GlassReaStore" StartupType="auto" StartAccount="localSystem" />
+        </desktop6:Extension>
+      </Extensions>
+    </Application>
+  </Applications>
+
+  <Capabilities>
+    <rescap:Capability Name="runFullTrust" />
+    <rescap:Capability Name="packagedServices" />
+    <rescap:Capability Name="localSystemServices" />
+  </Capabilities>
+</Package>

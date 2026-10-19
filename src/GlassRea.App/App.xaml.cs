@@ -1,5 +1,6 @@
 using System.IO.Pipes;
 using GlassRea.App.Support;
+using GlassRea.Core.Paths;
 using GlassRea.Core.Protocol;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
@@ -46,13 +47,14 @@ public partial class App : Application
         _ = ListenForShowRequests(_stop.Token);
         _ = WatchAlerts(_stop.Token);
         _ = ApplySavedPriority(_stop.Token);
-        _ = Updater.Watch(release => _ui.TryEnqueue(() => Notify($"Glass-Rea {release.Version.ToString(3)} is available",
+        // The Store updates its copy itself.
+        if (!Packaging.IsPackaged) _ = Updater.Watch(release => _ui.TryEnqueue(() => Notify($"Glass-Rea {release.Version.ToString(3)} is available",
             "Click to see what's new and install it from Settings > About.", onClick: () => _ui.TryEnqueue(() =>
             {
                 Pages.SettingsPage.Open(Pages.SettingsPage.About);
                 ShowWindow("settings");
             }))), _stop.Token);
-        if (!_startInTray) ShowWindow();
+        if (!_startInTray && !(Program.StartedAtSignIn && Preferences.State.StartHidden)) ShowWindow();
         else TrimMemorySoon();
     }
 

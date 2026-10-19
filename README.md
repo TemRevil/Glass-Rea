@@ -33,7 +33,7 @@ A free, private network monitor for Windows, made of glass.
 > **Using an AI assistant?** Ask it to *"install Glass-Rea using https://github.com/TemRevil/Glass-Rea/blob/main/INSTALL.md"*. That guide walks it through checking your PC, downloading from the official release only, verifying the file, and the setup steps.
 
 > [!IMPORTANT]
-> Releases are signed with the developer's own certificate for now, which Windows doesn't know yet. If **Smart App Control** is on, Windows blocks setup and there's no way to allow just this one app. Turning Smart App Control off can't be undone without resetting Windows, so think it over. Signing by SignPath Foundation, which Windows trusts, is being set up.
+> Releases are signed with the developer's own certificate for now, which Windows doesn't know yet. If **Smart App Control** is on, Windows blocks setup and there's no way to allow just this one app. Turning Smart App Control off can't be undone without resetting Windows, so think it over. A Microsoft Store version, which Smart App Control allows, is on its way (see [below](#-microsoft-store-version)).
 
 <details>
 <summary><b>What setup does</b></summary>
@@ -145,6 +145,16 @@ From what they say about themselves on the local network: the name they send whe
 
 **Settings > Apps > Installed apps > Glass-Rea > Uninstall.** Choose whether to keep your usage history (kept by default in `C:\ProgramData\Glass-Rea`). Every firewall block the app made is removed either way, so no app stays blocked.
 
+## 🛍️ Microsoft Store version
+
+The same app and service, packaged for the Microsoft Store, which signs it, so Smart App Control lets it run. It's being prepared for the Store and isn't listed yet. Where it differs from setup's copy:
+
+- **Updates** come from the Store, by themselves. Settings > About doesn't look on GitHub.
+- **Blocks** live in the recording service while it runs, as filters in Windows' firewall engine, not as Windows Firewall rules. Removing the app can't leave an app blocked, and while the service is stopped nothing is blocked. It blocks them again each time it starts.
+- **Start with Windows** is a startup app Windows manages; it can also be turned off in Windows' Settings > Apps > Startup.
+- **History** is kept in the same `C:\ProgramData\Glass-Rea`, and stays there when the app is removed (the Store doesn't let an app ask on the way out). To delete it, delete that folder as an administrator after uninstalling.
+- **Moving from setup's copy:** install the Store version, then remove setup's copy and keep the history (the Store copy offers a button for it). Until then setup's copy keeps recording and the Store copy's service waits; within a minute of the removal the Store copy takes over, blocks included. Setup won't install beside the Store version.
+
 ---
 
 ## 🧩 How it works
@@ -165,6 +175,7 @@ From what they say about themselves on the local network: the name they send whe
 | 🪟 **GlassRea** | The app: a WinUI 3 window plus tray icon that asks the service for data over a local named pipe. Closing the window keeps it in the tray. |
 | 📦 **GlassRea.Core** | What both share: the database, the protocol, address classification, number parsing. |
 | 💿 **GlassRea.Setup** | The installer and uninstaller, one signed exe. |
+| 🛍️ **Store package** | `src\GlassRea.App\Store\Package.appxmanifest`: the app and the service (as the packaged service `GlassReaStore`) in one MSIX. |
 
 ### 🧰 Tech stack
 
@@ -189,6 +200,8 @@ dotnet test tests\GlassRea.Tests
 ```
 
 Build the installer with `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\build-setup.ps1`; it writes `publish\Glass-Rea Setup.exe`. It's signed as Tem Revil once `scripts\make-cert.ps1` has made the certificate on this PC (trusted on this PC only), and unsigned otherwise.
+
+Build the Store package with `scripts\build-store.ps1`; it writes `publish\store\Glass-Rea_<version>.0_x64.msix`, unsigned, for upload to Partner Center. With `-TestSign` it's signed with a test certificate instead, and `publish\store\Glass-Rea test.wsb` opens a Windows Sandbox that installs it and tests it (`scripts\sandbox\test-store.ps1`), writing the results to `publish\store\sandbox-results.txt`.
 
 To publish a release, raise `<Version>` in `Directory.Build.props`, give it a `## <version>` section in `CHANGELOG.md`, and push both to main: the **Release** workflow starts by itself (or run it from the Actions tab). It builds and tests on GitHub, has SignPath sign Glass-Rea's files and then the setup (each approved on signpath.io), creates the GitHub release with that section as its notes, and checks GitHub stored the exact file. `scripts\release.ps1` does the same from this PC, signed with the Tem Revil certificate instead.
 

@@ -30,7 +30,7 @@ Current releases are signed with the developer's own certificate (Tem Revil), wh
 ```
 
 - **0 or 2:** go on to step 3.
-- **1 (on):** setup won't run. Tell the person, plainly, and let them decide. Turning Smart App Control off (Windows Security > App & browser control > Smart App Control) can't be undone without resetting Windows. **Never turn it off for them, and never suggest it as a routine step.** Signing by SignPath Foundation, which Windows trusts, is being set up; once releases carry it, this step goes away.
+- **1 (on):** setup won't run. Tell the person, plainly, and let them decide. Turning Smart App Control off (Windows Security > App & browser control > Smart App Control) can't be undone without resetting Windows. **Never turn it off for them, and never suggest it as a routine step.** A Microsoft Store version, which Smart App Control allows, is being prepared; once it's listed, it's the way to install with Smart App Control on.
 
 ## 📥 3. Download from the official source only
 

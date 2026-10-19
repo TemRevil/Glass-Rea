@@ -66,9 +66,18 @@
                     <ProgressBar.OpacityTransition><ScalarTransition Duration="0:0:0.25" /></ProgressBar.OpacityTransition>
                 </ProgressBar>
 
-                <InfoBar x:Name="Offline" IsOpen="False" IsClosable="False" Severity="Warning" Margin="14,12,14,0" VerticalAlignment="Top"
-                         Title="The Glass-Rea service isn't running"
-                         Message="Nothing is being recorded right now. It starts with Windows; if it stays stopped, run the installer again." />
+                <StackPanel Margin="14,12,14,0" Spacing="8" VerticalAlignment="Top">
+                    <InfoBar x:Name="Offline" IsOpen="False" IsClosable="False" Severity="Warning"
+                             Title="The Glass-Rea service isn't running"
+                             Message="Nothing is being recorded right now. It starts with Windows; if it stays stopped, run the installer again." />
+                    <!-- The Store copy, with the copy setup installed still on this PC (Support/OtherCopy.cs). -->
+                    <InfoBar x:Name="TwoCopies" IsOpen="False" IsClosable="True" Severity="Informational" Title="Glass-Rea is installed twice"
+                             Message="The copy from setup still records for now. Remove it and keep your history, and this copy takes over within a minute, blocks included. This window may close while it's removed; open Glass-Rea again afterwards.">
+                        <InfoBar.ActionButton>
+                            <Button Content="Remove the other copy" Click="OnRemoveOtherCopy" />
+                        </InfoBar.ActionButton>
+                    </InfoBar>
+                </StackPanel>
             </Grid>
 
             <!-- The floating bar: one glass capsule of tabs, the network every page counts (once there are two), and a

@@ -7,10 +7,12 @@ A personal network monitor for Windows by Tem Revil: per-app internet use, live 
 | Project | What it is |
 |---|---|
 | `src/GlassRea.Service` | Windows service, runs as SYSTEM, hosted by Microsoft's signed `dotnet.exe`. ETW capture, SRUM import, SQLite at `C:\ProgramData\Glass-Rea\data.db`, firewall rules (group "Glass-Rea"), network scan, limit and alert workers, named pipe `GlassRea`. |
-| `src/GlassRea.App` | WinUI 3 app (`GlassRea.exe`), unpackaged, single instance, tray icon. Only talks to the service through the pipe. Per-user files in `%LocalAppData%\Glass-Rea\`. |
+| `src/GlassRea.App` | WinUI 3 app (`GlassRea.exe`), unpackaged, single instance, tray icon. Only talks to the service through the pipe. Per-user files in `%LocalAppData%\Glass-Rea\`. `Store/Package.appxmanifest` makes it, with the service, the Microsoft Store package (below). |
 | `src/GlassRea.Core` | Shared: database, protocol (`Messages.cs`, `SettingKeys`, `Priority`), alert text, address and number handling. |
 | `src/GlassRea.Setup` | Elevated single-file installer with the app, the service and `Uninstall Glass-Rea.exe` embedded as `payload.zip`. The uninstaller is this project built with `-p:Uninstaller=true` (no payload), so the install folder holds one copy of the app, not two; `build-setup.ps1` builds it into the stage. |
 | `tests/GlassRea.Tests` | xUnit tests for Core and the service's pure logic. |
+
+**The Microsoft Store package** (`scripts/build-store.ps1`, identity `TemRevil.Glass-Rea` from Partner Center) is the same code. `Core/Paths/Packaging.cs` tells the copies apart at run time (`IsPackaged`), and when packaged: the service is `GlassReaStore`, runs as a self-contained `Service\GlassRea.Service.exe`, sets its own restart-on-failure and writes no event log; blocks are WFP filters held in a dynamic session (`Service/Blocking/WfpBlocker.cs`, struct layouts checked in `WfpTests`), listed in `apps.blocked` and added again at every start (`FirewallManager.RestoreBlocks`), because an MSIX can't run anything when it's removed; the app starts at sign-in through its startup task (Settings > General), doesn't look for updates, and offers to remove setup's copy (`Support/OtherCopy.cs`). While setup's copy (service `GlassRea`) is installed, the Store service only stands by (`Service/Standby.cs`): it notes setup's copy's firewall blocks each minute while that runs, and once it's gone marks them blocked and exits, for Windows to restart it recording. Setup refuses to install beside the Store copy, and never closes its window. `scripts/sandbox/test-store.ps1` tests all of this in Windows Sandbox.
 
 `README.md` is for people; `INSTALL.md` walks an AI assistant through installing Glass-Rea for someone (checks, official download and verification, setup's screens, troubleshooting). When setup's screens, requirements, paths or signing change, update both.
 
@@ -49,7 +51,7 @@ One line each: `time zone LEVEL source: message`, an exception's lines indented 
 - **No third-party native code.** Smart App Control refuses unsigned native DLLs, so the tray icon (`Tray.cs`), SQLite (Windows' own `winsqlite3.dll`), the setup folder picker and the window subclass call Windows directly. Keep it that way.
 - **Settings:** service-side ones go through `settings` / `settings.set` and must be added to `EditableSettings` and `ServiceState.Defaults`; per-user window choices live in `Support/Preferences.cs`; look and feel in `Support/Appearance.cs`.
 - **Setup runs elevated.** Anything it opens for the user (the app, temrevil.com) goes through `explorer.exe` so it runs unelevated. WinUI's FolderPicker doesn't work elevated; use `FolderDialog`.
-- **Uninstall leaves nothing blocked:** every firewall rule in the "Glass-Rea" group is removed.
+- **Uninstall leaves nothing blocked:** setup removes every firewall rule in the "Glass-Rea" group; the Store copy's blocks end with its service.
 - **Delete what isn't used**, after searching for every reference.
 
 ## Performance

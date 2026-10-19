@@ -23,7 +23,7 @@
                             <Border Style="{StaticResource Row}">
                                 <Grid ColumnSpacing="12">
                                     <Grid.ColumnDefinitions><ColumnDefinition /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
-                                    <StackPanel VerticalAlignment="Center"><TextBlock Text="Start with Windows" /><TextBlock Text="Opens when you sign in" Style="{StaticResource Caption}" /></StackPanel>
+                                    <StackPanel VerticalAlignment="Center"><TextBlock Text="Start with Windows" /><TextBlock x:Name="StartupCaption" Text="Opens when you sign in" Style="{StaticResource Caption}" TextWrapping="Wrap" /></StackPanel>
                                     <ToggleSwitch x:Name="StartupBox" Grid.Column="1" MinWidth="0" OnContent="" OffContent="" Toggled="OnStartup" AutomationProperties.Name="Start with Windows" />
                                 </Grid>
                             </Border>
@@ -306,7 +306,7 @@
                                     <HyperlinkButton x:Name="ReleaseLink" Grid.Column="2" Content="Release notes on GitHub" Padding="0" VerticalAlignment="Center" />
                                 </Grid>
                             </StackPanel>
-                            <Border Style="{StaticResource Row}">
+                            <Border x:Name="AutoUpdateRow" Style="{StaticResource Row}">
                                 <Grid ColumnSpacing="12">
                                     <Grid.ColumnDefinitions><ColumnDefinition /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
                                     <StackPanel VerticalAlignment="Center"><TextBlock Text="Check for updates automatically" /><TextBlock Text="Once a day, with a notification when a new version is out" Style="{StaticResource Caption}" /></StackPanel>
