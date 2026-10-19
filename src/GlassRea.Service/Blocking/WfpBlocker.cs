@@ -54,16 +54,20 @@ internal sealed unsafe partial class WfpBlocker : IDisposable
     /// <summary>
     /// Blocks the program at <paramref name="path"/>; with <paramref name="service"/>, only that service inside it
     /// (svchost.exe runs many). A Store app is also matched by its package (<paramref name="packageSid"/>), which
-    /// keeps working after an update moves its program to a new folder.
+    /// keeps working after an update moves its program to a new folder. False when the program isn't there (its drive
+    /// unplugged, say): the engine names a program by its file, so it can't be blocked until the file is back.
     /// </summary>
-    public void Block(string key, string path, string? service, string? packageSid)
+    public bool Block(string key, string path, string? service, string? packageSid)
     {
-        if (_filters.ContainsKey(key)) return;
+        const uint FileNotFound = 2, PathNotFound = 3;
+        if (_filters.ContainsKey(key)) return true;
         var added = new List<ulong>();
         nint appId = 0, descriptor = 0, sid = 0;
         try
         {
-            Check(FwpmGetAppIdFromFileName0(path, &appId), $"find {path}");
+            var found = FwpmGetAppIdFromFileName0(path, &appId);
+            if (found is FileNotFound or PathNotFound) return false;
+            Check(found, $"find {path}");
             var conditions = stackalloc Condition[2];
             conditions[0] = new Condition { Field = AppIdField, MatchType = MatchEqual, Value = new Value { Type = TypeByteBlob, Data = appId } };
             var count = 1u;
@@ -86,6 +90,7 @@ internal sealed unsafe partial class WfpBlocker : IDisposable
                 AddAll(&package, 1, added);
             }
             _filters[key] = added;
+            return true;
         }
         catch
         {

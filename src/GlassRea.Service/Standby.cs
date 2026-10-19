@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using System.ServiceProcess;
 using GlassRea.Core.Paths;
 using GlassRea.Core.Storage;
@@ -9,30 +8,17 @@ namespace GlassRea.Service;
 /// <summary>
 /// The Store copy's service while the copy setup installs is still on this PC. That one records and blocks, so this one
 /// only watches: it keeps note of which apps the other copy blocks, and once that copy is removed (keeping the
-/// history), marks them blocked here and stops, for Windows to start it again as the recording service.
+/// history), marks them blocked here and starts recording in this same process (<paramref name="startRecording"/>).
+/// It can't stop and have Windows start it again: Windows doesn't let a packaged service set its own restart.
 /// </summary>
-public sealed class Standby(ILogger<Standby> log) : BackgroundService
+public sealed class Standby(ILogger<Standby> log, Func<IHost> startRecording) : BackgroundService
 {
+    private IHost? _recording;
+
     public static bool ClassicInstalled()
     {
         using var key = Registry.LocalMachine.OpenSubKey($@"SYSTEM\CurrentControlSet\Services\{Packaging.ClassicService}");
         return key is not null;
-    }
-
-    /// <summary>
-    /// Has Windows start this service again whenever it stops unexpectedly, as setup does for its copy. Standing by,
-    /// that's also how it comes back to record.
-    /// </summary>
-    public static void RestartOnFailure()
-    {
-        var psi = new ProcessStartInfo("sc.exe") { UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true };
-        foreach (var a in new[] { "failure", Packaging.StoreService, "reset=", "86400", "actions=", "restart/5000/restart/5000/restart/30000" })
-            psi.ArgumentList.Add(a);
-        using var p = Process.Start(psi)!;
-        var output = p.StandardOutput.ReadToEnd();
-        p.WaitForExit();
-        if (p.ExitCode != 0)
-            FileLoggerProvider.File.Write(Core.Logs.LogLevel.Warning, "Service", $"Windows wouldn't restart this service on failure: {output.Trim()}");
     }
 
     protected override async Task ExecuteAsync(CancellationToken ct)
@@ -80,8 +66,17 @@ public sealed class Standby(ILogger<Standby> log) : BackgroundService
             }
         }
         catch (Exception ex) { log.LogWarning(ex, "Could not carry over the other copy's blocks"); }
-        log.LogInformation("Glass-Rea from setup was removed; restarting to record, with {Count} blocked apps carried over", blocked.Count);
-        // Ends without telling Windows it stopped, so Windows restarts it (RestartOnFailure), this time recording.
-        Environment.Exit(1);
+        log.LogInformation("Glass-Rea from setup was removed; recording now, with {Count} blocked apps carried over", blocked.Count);
+        try { _recording = startRecording(); _recording.Start(); }
+        catch (Exception ex) { log.LogError(ex, "Could not start recording"); }
+    }
+
+    /// <summary>Windows stopping the service stops the recording that took over in it.</summary>
+    public override async Task StopAsync(CancellationToken ct)
+    {
+        await base.StopAsync(ct);
+        if (_recording is not { } recording) return;
+        await recording.StopAsync(ct);
+        recording.Dispose();
     }
 }

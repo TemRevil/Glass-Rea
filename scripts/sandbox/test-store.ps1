@@ -12,7 +12,11 @@ $results = Join-Path $here 'sandbox-results.txt'
 $pfn = 'TemRevil.Glass-Rea_m8znxtvwyfwk8'
 Set-Content $results "Glass-Rea in Windows Sandbox, $(Get-Date -Format 'yyyy-MM-dd HH:mm')"
 
-function Say([string]$text) { Add-Content $results "$(Get-Date -Format HH:mm:ss) $text" }
+# Retried: whatever is watching the file may have it open for a moment.
+function Say([string]$text) {
+    $line = "$(Get-Date -Format HH:mm:ss) $text"
+    for ($i = 0; $i -lt 20; $i++) { try { Add-Content $results $line -ErrorAction Stop; return } catch { Start-Sleep -Milliseconds 250 } }
+}
 function Check([string]$what, [scriptblock]$test) {
     try { if (& $test) { Say "PASS $what" } else { Say "FAIL $what" } }
     catch { Say "FAIL $what ($($_.Exception.Message))" }
@@ -36,8 +40,7 @@ function Call([hashtable]$request) {
     }
     finally { $pipe.Dispose() }
 }
-function Reaches { & curl.exe -s -o NUL -m 10 https://www.microsoft.com; return $LASTEXITCODE -eq 0 }
-function StoreServicePid { (Get-CimInstance Win32_Service -Filter "Name='GlassReaStore'").ProcessId }
+function Reaches { & curl.exe -s -o NUL -m 10 https://example.com; return $LASTEXITCODE -eq 0 }
 
 try {
     # 1. Setup's copy.
@@ -56,7 +59,6 @@ try {
     Add-AppxPackage (Get-ChildItem $local -Filter *.msix | Select-Object -First 1).FullName
     Say "Installed $((Get-AppxPackage TemRevil.Glass-Rea).PackageFullName)"
     Check 'the Store service runs' { WaitFor 60 { (Get-Service GlassReaStore).Status -eq 'Running' } }
-    Check 'Windows restarts the Store service on failure' { (& sc.exe qfailure GlassReaStore) -match 'RESTART' }
     Check 'the Store service waits while setup''s copy is here' {
         WaitFor 30 { Select-String -Path 'C:\ProgramData\Glass-Rea\Logs\service.log' -Pattern 'this copy waits until it' -Quiet } }
 
@@ -82,8 +84,7 @@ try {
     Say 'Removed setup''s copy'
 
     # 4. The take-over.
-    $before = StoreServicePid
-    Check 'the Store service takes over' { WaitFor 150 { (StoreServicePid) -ne $before -and (Call @{ op = 'status' }).capturing } }
+    Check 'the Store service takes over' { WaitFor 150 { (Call @{ op = 'status' }).capturing } }
     Check 'the block carried over' { -not (Reaches) }
     Check 'the block shows as blocked' { ((Call @{ op = 'usage'; from = 0 }).apps | Where-Object { $_.appId -eq $curl.appId }).blocked }
 

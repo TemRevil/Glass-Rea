@@ -20,6 +20,9 @@ public sealed class FirewallManager(Database db, ILogger<FirewallManager> log) :
     private HashSet<long> _blocked = [];
     private long _syncedAt = long.MinValue;
     private WfpBlocker? _engine;
+    // The Store copy's blocks on programs that aren't there right now, tried again every 30 seconds until they are.
+    private readonly Dictionary<long, (string Key, string Path, string? Service, string Name)> _waiting = [];
+    private Timer? _retry;
 
     public static string RuleName(string appKey, bool outbound) => $"{Group} block {(outbound ? "out" : "in")}: {appKey}";
 
@@ -43,7 +46,8 @@ public sealed class FirewallManager(Database db, ILogger<FirewallManager> log) :
                 if (db.GetApp(id) is not { Path: { } path } app) continue;
                 try
                 {
-                    BlockInEngine(db.AllApps().First(a => a.Id == id).Key, path, app.Service, true);
+                    var key = db.AllApps().First(a => a.Id == id).Key;
+                    if (!BlockInEngine(key, path, app.Service, true)) Wait(id, key, path, app.Service, app.Name);
                     _blocked.Add(id);
                 }
                 catch (Exception ex) { log.LogWarning(ex, "Could not block {App} again", app.Name); }
@@ -93,7 +97,8 @@ public sealed class FirewallManager(Database db, ILogger<FirewallManager> log) :
         {
             if (Packaging.IsPackaged)
             {
-                BlockInEngine(key, app.Path, app.Service, block);
+                _waiting.Remove(appId);
+                if (!BlockInEngine(key, app.Path, app.Service, block)) Wait(appId, key, app.Path, app.Service, app.Name);
                 db.SetBlocked(appId, block);
                 if (block) _blocked.Add(appId); else _blocked.Remove(appId);
                 log.LogInformation("{Action} {App}", block ? "Blocked" : "Unblocked", app.Name);
@@ -128,17 +133,50 @@ public sealed class FirewallManager(Database db, ILogger<FirewallManager> log) :
         log.LogInformation("{Action} {App}", block ? "Blocked" : "Unblocked", app.Name);
     }
 
-    private void BlockInEngine(string key, string path, string? service, bool block)
+    /// <summary>False when the program to block isn't there now (see <see cref="Wait"/>).</summary>
+    private bool BlockInEngine(string key, string path, string? service, bool block)
     {
         _engine ??= new WfpBlocker();
-        if (!block) { _engine.Unblock(key); return; }
+        if (!block) { _engine.Unblock(key); return true; }
         var packageSid = PackagePaths.FamilyName(path) is { } family ? Native.AppContainerSid(family) : null;
-        _engine.Block(key, path, service, packageSid);
+        return _engine.Block(key, path, service, packageSid);
+    }
+
+    /// <summary>
+    /// A program on a drive that isn't plugged in can't be named to the firewall engine. It can't run either, so it
+    /// counts as blocked, and is blocked within 30 seconds of its file coming back.
+    /// </summary>
+    private void Wait(long appId, string key, string path, string? service, string name)
+    {
+        _waiting[appId] = (key, path, service, name);
+        _retry ??= new Timer(_ => RetryWaiting(), null, TimeSpan.FromSeconds(30), TimeSpan.FromSeconds(30));
+        log.LogInformation("{App} isn't at {Path} now; it's blocked once it's back", name, path);
+    }
+
+    private void RetryWaiting()
+    {
+        lock (_gate)
+        {
+            foreach (var (id, (key, path, service, name)) in _waiting.ToList())
+            {
+                try
+                {
+                    if (!BlockInEngine(key, path, service, true)) continue;
+                    _waiting.Remove(id);
+                    log.LogInformation("Blocked {App}, now that it's back", name);
+                }
+                catch (Exception ex) { _waiting.Remove(id); log.LogWarning(ex, "Could not block {App}", name); }
+            }
+        }
     }
 
     public void Dispose()
     {
-        lock (_gate) _engine?.Dispose();
+        lock (_gate)
+        {
+            _retry?.Dispose();
+            _engine?.Dispose();
+        }
     }
 
     /// <summary>
