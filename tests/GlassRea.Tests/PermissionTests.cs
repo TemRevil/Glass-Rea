@@ -192,3 +192,51 @@ public class PermissionWorkerTests
         Assert.True(GlassRea.Service.Capture.FlushService.Settled(9, 10));
     }
 }
+
+public class BlockingPermissionTests
+{
+    private static FirewallManager Firewall(Database db, Permissions p) =>
+        new(db, p, Microsoft.Extensions.Logging.Abstractions.NullLogger<FirewallManager>.Instance);
+
+    [Fact]
+    public void OnlyBlockRulesAreLifted()
+    {
+        Assert.True(FirewallManager.IsBlockRule(FirewallManager.RuleName(@"c:\a.exe", true)));
+        Assert.True(FirewallManager.IsBlockRule(FirewallManager.RuleName(@"c:\a.exe", false)));
+        Assert.False(FirewallManager.IsBlockRule(FirewallManager.DiscoveryRule));
+        Assert.False(FirewallManager.IsBlockRule("Some other app's rule"));
+    }
+
+    [Fact]
+    public void BlockRefusedWhileBlockingIsOff()
+    {
+        using var db = Database.InMemory();
+        var p = new Permissions(db);
+        p.Initialize();
+        var id = db.EnsureApp(new AppIdentity(@"c:\a.exe", "A", @"C:\a.exe", null, false), 0, out _);
+        using var firewall = Firewall(db, p);
+        var refused = Assert.Throws<InvalidOperationException>(() => firewall.SetBlocked(id, true));
+        Assert.Equal(PermissionText.OffBody(Feature.Blocking), refused.Message);
+        Assert.Empty(db.BlockedApps());
+    }
+
+    [Fact]
+    public void ForgettingBlocksDropsWaitingOnesToo()
+    {
+        using var db = Database.InMemory();
+        var p = new Permissions(db);
+        p.Initialize();
+        var id = db.EnsureApp(new AppIdentity(@"e:\game.exe", "Game", @"E:\game.exe", null, false), 0, out _);
+        db.SetBlocked(id, true);
+        using var firewall = Firewall(db, p);
+        firewall.Wait(id, @"e:\game.exe", @"E:\game.exe", null, "Game");
+        Assert.Equal(1, firewall.WaitingCount);
+
+        firewall.ForgetBlocks();
+
+        Assert.Equal(0, firewall.WaitingCount);
+        Assert.False(firewall.Retrying);
+        Assert.Empty(db.BlockedApps());
+        Assert.Equal(0, firewall.BlockedCount);
+    }
+}

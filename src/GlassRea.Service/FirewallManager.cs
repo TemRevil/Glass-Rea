@@ -1,5 +1,7 @@
 using System.Runtime.InteropServices;
+using GlassRea.Core.Alerts;
 using GlassRea.Core.Paths;
+using GlassRea.Core.Protocol;
 using GlassRea.Core.Storage;
 using GlassRea.Service.Blocking;
 
@@ -9,9 +11,10 @@ namespace GlassRea.Service;
 /// Blocks apps. The copy setup installs does it through Windows Firewall (inbound and outbound rules in the "Glass-Rea"
 /// group), so a block keeps working even when this service is stopped, and Windows Firewall is the source of truth
 /// for what is blocked. The Store copy can't remove rules when it's uninstalled, so it blocks in the firewall engine
-/// for as long as it runs instead (<see cref="WfpBlocker"/>), keeping the list in the database.
+/// for as long as it runs instead (<see cref="WfpBlocker"/>), keeping the list in the database. Nothing is blocked while
+/// Blocking apps is off (<see cref="Permissions"/>), and turning it off lifts every block (<see cref="LiftAll"/>).
 /// </summary>
-public sealed class FirewallManager(Database db, ILogger<FirewallManager> log) : IDisposable
+public sealed class FirewallManager(Database db, Permissions permissions, ILogger<FirewallManager> log) : IDisposable
 {
     public const string Group = "Glass-Rea";
     public const string DiscoveryRule = Group + " device discovery";
@@ -26,6 +29,13 @@ public sealed class FirewallManager(Database db, ILogger<FirewallManager> log) :
 
     public static string RuleName(string appKey, bool outbound) => $"{Group} block {(outbound ? "out" : "in")}: {appKey}";
 
+    /// <summary>One of the rules <see cref="SetBlocked"/> makes, as opposed to the discovery rule or anyone else's.</summary>
+    public static bool IsBlockRule(string name) => name.StartsWith(Group + " block ", StringComparison.Ordinal);
+
+    internal int WaitingCount { get { lock (_gate) return _waiting.Count; } }
+    internal bool Retrying { get { lock (_gate) return _retry is not null; } }
+    internal int BlockedCount { get { lock (_gate) return _blocked.Count; } }
+
     public HashSet<long> BlockedAppIds()
     {
         lock (_gate)
@@ -38,7 +48,7 @@ public sealed class FirewallManager(Database db, ILogger<FirewallManager> log) :
     /// <summary>The Store copy, at start: blocks again what was blocked when it last stopped.</summary>
     public void RestoreBlocks()
     {
-        if (!Packaging.IsPackaged) return;
+        if (!Packaging.IsPackaged || !permissions.Allowed(Feature.Blocking)) return;
         lock (_gate)
         {
             foreach (var id in db.BlockedApps())
@@ -87,6 +97,12 @@ public sealed class FirewallManager(Database db, ILogger<FirewallManager> log) :
 
     public void SetBlocked(long appId, bool block)
     {
+        if (!permissions.Allowed(Feature.Blocking))
+        {
+            // Nothing is blocked while it's off, so there's nothing to unblock either.
+            if (block) throw new InvalidOperationException(PermissionText.OffBody(Feature.Blocking));
+            return;
+        }
         var app = db.GetApp(appId) ?? throw new InvalidOperationException("Unknown app.");
         var key = db.AllApps().First(a => a.Id == appId).Key;
         if (app.Path is null) throw new InvalidOperationException($"{app.Name} has no program file, so Windows Firewall cannot target it.");
@@ -146,7 +162,7 @@ public sealed class FirewallManager(Database db, ILogger<FirewallManager> log) :
     /// A program on a drive that isn't plugged in can't be named to the firewall engine. It can't run either, so it
     /// counts as blocked, and is blocked within 30 seconds of its file coming back.
     /// </summary>
-    private void Wait(long appId, string key, string path, string? service, string name)
+    internal void Wait(long appId, string key, string path, string? service, string name)
     {
         _waiting[appId] = (key, path, service, name);
         _retry ??= new Timer(_ => RetryWaiting(), null, TimeSpan.FromSeconds(30), TimeSpan.FromSeconds(30));
@@ -168,6 +184,46 @@ public sealed class FirewallManager(Database db, ILogger<FirewallManager> log) :
                 catch (Exception ex) { _waiting.Remove(id); log.LogWarning(ex, "Could not block {App}", name); }
             }
         }
+    }
+
+    /// <summary>
+    /// Blocking apps was turned off: every block goes, from Windows Firewall (setup's copy) or the firewall engine (the
+    /// Store copy), and none is remembered for when it's turned back on.
+    /// </summary>
+    public void LiftAll()
+    {
+        try
+        {
+            lock (_gate)
+            {
+                if (Packaging.IsPackaged) { _engine?.Dispose(); _engine = null; }
+                else
+                {
+                    dynamic rules = Policy().Rules;
+                    var ours = new List<string>();
+                    foreach (dynamic rule in (System.Collections.IEnumerable)rules)
+                        if (rule.Grouping is string group && group == Group && rule.Name is string name && IsBlockRule(name)) ours.Add(name);
+                    foreach (var name in ours) rules.Remove(name);
+                }
+            }
+        }
+        catch (Exception ex) { log.LogWarning(ex, "Could not remove every block"); }
+        ForgetBlocks();
+        log.LogInformation("Lifted every block");
+    }
+
+    /// <summary>What <see cref="LiftAll"/> forgets: the list, the blocks waiting for their program, and the retry timer.</summary>
+    internal void ForgetBlocks()
+    {
+        lock (_gate)
+        {
+            _waiting.Clear();
+            _retry?.Dispose();
+            _retry = null;
+            _blocked.Clear();
+            _syncedAt = Environment.TickCount64;
+        }
+        db.ClearBlocked();
     }
 
     public void Dispose()
@@ -210,6 +266,20 @@ public sealed class FirewallManager(Database db, ILogger<FirewallManager> log) :
             }
         }
         catch (Exception ex) { log.LogWarning(ex, "Could not add the device discovery firewall rule"); }
+    }
+
+    /// <summary>Device discovery was turned off: the service stops listening, so the rule letting it hear goes too.</summary>
+    public void RemoveDiscovery()
+    {
+        try
+        {
+            lock (_gate)
+            {
+                dynamic rules = Policy().Rules;
+                if (Exists(rules, DiscoveryRule)) rules.Remove(DiscoveryRule);
+            }
+        }
+        catch (Exception ex) { log.LogWarning(ex, "Could not remove the device discovery firewall rule"); }
     }
 
     private static dynamic Policy() => Activator.CreateInstance(Type.GetTypeFromProgID("HNetCfg.FwPolicy2", true)!)!;

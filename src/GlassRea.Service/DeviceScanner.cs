@@ -16,7 +16,7 @@ namespace GlassRea.Service;
 /// the very first scan, when everything is new). With presence alerts on, a device missing for
 /// <see cref="AwayAfter"/> seconds raises a "left" alert and its return a "back" one.
 /// </summary>
-public sealed partial class DeviceScanner(Database db, ServiceState state, ILogger<DeviceScanner> log) : BackgroundService
+public sealed partial class DeviceScanner(Database db, ServiceState state, Permissions permissions, ILogger<DeviceScanner> log) : BackgroundService
 {
     private static readonly string[] SkipAdapters = ["cloudflare", "warp", "vpn", "virtual", "hyper-v", "vmware", "virtualbox", "tap-", "wintun", "wireguard", "loopback", "bluetooth"];
     private readonly SemaphoreSlim _scanNow = new(0, 1);
@@ -26,7 +26,10 @@ public sealed partial class DeviceScanner(Database db, ServiceState state, ILogg
 
     public void RequestScan() { if (_scanNow.CurrentCount == 0) _scanNow.Release(); }
 
-    protected override async Task ExecuteAsync(CancellationToken ct)
+    /// <summary>Scans only while Device discovery is allowed.</summary>
+    protected override Task ExecuteAsync(CancellationToken ct) => permissions.WhileOn(Feature.Devices, Scanning, ct);
+
+    private async Task Scanning(CancellationToken ct)
     {
         await Task.Delay(TimeSpan.FromSeconds(20), ct).ConfigureAwait(false);
         while (!ct.IsCancellationRequested)

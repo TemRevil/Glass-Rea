@@ -65,7 +65,12 @@ static IHost Recording(HostApplicationBuilder builder)
     builder.Services.AddHostedService<PipeServer>();
 
     var host = builder.Build();
-    host.Services.GetRequiredService<Permissions>().Initialize();
+    var permissions = host.Services.GetRequiredService<Permissions>();
+    permissions.Initialize();
+    permissions.Changed += (feature, on) =>
+    {
+        if (feature == Feature.Blocking && !on) host.Services.GetRequiredService<FirewallManager>().LiftAll();
+    };
     // Asks Windows for the processor share chosen in Settings > General, before capture starts.
     Priority.ApplyToSelf(host.Services.GetRequiredService<ServiceState>().Setting(SettingKeys.Priority));
     host.Services.GetRequiredService<FirewallManager>().RestoreBlocks();

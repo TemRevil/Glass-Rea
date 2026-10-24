@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Sockets;
+using GlassRea.Core.Protocol;
 using GlassRea.Core.Storage;
 using GlassRea.Service.Devices;
 
@@ -11,17 +12,24 @@ namespace GlassRea.Service;
 /// is sent. What's heard is stored per hardware address for <see cref="DeviceScanner"/>, and a device joining
 /// triggers a scan straight away.
 /// </summary>
-public sealed class DeviceListener(Database db, DeviceScanner scanner, FirewallManager firewall, ILogger<DeviceListener> log) : BackgroundService
+public sealed class DeviceListener(Database db, DeviceScanner scanner, FirewallManager firewall, Permissions permissions, ILogger<DeviceListener> log) : BackgroundService
 {
     private static readonly IPAddress MdnsGroup = IPAddress.Parse("224.0.0.251");
     private readonly Dictionary<string, long> _saved = new(StringComparer.Ordinal);
     private Dictionary<IPAddress, string> _arp = [];
     private long _arpAt = long.MinValue, _scanAskedAt = long.MinValue;
 
-    protected override async Task ExecuteAsync(CancellationToken ct)
+    /// <summary>
+    /// Listens only while Device discovery is allowed. Turning it off closes both sockets and removes the firewall rule
+    /// that let them hear.
+    /// </summary>
+    protected override Task ExecuteAsync(CancellationToken ct) => permissions.WhileOn(Feature.Devices, Listen, ct);
+
+    private async Task Listen(CancellationToken ct)
     {
         firewall.AllowDiscovery();
-        await Task.WhenAll(ListenDhcp(ct), ListenMdns(ct)).ConfigureAwait(false);
+        try { await Task.WhenAll(ListenDhcp(ct), ListenMdns(ct)).ConfigureAwait(false); }
+        finally { if (!permissions.Allowed(Feature.Devices)) firewall.RemoveDiscovery(); }
     }
 
     private async Task ListenDhcp(CancellationToken ct)
