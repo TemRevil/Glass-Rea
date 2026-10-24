@@ -67,6 +67,12 @@
                 </ProgressBar>
 
                 <StackPanel Margin="14,12,14,0" Spacing="8" VerticalAlignment="Top">
+                    <!-- The page's feature is off in Settings > General > Permissions (Support/PermissionState.cs). -->
+                    <InfoBar x:Name="FeatureOff" IsOpen="False" IsClosable="False" Severity="Informational">
+                        <InfoBar.ActionButton>
+                            <Button Content="Turn on" Click="OnTurnOn" />
+                        </InfoBar.ActionButton>
+                    </InfoBar>
                     <InfoBar x:Name="Offline" IsOpen="False" IsClosable="False" Severity="Warning"
                              Title="The Glass-Rea service isn't running"
                              Message="Nothing is being recorded right now. It starts with Windows; if it stays stopped, run the installer again." />
@@ -104,6 +110,24 @@
                     </Button>
                 </c:Glass>
             </StackPanel>
+        </Grid>
+
+        <!-- The first time the app opens, and once after an update from before permissions: what the service may do.
+             Over everything but the title bar, so it's answered before anything else. -->
+        <Grid x:Name="PermissionScreen" Grid.Row="1" Grid.RowSpan="2" Visibility="Collapsed" Background="{ThemeResource SmokeFillColorDefaultBrush}">
+            <Border Style="{StaticResource Card}" Background="{ThemeResource SolidBackgroundFillColorBaseBrush}" MaxWidth="600"
+                    HorizontalAlignment="Center" VerticalAlignment="Center" Margin="24" Padding="28,24">
+                <StackPanel Spacing="14">
+                    <TextBlock Text="What Glass-Rea may do" Style="{StaticResource PageTitle}" />
+                    <TextBlock Style="{StaticResource Caption}" TextWrapping="Wrap"
+                               Text="Glass-Rea's service runs with system rights, and uses them only for what's turned on here. You can change this any time in Settings > General." />
+                    <c:PermissionsPanel />
+                    <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
+                        <Button Content="Allow all" Click="OnAllowAll" />
+                        <Button Content="Done" Style="{StaticResource AccentButtonStyle}" Click="OnPermissionsDone" />
+                    </StackPanel>
+                </StackPanel>
+            </Border>
         </Grid>
     </Grid>
 </Window>

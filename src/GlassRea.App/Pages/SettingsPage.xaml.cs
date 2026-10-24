@@ -218,6 +218,31 @@ public sealed partial class SettingsPage : UserControl, IPage
         await ShowStartupTask();
     }
 
+    private async void OnDeleteHistory(object sender, RoutedEventArgs e)
+    {
+        var ask = new ContentDialog
+        {
+            XamlRoot = XamlRoot,
+            Title = "Delete history?",
+            Content = "Usage, connections, devices and alerts recorded so far are removed. Settings and blocks stay.",
+            PrimaryButtonText = "Delete",
+            CloseButtonText = "Cancel",
+            DefaultButton = ContentDialogButton.Close,
+        };
+        if (await ask.ShowAsync() != ContentDialogResult.Primary) return;
+        DeleteHistoryButton.IsEnabled = false;
+        try
+        {
+            await Service.Do("history.delete");
+            DeleteHistoryCaption.Text = "Deleted. What's recorded from now on shows as usual.";
+        }
+        catch (Exception ex) when (Service.IsOffline(ex) || ex is ServiceException)
+        {
+            DeleteHistoryCaption.Text = $"Couldn't delete it: {ex.Message}";
+        }
+        finally { DeleteHistoryButton.IsEnabled = true; }
+    }
+
     private void OnStartup(object sender, RoutedEventArgs e)
     {
         if (_loading || _showingStartup) return;

@@ -2,6 +2,7 @@ using System.Runtime.InteropServices;
 using GlassRea.App.Controls;
 using GlassRea.App.Pages;
 using GlassRea.App.Support;
+using GlassRea.Core.Alerts;
 using GlassRea.Core.Paths;
 using GlassRea.Core.Protocol;
 using Microsoft.UI;
@@ -92,6 +93,7 @@ public sealed partial class MainWindow : Window
         if (Packaging.IsPackaged)
             Offline.Message = "Nothing is being recorded right now. It starts with Windows; if it stays stopped, choose Repair for Glass-Rea in Windows' Settings > Apps > Installed apps > Advanced options.";
         TwoCopies.Closed += (_, _) => _twoCopiesClosed = true;
+        PermissionState.Changed += ShowPermissions;
 
         _timer = DispatcherQueue.CreateTimer();
         _timer.Interval = TimeSpan.FromSeconds(1);
@@ -174,6 +176,7 @@ public sealed partial class MainWindow : Window
         var first = _current == "";
         _current = key;
         Log.Where = key;
+        ShowPermissions();
         var opening = System.Diagnostics.Stopwatch.GetTimestamp();
         var fresh = false;
         foreach (var (k, b) in _tabButtons)
@@ -348,6 +351,47 @@ public sealed partial class MainWindow : Window
         catch (InvalidOperationException ex) { TwoCopies.Message = ex.Message; }
     }
 
+    // ---------- permissions ----------
+
+    /// <summary>The page that needs each feature; Past usage from Windows has none.</summary>
+    private static Feature? FeatureOf(string page) => page switch
+    {
+        "overview" or "apps" or "connections" => Feature.Usage,
+        "firewall" => Feature.Blocking,
+        "devices" => Feature.Devices,
+        _ => null,
+    };
+
+    /// <summary>The permission screen until it's been answered, and the bar on a page whose feature is off.</summary>
+    private void ShowPermissions()
+    {
+        PermissionScreen.Visibility = PermissionState.Current is { Reviewed: false } ? Visibility.Visible : Visibility.Collapsed;
+        if (FeatureOf(_current) is { } f && PermissionState.IsOff(f))
+        {
+            FeatureOff.Title = PermissionText.OffTitle(f);
+            FeatureOff.Message = PermissionText.OffBody(f);
+            FeatureOff.IsOpen = true;
+        }
+        else FeatureOff.IsOpen = false;
+    }
+
+    private async void OnTurnOn(object sender, RoutedEventArgs e)
+    {
+        if (FeatureOf(_current) is not { } f) return;
+        await Permit(() => PermissionState.Turn(f, true));
+        _lastRefresh = DateTime.MinValue; // the page fills in now rather than at its next refresh
+    }
+
+    private async void OnAllowAll(object sender, RoutedEventArgs e) => await Permit(PermissionState.AllowAll);
+
+    private async void OnPermissionsDone(object sender, RoutedEventArgs e) => await Permit(PermissionState.Reviewed);
+
+    private static async Task Permit(Func<Task> change)
+    {
+        try { await change(); }
+        catch (Exception ex) when (Service.IsOffline(ex) || ex is ServiceException) { Log.Warn("Permissions", $"Couldn't change permissions: {ex.Message}"); }
+    }
+
     // ---------- refresh ----------
 
     private async Task Tick()
@@ -371,8 +415,11 @@ public sealed partial class MainWindow : Window
             {
                 _lastRefresh = DateTime.UtcNow;
                 var status = await Service.Call<ServiceStatus>("status");
+                PermissionState.Use(status.Permissions);
+                ShowPermissions();
                 StatusText.Text = status.Capturing
                     ? $"Recording since {Fmt.Date(status.TrackingSince)}"
+                    : PermissionState.IsOff(Feature.Usage) ? "Not recording: Usage per app is off"
                     : $"Not recording: {status.CaptureError ?? "starting"}";
                 Periods.Use(await Service.Call<Dictionary<string, string>>("settings")); // the reset day shapes "this month"
                 Networks.Use(await Service.Call<List<NetworkInfo>>("networks")); // for the network switch

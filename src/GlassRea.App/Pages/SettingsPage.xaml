@@ -16,6 +16,7 @@
                 <!-- General -->
                 <Grid x:Name="GeneralSection" VerticalAlignment="Top" ColumnSpacing="12" RowSpacing="12">
                     <Grid.ColumnDefinitions><ColumnDefinition /><ColumnDefinition /><ColumnDefinition /></Grid.ColumnDefinitions>
+                    <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
 
                     <Border Style="{StaticResource Card}">
                         <StackPanel Spacing="10">
@@ -34,7 +35,7 @@
                                     <ToggleSwitch x:Name="StartHiddenBox" Grid.Column="1" MinWidth="0" OnContent="" OffContent="" Toggled="OnStartup" AutomationProperties.Name="Start hidden in the tray" />
                                 </Grid>
                             </Border>
-                            <TextBlock Text="Recording never stops: the service runs whether this window is open or not." Style="{StaticResource Caption}" />
+                            <TextBlock Text="Recording runs whether this window is open or not, for what's on under Permissions." Style="{StaticResource Caption}" TextWrapping="Wrap" />
                         </StackPanel>
                     </Border>
 
@@ -76,6 +77,23 @@
                                 </StackPanel>
                             </Border>
                             <TextBlock x:Name="PriorityNote" Style="{StaticResource Caption}" Text="Normal suits most PCs. High can slow games and other apps a little." />
+                        </StackPanel>
+                    </Border>
+
+                    <!-- What the service may do with its system rights (Controls/PermissionsPanel.cs), and deleting what it recorded. -->
+                    <Border Grid.Row="1" Grid.ColumnSpan="3" Style="{StaticResource Card}">
+                        <StackPanel Spacing="10">
+                            <StackPanel Orientation="Horizontal" Spacing="8"><FontIcon Glyph="&#xE8D7;" FontSize="15" /><TextBlock Text="Permissions" Style="{StaticResource CardTitle}" /></StackPanel>
+                            <TextBlock Style="{StaticResource Caption}" TextWrapping="Wrap"
+                                       Text="The service runs with system rights and uses them only for what's on here. Turning one off stops it at once; turning off Blocking apps lifts every block." />
+                            <c:PermissionsPanel />
+                            <Border Style="{StaticResource Row}">
+                                <Grid ColumnSpacing="12">
+                                    <Grid.ColumnDefinitions><ColumnDefinition /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                                    <StackPanel VerticalAlignment="Center"><TextBlock Text="Delete history" /><TextBlock x:Name="DeleteHistoryCaption" Text="Usage, connections, devices and alerts recorded so far. Settings and blocks stay." Style="{StaticResource Caption}" TextWrapping="Wrap" /></StackPanel>
+                                    <Button x:Name="DeleteHistoryButton" Grid.Column="1" Content="Delete history" Click="OnDeleteHistory" VerticalAlignment="Center" />
+                                </Grid>
+                            </Border>
                         </StackPanel>
                     </Border>
                 </Grid>
