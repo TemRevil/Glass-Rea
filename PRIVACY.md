@@ -2,6 +2,10 @@
 
 Glass-Rea has no accounts, no telemetry, no analytics and no ads. What it records stays on your PC.
 
+## You choose what it does
+
+The service runs with system rights, and uses them only for what's turned on in the app's permission screen or in Settings > General > Permissions: counting each app's use, blocking apps, reading Windows' own past usage, and finding devices on your network. On a new install all four are off until you turn them on. Turning one off stops it at once. **Delete history** in the same place removes the usage, connections, devices and alerts recorded so far.
+
 ## What it records, and where
 
 How much each app sends and receives and on which network (by the name Windows gives it), the addresses and names of the computers they talk to, the devices on your network (their names, addresses, network card makers and what they say about themselves), and the alerts it raised. All of it is kept in `C:\ProgramData\Glass-Rea\data.db` on your PC and is never sent anywhere. The app's own settings (its look and window) are kept in your Windows profile. Uninstalling asks whether to keep or delete your history. The Microsoft Store version can't ask, so its history stays when it's removed: delete `C:\ProgramData\Glass-Rea` as an administrator to remove it. Its settings and logs in your profile go with the app.

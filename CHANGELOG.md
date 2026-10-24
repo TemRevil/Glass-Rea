@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.2.8
+
+- Glass-Rea asks before its service does anything. The first time it opens, a screen lists what the service would use its system rights for (usage per app, blocking apps, past usage from Windows, device discovery), with a line on why each needs them. Nothing runs until it's turned on.
+- Settings > General > Permissions has the same switches. Turning one off stops it at once: blocking apps off lifts every block, device discovery off removes its firewall rule. A page whose feature is off says so, with a button to turn it on.
+- Delete history, in the same card, removes the usage, connections, devices and alerts recorded so far. Settings and blocks stay.
+- Updating from 1.2.7 or earlier keeps everything on, as before, and shows the permission screen once.
+- With usage per app turned on later, no flood of "went online" alerts: those start an hour after counting does.
+
 ## 1.2.7
 
 - The network switch moved to the floating bar, next to the light and dark button: one choice for every page, always in sight, kept for next time. The pages no longer have their own.

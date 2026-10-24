@@ -28,6 +28,7 @@ A free, private network monitor for Windows, made of glass.
 1. **Download** `Glass-Rea.Setup.exe` from the [latest release](https://github.com/TemRevil/Glass-Rea/releases/latest).
 2. **Run it** and approve the admin prompt. If Windows says *"Windows protected your PC"*, click **More info**, check the publisher is **Tem Revil**, then **Run anyway**.
 3. Click **Install**, then **Finish**. Glass-Rea opens and stays in the tray by the clock.
+4. **Choose what it may do.** The first time, Glass-Rea lists what its service would use system rights for: usage per app, blocking apps, past usage from Windows and device discovery. Nothing runs until you turn it on, and you can change it any time in Settings > General > Permissions.
 
 > [!TIP]
 > **Using an AI assistant?** Ask it to *"install Glass-Rea using https://github.com/TemRevil/Glass-Rea/blob/main/INSTALL.md"*. That guide walks it through checking your PC, downloading from the official release only, verifying the file, and the setup steps.
@@ -133,7 +134,7 @@ From what they say about themselves on the local network: the name they send whe
 ## 🔒 Privacy
 
 > [!NOTE]
-> Glass-Rea sends nothing about you or your network anywhere. It asks GitHub once a day whether there's a new version, which you can turn off. See [PRIVACY.md](PRIVACY.md).
+> Glass-Rea sends nothing about you or your network anywhere. It asks GitHub once a day whether there's a new version, which you can turn off. Its service records only what you've allowed under Permissions, and Delete history removes what it recorded. See [PRIVACY.md](PRIVACY.md).
 
 ---
 

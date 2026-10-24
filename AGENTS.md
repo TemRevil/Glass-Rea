@@ -51,6 +51,7 @@ One line each: `time zone LEVEL source: message`, an exception's lines indented 
 - **No third-party native code.** Smart App Control refuses unsigned native DLLs, so the tray icon (`Tray.cs`), SQLite (Windows' own `winsqlite3.dll`), the setup folder picker and the window subclass call Windows directly. Keep it that way.
 - **Settings:** service-side ones go through `settings` / `settings.set` and must be added to `EditableSettings` and `ServiceState.Defaults`; per-user window choices live in `Support/Preferences.cs`; look and feel in `Support/Appearance.cs`.
 - **Setup runs elevated.** Anything it opens for the user (the app, temrevil.com) goes through `explorer.exe` so it runs unelevated. WinUI's FolderPicker doesn't work elevated; use `FolderDialog`.
+- **Nothing privileged runs unasked.** Every worker that uses the service's system rights waits on its permission (`Service/Permissions.cs`, `WhileOn`) and stops when it's turned off; new privileged work gets a permission too, with its words in `Core/Alerts/PermissionText.cs`.
 - **Uninstall leaves nothing blocked:** setup removes every firewall rule in the "Glass-Rea" group; the Store copy's blocks end with its service.
 - **Delete what isn't used**, after searching for every reference.
 

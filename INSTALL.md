@@ -82,7 +82,9 @@ Get-Service GlassRea                                    # Status: Running, Start
 Test-Path 'C:\Program Files\Glass-Rea\App\GlassRea.exe' # True (for the default folder)
 ```
 
-The window opens on the **Overview** page. The first time, it imports the last 30 to 60 days of usage Windows already keeps, so history shows up within a minute. Closing the window keeps it in the tray, by the clock.
+The window opens with **What Glass-Rea may do**: four switches (Usage per app, Blocking apps, Past usage from Windows, Device discovery), all off on a new install. The service does nothing for a feature until it's on. Ask the person which they want, or use **Allow all** if they said to set it up fully, then **Done**. With Past usage from Windows on, it imports the last 30 to 60 days of usage Windows already keeps, so history shows up within a minute. Closing the window keeps it in the tray, by the clock.
+
+An update from 1.2.7 or earlier keeps everything on, as before, and shows the same screen once.
 
 ## 🧯 Troubleshooting
 
