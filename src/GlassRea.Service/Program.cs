@@ -47,6 +47,7 @@ static IHost Recording(HostApplicationBuilder builder)
 {
     builder.Services.AddSingleton(_ => Database.OpenFile(Path.Combine(ServiceState.DataDirectory, "data.db")));
     builder.Services.AddSingleton(_ => new UsageAccumulator());
+    builder.Services.AddSingleton<Permissions>();
     builder.Services.AddSingleton<ServiceState>();
     builder.Services.AddSingleton<ProcessResolver>();
     builder.Services.AddSingleton<DnsCache>();
@@ -64,6 +65,7 @@ static IHost Recording(HostApplicationBuilder builder)
     builder.Services.AddHostedService<PipeServer>();
 
     var host = builder.Build();
+    host.Services.GetRequiredService<Permissions>().Initialize();
     // Asks Windows for the processor share chosen in Settings > General, before capture starts.
     Priority.ApplyToSelf(host.Services.GetRequiredService<ServiceState>().Setting(SettingKeys.Priority));
     host.Services.GetRequiredService<FirewallManager>().RestoreBlocks();

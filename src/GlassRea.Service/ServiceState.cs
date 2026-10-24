@@ -5,7 +5,7 @@ using GlassRea.Core.Usage;
 namespace GlassRea.Service;
 
 /// <summary>Runtime status shared between the background workers and the pipe server.</summary>
-public sealed class ServiceState(Database db)
+public sealed class ServiceState(Database db, Permissions? permissions = null)
 {
     public volatile bool Capturing;
     public volatile string? CaptureError;
@@ -44,5 +44,5 @@ public sealed class ServiceState(Database db)
     public ServiceStatus Snapshot() => new(
         typeof(ServiceState).Assembly.GetName().Version?.ToString(3) ?? "1.0.0",
         Capturing, CaptureError, db.GetSetting(SettingKeys.SrumState) ?? "pending",
-        FirstLiveHour * 3600, Interlocked.Read(ref LastDeviceScan), NetworkPublic);
+        FirstLiveHour * 3600, Interlocked.Read(ref LastDeviceScan), NetworkPublic, permissions?.Current);
 }

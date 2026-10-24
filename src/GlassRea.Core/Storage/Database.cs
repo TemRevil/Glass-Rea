@@ -798,6 +798,12 @@ public sealed class Database : IDisposable
         }
     }
 
+    /// <summary>Anything recorded at all, live or imported.</summary>
+    public bool HasUsage()
+    {
+        lock (_gate) { using var c = Cmd("SELECT EXISTS(SELECT 1 FROM usage)"); return Convert.ToInt64(c.ExecuteScalar()) == 1; }
+    }
+
     // ---------- settings ----------
 
     public string? GetSetting(string key)

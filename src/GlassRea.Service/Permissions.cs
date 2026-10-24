@@ -1,0 +1,83 @@
+using GlassRea.Core.Alerts;
+using GlassRea.Core.Protocol;
+using GlassRea.Core.Storage;
+
+namespace GlassRea.Service;
+
+/// <summary>
+/// What the person has allowed the service to do (Settings > General > Permissions, and the screen the app shows
+/// first). A worker that needs system rights waits here until its feature is on (<see cref="WaitAllowed"/>) and stops
+/// as soon as it's turned off (<see cref="WhileAllowed"/>), without the service restarting.
+/// </summary>
+public sealed class Permissions(Database db, ILogger<Permissions>? log = null)
+{
+    private readonly Lock _gate = new();
+    private readonly Dictionary<Feature, TaskCompletionSource> _waiting = [];
+    private readonly Dictionary<Feature, CancellationTokenSource> _allowed = [];
+
+    /// <summary>Raised after a feature is turned on or off, with its new state.</summary>
+    public event Action<Feature, bool>? Changed;
+
+    /// <summary>
+    /// Once, the first time a 1.2.8 or later service starts: everything off on a new install; on one that already
+    /// recorded, everything stays on as before, and the app shows the screen once so the person can review it.
+    /// </summary>
+    public void Initialize()
+    {
+        if (PermissionKeys.All.Any(f => db.GetSetting(PermissionKeys.For(f)) is not null)) return;
+        var installed = db.GetSetting(SettingKeys.FirstEtwHour) is not null || db.HasUsage();
+        foreach (var f in PermissionKeys.All) db.SetSetting(PermissionKeys.For(f), installed ? "true" : "false");
+        db.SetSetting(PermissionKeys.Reviewed, "false");
+        log?.LogInformation(installed
+            ? "Permissions start on, as this PC already used every feature; the app asks once to review them"
+            : "Permissions start off until they're allowed in the app");
+    }
+
+    public PermissionSet Current => new(Allowed(Feature.Usage), Allowed(Feature.Blocking), Allowed(Feature.History),
+        Allowed(Feature.Devices), db.GetSetting(PermissionKeys.Reviewed) == "true");
+
+    public bool Allowed(Feature f) => db.GetSetting(PermissionKeys.For(f)) == "true";
+
+    public void Set(Feature f, bool on)
+    {
+        TaskCompletionSource? waiting = null;
+        CancellationTokenSource? allowed = null;
+        lock (_gate)
+        {
+            if (Allowed(f) == on) return;
+            db.SetSetting(PermissionKeys.For(f), on ? "true" : "false");
+            if (on) _waiting.Remove(f, out waiting);
+            else _allowed.Remove(f, out allowed);
+        }
+        // Outside the lock: what runs on these may ask again.
+        waiting?.TrySetResult();
+        allowed?.Cancel();
+        log?.LogInformation("{Feature} is {State}", PermissionText.Title(f), on ? "on" : "off");
+        Changed?.Invoke(f, on);
+    }
+
+    public void MarkReviewed() => db.SetSetting(PermissionKeys.Reviewed, "true");
+
+    /// <summary>Completes once <paramref name="f"/> is allowed (at once if it already is).</summary>
+    public Task WaitAllowed(Feature f, CancellationToken ct)
+    {
+        lock (_gate)
+        {
+            if (Allowed(f)) return Task.CompletedTask;
+            if (!_waiting.TryGetValue(f, out var tcs))
+                _waiting[f] = tcs = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            return tcs.Task.WaitAsync(ct);
+        }
+    }
+
+    /// <summary>Cancelled when <paramref name="f"/> is turned off; already cancelled if it's off now.</summary>
+    public CancellationToken WhileAllowed(Feature f)
+    {
+        lock (_gate)
+        {
+            if (!Allowed(f)) return new CancellationToken(canceled: true);
+            if (!_allowed.TryGetValue(f, out var cts)) _allowed[f] = cts = new CancellationTokenSource();
+            return cts.Token;
+        }
+    }
+}
