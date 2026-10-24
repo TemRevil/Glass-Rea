@@ -36,6 +36,7 @@ public sealed partial class DevicesPage : UserControl, IPage
             ? "The first scan runs shortly after the service starts."
             : $"{online} device{(online == 1 ? "" : "s")} online at the last scan, {Fmt.Ago(status.LastDeviceScan)}. Scans run every 5 minutes.";
         PublicHint.Visibility = status.NetworkPublic ? Visibility.Visible : Visibility.Collapsed;
+        if (!ScanRing.IsActive) ScanButton.IsEnabled = CanScan; // the service refuses a scan while discovery is off
         var rows = devices
             .OrderByDescending(d => d.IsGateway).ThenByDescending(d => d.IsThisPc).ThenByDescending(d => d.LastSeen >= recent)
             .ThenBy(DeviceLabel.For, StringComparer.CurrentCultureIgnoreCase)
@@ -130,6 +131,8 @@ public sealed partial class DevicesPage : UserControl, IPage
         flyout.ShowAt(button);
     }
 
+    private static bool CanScan => !PermissionState.IsOff(Feature.Devices);
+
     /// <summary>Scans now and shows the list as soon as the scan has finished (it takes a few seconds).</summary>
     private async void OnScan(object sender, RoutedEventArgs e)
     {
@@ -152,7 +155,7 @@ public sealed partial class DevicesPage : UserControl, IPage
         catch (Exception ex) when (Service.IsOffline(ex) || ex is ServiceException) { /* the window shows service problems */ }
         finally
         {
-            ScanButton.IsEnabled = true;
+            ScanButton.IsEnabled = CanScan;
             ScanRing.IsActive = false;
             ScanRing.Visibility = Visibility.Collapsed;
             ScanText.Text = "Scan now";

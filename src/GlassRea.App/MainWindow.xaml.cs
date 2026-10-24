@@ -375,6 +375,9 @@ public sealed partial class MainWindow : Window
         else FeatureOff.IsOpen = false;
     }
 
+    private void OnBarsResized(object sender, SizeChangedEventArgs e) =>
+        PageHost.Margin = new Thickness(14, 12 + (e.NewSize.Height > 0 ? e.NewSize.Height + 12 : 0), 14, 0);
+
     private async void OnTurnOn(object sender, RoutedEventArgs e)
     {
         if (FeatureOf(_current) is not { } f) return;

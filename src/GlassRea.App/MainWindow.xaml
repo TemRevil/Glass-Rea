@@ -66,7 +66,8 @@
                     <ProgressBar.OpacityTransition><ScalarTransition Duration="0:0:0.25" /></ProgressBar.OpacityTransition>
                 </ProgressBar>
 
-                <StackPanel Margin="14,12,14,0" Spacing="8" VerticalAlignment="Top">
+                <!-- The page moves down below an open bar (OnBarsResized), so a bar never covers its title. -->
+                <StackPanel x:Name="Bars" Margin="14,12,14,0" Spacing="8" VerticalAlignment="Top" SizeChanged="OnBarsResized">
                     <!-- The page's feature is off in Settings > General > Permissions (Support/PermissionState.cs). -->
                     <InfoBar x:Name="FeatureOff" IsOpen="False" IsClosable="False" Severity="Informational">
                         <InfoBar.ActionButton>
