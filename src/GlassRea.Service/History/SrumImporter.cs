@@ -19,7 +19,7 @@ namespace GlassRea.Service.History;
 /// its networks too; a wired network it doesn't name.
 /// History imported before VPN traffic was marked, or before networks were recorded, gets that once, in a second pass.
 /// </summary>
-public sealed class SrumImporter(Database db, ServiceState state, ProcessResolver resolver, ILogger<SrumImporter> log) : BackgroundService
+public sealed class SrumImporter(Database db, ServiceState state, ProcessResolver resolver, Permissions permissions, ILogger<SrumImporter> log) : BackgroundService
 {
     private const string SruFolder = @"C:\Windows\System32\sru";
     private const string NetworkUsageTable = "{973F5D5C-1D90-4944-BE8E-24B94231A174}";
@@ -33,8 +33,21 @@ public sealed class SrumImporter(Database db, ServiceState state, ProcessResolve
         var tunnelsMarked = db.GetSetting(SettingKeys.SrumTunnelSplit) == "done";
         var networksMarked = db.GetSetting(SettingKeys.SrumNetworks) == SettingKeys.SrumNetworksDone;
         if (imported && tunnelsMarked && networksMarked) return;
-        while (state.FirstLiveHour == 0) await Task.Delay(TimeSpan.FromSeconds(5), ct);
+        await permissions.WhileOn(Feature.History, run => Import(imported, tunnelsMarked, networksMarked, run), ct);
+    }
+
+    /// <summary>
+    /// Where the import stops: before live capture's first hour, so nothing is counted twice; or, with Usage per app
+    /// off and nothing captured yet, the current hour.
+    /// </summary>
+    public static long Cutoff(long firstLiveHour, long nowHour) => firstLiveHour > 0 ? firstLiveHour : nowHour;
+
+    private async Task Import(bool imported, bool tunnelsMarked, bool networksMarked, CancellationToken ct)
+    {
+        // Gives live capture, if it's allowed, time to start first: its first hour is where the import stops.
         await Task.Delay(TimeSpan.FromSeconds(15), ct);
+        if (state.FirstLiveHour == 0)
+            db.SetSetting(SettingKeys.FirstEtwHour, Cutoff(0, DateTimeOffset.UtcNow.ToUnixTimeSeconds() / 3600).ToString(System.Globalization.CultureInfo.InvariantCulture));
         if (imported)
         {
             try

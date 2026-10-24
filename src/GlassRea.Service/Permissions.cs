@@ -28,6 +28,9 @@ public sealed class Permissions(Database db, ILogger<Permissions>? log = null)
         var installed = db.GetSetting(SettingKeys.FirstEtwHour) is not null || db.HasUsage();
         foreach (var f in PermissionKeys.All) db.SetSetting(PermissionKeys.For(f), installed ? "true" : "false");
         db.SetSetting(PermissionKeys.Reviewed, "false");
+        // Capture has run since its first hour on such a PC, so new-app alerts keep counting from there.
+        if (installed && db.GetSetting(SettingKeys.FirstEtwHour) is { } first && db.GetSetting(SettingKeys.CaptureFirstHour) is null)
+            db.SetSetting(SettingKeys.CaptureFirstHour, first);
         log?.LogInformation(installed
             ? "Permissions start on, as this PC already used every feature; the app asks once to review them"
             : "Permissions start off until they're allowed in the app");
@@ -67,6 +70,24 @@ public sealed class Permissions(Database db, ILogger<Permissions>? log = null)
             if (!_waiting.TryGetValue(f, out var tcs))
                 _waiting[f] = tcs = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
             return tcs.Task.WaitAsync(ct);
+        }
+    }
+
+    /// <summary>
+    /// Runs <paramref name="work"/> while <paramref name="f"/> is allowed: it starts once the feature is turned on, its
+    /// token is cancelled when it's turned off, and it starts again when it's turned back on. Ends when the work
+    /// finishes on its own or the service stops.
+    /// </summary>
+    public async Task WhileOn(Feature f, Func<CancellationToken, Task> work, CancellationToken ct)
+    {
+        while (!ct.IsCancellationRequested)
+        {
+            try { await WaitAllowed(f, ct).ConfigureAwait(false); }
+            catch (OperationCanceledException) { return; }
+            using var run = CancellationTokenSource.CreateLinkedTokenSource(ct, WhileAllowed(f));
+            try { await work(run.Token).ConfigureAwait(false); }
+            catch (OperationCanceledException) when (run.IsCancellationRequested) { }
+            if (!run.IsCancellationRequested) return;
         }
     }
 

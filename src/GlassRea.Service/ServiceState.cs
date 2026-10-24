@@ -41,8 +41,12 @@ public sealed class ServiceState(Database db, Permissions? permissions = null)
     /// <summary>The first hour live capture covered. Windows history is only imported before it, so nothing is counted twice.</summary>
     public long FirstLiveHour => long.TryParse(db.GetSetting(SettingKeys.FirstEtwHour), out var h) ? h : 0;
 
+    /// <summary>The hour live capture first ran (0 if it never has), from when new-app alerts make sense.</summary>
+    public long CaptureFirstHour => long.TryParse(db.GetSetting(SettingKeys.CaptureFirstHour), out var h) ? h : 0;
+
     public ServiceStatus Snapshot() => new(
         typeof(ServiceState).Assembly.GetName().Version?.ToString(3) ?? "1.0.0",
         Capturing, CaptureError, db.GetSetting(SettingKeys.SrumState) ?? "pending",
-        FirstLiveHour * 3600, Interlocked.Read(ref LastDeviceScan), NetworkPublic, permissions?.Current);
+        (CaptureFirstHour > 0 ? CaptureFirstHour : FirstLiveHour) * 3600, Interlocked.Read(ref LastDeviceScan), NetworkPublic,
+        permissions?.Current);
 }

@@ -68,6 +68,7 @@ public class PermissionTests
         var p = new Permissions(db);
         p.Initialize();
         Assert.Equal(new PermissionSet(true, true, true, true, false), p.Current);
+        Assert.Equal("1", db.GetSetting(SettingKeys.CaptureFirstHour));
     }
 
     [Fact]
@@ -137,5 +138,57 @@ public class PermissionTests
         using var _ = db;
         p.MarkReviewed();
         Assert.True(new Permissions(db).Current.Reviewed);
+    }
+}
+
+public class PermissionWorkerTests
+{
+    [Fact]
+    public async Task WhileOnRunsAgainAfterTurnedBackOn()
+    {
+        using var db = Database.InMemory();
+        var p = new Permissions(db);
+        p.Initialize();
+        using var stop = new CancellationTokenSource();
+        var runs = 0;
+        var running = p.WhileOn(Feature.Usage, async t => { runs++; await Task.Delay(Timeout.Infinite, t); }, stop.Token);
+        await Task.Delay(50);
+        Assert.Equal(0, runs);
+        p.Set(Feature.Usage, true);
+        await Task.Delay(100);
+        Assert.Equal(1, runs);
+        p.Set(Feature.Usage, false);
+        p.Set(Feature.Usage, true);
+        await Task.Delay(100);
+        Assert.Equal(2, runs);
+        stop.Cancel();
+        await running.WaitAsync(TimeSpan.FromSeconds(1));
+    }
+
+    [Fact]
+    public async Task WhileOnEndsWhenTheWorkIsDone()
+    {
+        using var db = Database.InMemory();
+        var p = new Permissions(db);
+        p.Initialize();
+        p.Set(Feature.History, true);
+        var runs = 0;
+        await Task.Run(() => p.WhileOn(Feature.History, _ => { runs++; return Task.CompletedTask; }, CancellationToken.None)).WaitAsync(TimeSpan.FromSeconds(1));
+        Assert.Equal(1, runs);
+    }
+
+    [Fact]
+    public void SrumCutoffUsesNowWhenNothingWasCaptured()
+    {
+        Assert.Equal(500, GlassRea.Service.History.SrumImporter.Cutoff(0, 500));
+        Assert.Equal(400, GlassRea.Service.History.SrumImporter.Cutoff(400, 500));
+    }
+
+    [Fact]
+    public void NewAppAlertsWaitForTheFirstCaptureHour()
+    {
+        Assert.False(GlassRea.Service.Capture.FlushService.Settled(0, 9));
+        Assert.False(GlassRea.Service.Capture.FlushService.Settled(9, 9));
+        Assert.True(GlassRea.Service.Capture.FlushService.Settled(9, 10));
     }
 }

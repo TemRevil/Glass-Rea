@@ -18,7 +18,7 @@ namespace GlassRea.Service.Capture;
 /// including when the VPN works as a local proxy.
 /// </summary>
 public sealed class EtwCapture(UsageAccumulator usage, ProcessResolver resolver, DnsCache dns, ServiceState state,
-    Database db, ILogger<EtwCapture> log) : BackgroundService
+    Database db, Permissions permissions, ILogger<EtwCapture> log) : BackgroundService
 {
     public const string SessionName = "GlassRea-Capture";
     private const string KernelNetwork = "Microsoft-Windows-Kernel-Network";
@@ -36,9 +36,8 @@ public sealed class EtwCapture(UsageAccumulator usage, ProcessResolver resolver,
         [11] = false, [27] = false, [43] = false, [59] = false, // TCP/UDP receive, IPv4/IPv6
     };
 
-    protected override Task ExecuteAsync(CancellationToken ct) => Task.Factory.StartNew(() => Run(ct), TaskCreationOptions.LongRunning);
-
-    private void Run(CancellationToken ct)
+    /// <summary>Captures only while Usage per app is allowed; turning it off stops the session (no ETW session is left).</summary>
+    protected override Task ExecuteAsync(CancellationToken ct)
     {
         NetworkChange.NetworkAddressChanged += (_, _) =>
         {
@@ -46,6 +45,12 @@ public sealed class EtwCapture(UsageAccumulator usage, ProcessResolver resolver,
             _tunnelAddresses = LocalAddresses(tunnelsOnly: true);
             resolver.RefreshDrives();
         };
+        return permissions.WhileOn(Feature.Usage,
+            run => Task.Factory.StartNew(() => Run(run), CancellationToken.None, TaskCreationOptions.LongRunning, TaskScheduler.Default), ct);
+    }
+
+    private void Run(CancellationToken ct)
+    {
         while (!ct.IsCancellationRequested)
         {
             try
@@ -58,8 +63,9 @@ public sealed class EtwCapture(UsageAccumulator usage, ProcessResolver resolver,
                 var parser = new RegisteredTraceEventParser(session.Source);
                 parser.All += OnEvent;
 
-                if (state.FirstLiveHour == 0)
-                    db.SetSetting(SettingKeys.FirstEtwHour, (DateTimeOffset.UtcNow.ToUnixTimeSeconds() / 3600).ToString());
+                var hour = (DateTimeOffset.UtcNow.ToUnixTimeSeconds() / 3600).ToString();
+                if (state.FirstLiveHour == 0) db.SetSetting(SettingKeys.FirstEtwHour, hour);
+                if (state.CaptureFirstHour == 0) db.SetSetting(SettingKeys.CaptureFirstHour, hour);
                 // The hour this build started in may hold bytes an older build counted without marking VPN traffic.
                 if (db.GetSetting(SettingKeys.TunnelMarkedFrom) is null)
                     db.SetSetting(SettingKeys.TunnelMarkedFrom, (DateTimeOffset.UtcNow.ToUnixTimeSeconds() / 3600 + 1).ToString());
@@ -74,7 +80,8 @@ public sealed class EtwCapture(UsageAccumulator usage, ProcessResolver resolver,
                 log.LogError(ex, "Traffic capture failed");
             }
             state.Capturing = false;
-            if (!ct.IsCancellationRequested) ct.WaitHandle.WaitOne(TimeSpan.FromSeconds(5));
+            if (ct.IsCancellationRequested) state.CaptureError = null;
+            else ct.WaitHandle.WaitOne(TimeSpan.FromSeconds(5));
         }
     }
 

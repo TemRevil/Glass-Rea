@@ -9,11 +9,14 @@ namespace GlassRea.Service;
 /// <summary>Checks today's and this month's internet use against the limits once a minute, counted as your internet
 /// provider counts it (a VPN's wrapping included, see <see cref="Database.Connection"/>). "This month" runs from the
 /// reset day set in Settings > Data.</summary>
-public sealed class LimitWatcher(Database db, ServiceState state, ILogger<LimitWatcher> log) : BackgroundService
+public sealed class LimitWatcher(Database db, ServiceState state, Permissions permissions, ILogger<LimitWatcher> log) : BackgroundService
 {
     private const string FiredKey = "limit_alerts_fired";
 
-    protected override async Task ExecuteAsync(CancellationToken ct)
+    /// <summary>Limits count what Usage per app records, so they're checked only while it's allowed.</summary>
+    protected override Task ExecuteAsync(CancellationToken ct) => permissions.WhileOn(Feature.Usage, Watch, ct);
+
+    private async Task Watch(CancellationToken ct)
     {
         using var timer = new PeriodicTimer(TimeSpan.FromMinutes(1));
         do

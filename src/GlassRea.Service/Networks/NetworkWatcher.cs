@@ -1,4 +1,5 @@
 using System.Net.NetworkInformation;
+using GlassRea.Core.Protocol;
 using GlassRea.Core.Storage;
 using GlassRea.Core.Usage;
 
@@ -9,14 +10,17 @@ namespace GlassRea.Service.Networks;
 /// it. Checked at start, whenever the PC's addresses change and a few times over the next minutes while Windows
 /// identifies a new network, and every 5 minutes, which also picks up a network renamed in Windows.
 /// </summary>
-public sealed class NetworkWatcher(Database db, UsageAccumulator usage, ILogger<NetworkWatcher> log) : BackgroundService
+public sealed class NetworkWatcher(Database db, UsageAccumulator usage, Permissions permissions, ILogger<NetworkWatcher> log) : BackgroundService
 {
     private static readonly TimeSpan Every = TimeSpan.FromMinutes(5);
     private static readonly TimeSpan[] AfterChange = [TimeSpan.FromSeconds(2), TimeSpan.FromSeconds(8), TimeSpan.FromSeconds(20), TimeSpan.FromSeconds(60)];
     private readonly SemaphoreSlim _changed = new(0, 1);
     private bool _failing;
 
-    protected override async Task ExecuteAsync(CancellationToken ct)
+    /// <summary>Only needed while Usage per app is allowed: it says which network the counted use was on.</summary>
+    protected override Task ExecuteAsync(CancellationToken ct) => permissions.WhileOn(Feature.Usage, Watch, ct);
+
+    private async Task Watch(CancellationToken ct)
     {
         NetworkChange.NetworkAddressChanged += OnChange;
         NetworkChange.NetworkAvailabilityChanged += OnChange;
