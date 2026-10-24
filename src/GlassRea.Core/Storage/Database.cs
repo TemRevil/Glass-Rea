@@ -798,6 +798,26 @@ public sealed class Database : IDisposable
         }
     }
 
+    /// <summary>
+    /// Settings > General > Delete history: every app's use, who it talked to, the devices seen and the alerts go. The
+    /// apps themselves stay (blocks are kept on them), and so do networks' names and every setting.
+    /// </summary>
+    public void DeleteHistory()
+    {
+        lock (_gate)
+        {
+            using var tx = _db.BeginTransaction();
+            Exec("DELETE FROM usage; DELETE FROM hosts; DELETE FROM dns; DELETE FROM devices; DELETE FROM forgotten_devices; DELETE FROM device_hints; DELETE FROM alerts;");
+            tx.Commit();
+        }
+    }
+
+    /// <summary>Blocking apps was turned off: nothing stays marked blocked.</summary>
+    public void ClearBlocked()
+    {
+        lock (_gate) Exec("UPDATE apps SET blocked=0 WHERE blocked=1");
+    }
+
     /// <summary>Anything recorded at all, live or imported.</summary>
     public bool HasUsage()
     {

@@ -209,3 +209,59 @@ public class SqliteTests
         Assert.Throws<SqliteException>(() => ins.Bind("$missing", 1));
     }
 }
+
+public class DeleteHistoryTests
+{
+    private static readonly AppIdentity Chrome = new(@"c:\chrome.exe", "Chrome", @"C:\chrome.exe", null, false);
+    private static readonly AppIdentity Steam = new(@"c:\steam.exe", "Steam", @"C:\steam.exe", null, false);
+    private const long Hour = 500_000;
+
+    private static UsageDelta D(long hour, long netIn, long netOut) => new("", hour, netIn, netOut, 0, 0);
+
+    [Fact]
+    public void DeleteHistoryKeepsSettingsBlocksAndNetworks()
+    {
+        using var db = Database.InMemory();
+        var chrome = db.EnsureApp(Chrome, 0, out _);
+        db.AddUsage([(chrome, D(Hour, 1000, 100))], UsageSource.Live);
+        db.AddHosts([(chrome, new HostDelta("", 20000, "1.1.1.1", 10, 10, 5))]);
+        db.SaveDns([("1.1.1.1", "one.one")], 5);
+        db.SaveDevice(new DeviceInfo("AA-BB-CC-DD-EE-FF", "192.168.1.5", "Phone", false, false, false, 1, 2));
+        db.AddAlert("new_app", "Chrome went online", "First time.", 5);
+        db.SetSetting(SettingKeys.DailyLimit, "123");
+        db.SetBlocked(chrome, true);
+        var home = db.EnsureNetwork("wifi:Home", "Home", NetworkKinds.WiFi, 1, 2);
+
+        db.DeleteHistory();
+
+        Assert.Empty(db.Report(0, (Hour + 1) * 3600, new HashSet<long>()).Apps);
+        Assert.Empty(db.Hosts(chrome, 0, int.MaxValue));
+        Assert.Empty(db.Devices());
+        Assert.Empty(db.Alerts(0));
+        Assert.False(db.HasUsage());
+        Assert.Equal("123", db.GetSetting(SettingKeys.DailyLimit));
+        Assert.Equal([chrome], db.BlockedApps());
+        Assert.Contains(db.Networks(0), n => n.Id == home);
+    }
+
+    [Fact]
+    public void UsageAfterDeleteCountsOnlyNewBytes()
+    {
+        using var db = Database.InMemory();
+        var chrome = db.EnsureApp(Chrome, 0, out _);
+        db.AddUsage([(chrome, D(Hour, 1000, 100))], UsageSource.Live);
+        db.DeleteHistory();
+        db.AddUsage([(chrome, D(Hour, 50, 5))], UsageSource.Live);
+        Assert.Equal(50, db.Report(Hour * 3600, (Hour + 1) * 3600, new HashSet<long>()).NetIn);
+    }
+
+    [Fact]
+    public void ClearBlockedUnblocksAll()
+    {
+        using var db = Database.InMemory();
+        db.SetBlocked(db.EnsureApp(Chrome, 0, out _), true);
+        db.SetBlocked(db.EnsureApp(Steam, 0, out _), true);
+        db.ClearBlocked();
+        Assert.Empty(db.BlockedApps());
+    }
+}
