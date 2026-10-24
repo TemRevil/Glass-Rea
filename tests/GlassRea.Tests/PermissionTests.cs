@@ -240,3 +240,38 @@ public class BlockingPermissionTests
         Assert.Equal(0, firewall.BlockedCount);
     }
 }
+
+public class PermissionRequestTests
+{
+    [Fact]
+    public void ApplySetsEachAndMarksReviewed()
+    {
+        using var db = Database.InMemory();
+        var p = new Permissions(db);
+        p.Initialize();
+        p.Apply(new Dictionary<string, string> { ["allow_usage"] = "true", ["allow_devices"] = "true", ["permissions_reviewed"] = "true" });
+        Assert.Equal(new PermissionSet(true, false, false, true, true), p.Current);
+    }
+
+    [Fact]
+    public void ApplyRefusesUnknownKeysAndChangesNothing()
+    {
+        using var db = Database.InMemory();
+        var p = new Permissions(db);
+        p.Initialize();
+        var refused = Assert.Throws<InvalidOperationException>(() =>
+            p.Apply(new Dictionary<string, string> { ["allow_usage"] = "true", ["allow_everything"] = "true" }));
+        Assert.Equal("Unknown permission: allow_everything", refused.Message);
+        Assert.False(p.Current.Usage);
+    }
+
+    [Fact]
+    public void ApplyRefusesValuesOtherThanTrueOrFalse()
+    {
+        using var db = Database.InMemory();
+        var p = new Permissions(db);
+        p.Initialize();
+        Assert.Throws<InvalidOperationException>(() => p.Apply(new Dictionary<string, string> { ["allow_usage"] = "yes" }));
+        Assert.False(p.Current.Usage);
+    }
+}

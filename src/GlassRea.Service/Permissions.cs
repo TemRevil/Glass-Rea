@@ -59,6 +59,26 @@ public sealed class Permissions(Database db, ILogger<Permissions>? log = null)
         Changed?.Invoke(f, on);
     }
 
+    /// <summary>
+    /// The app's "permissions.set": each <see cref="PermissionKeys.For"/> key to "true" or "false", and
+    /// <see cref="PermissionKeys.Reviewed"/> to "true". Checked whole before anything changes.
+    /// </summary>
+    public void Apply(IReadOnlyDictionary<string, string> changes)
+    {
+        var features = new List<(Feature, bool)>();
+        var reviewed = false;
+        foreach (var (key, value) in changes)
+        {
+            if (value is not ("true" or "false")) throw new InvalidOperationException($"{key} must be true or false.");
+            if (key == PermissionKeys.Reviewed) { reviewed = value == "true"; continue; }
+            var f = PermissionKeys.All.Where(f => PermissionKeys.For(f) == key).Select(f => (Feature?)f).FirstOrDefault()
+                ?? throw new InvalidOperationException($"Unknown permission: {key}");
+            features.Add((f, value == "true"));
+        }
+        foreach (var (f, on) in features) Set(f, on);
+        if (reviewed) MarkReviewed();
+    }
+
     public void MarkReviewed() => db.SetSetting(PermissionKeys.Reviewed, "true");
 
     /// <summary>Completes once <paramref name="f"/> is allowed (at once if it already is).</summary>

@@ -3,6 +3,7 @@ using System.Security.AccessControl;
 using System.Security.Principal;
 using System.Text;
 using System.Text.Json;
+using GlassRea.Core.Alerts;
 using GlassRea.Core.Protocol;
 using GlassRea.Core.Storage;
 using GlassRea.Core.Usage;
@@ -12,7 +13,7 @@ namespace GlassRea.Service;
 
 /// <summary>Serves the desktop app over a local named pipe: one JSON request per line, one JSON response per line.</summary>
 public sealed class PipeServer(Database db, UsageAccumulator usage, ProcessResolver resolver, FirewallManager firewall,
-    DeviceScanner devices, ServiceState state, ILogger<PipeServer> log) : BackgroundService
+    DeviceScanner devices, ServiceState state, Permissions permissions, ILogger<PipeServer> log) : BackgroundService
 {
     private static readonly HashSet<string> EditableSettings =
         [SettingKeys.DailyLimit, SettingKeys.MonthlyLimit, SettingKeys.AlertNewApp, SettingKeys.AlertNewDevice, SettingKeys.AlertDevicePresence,
@@ -121,7 +122,17 @@ public sealed class PipeServer(Database db, UsageAccumulator usage, ProcessResol
                 if (!db.RenameNetwork(r.Network.Value, networkName)) throw new InvalidOperationException("That network isn't in the list any more.");
                 return null;
             case "scan":
+                if (!permissions.Allowed(Feature.Devices)) throw new InvalidOperationException(PermissionText.OffBody(Feature.Devices));
                 devices.RequestScan();
+                return null;
+            case "permissions":
+                return permissions.Current;
+            case "permissions.set":
+                permissions.Apply(r.Settings ?? []);
+                return null;
+            case "history.delete":
+                db.DeleteHistory();
+                log.LogInformation("History deleted");
                 return null;
             case "alerts":
                 return db.Alerts(r.AfterId);
