@@ -61,8 +61,9 @@ public sealed record NetworkInfo(long Id, string Name, string? CustomName, strin
 public sealed record AlertInfo(long Id, long Time, string Kind, string Title, string Body);
 
 /// <param name="NetworkPublic">Windows has the scanned network marked Public, so devices can't be heard saying their names.</param>
+/// <param name="Permissions">What the person has allowed the service to do; null from a service older than 1.2.8.</param>
 public sealed record ServiceStatus(string Version, bool Capturing, string? CaptureError, string HistoryImport,
-    long TrackingSince, long LastDeviceScan, bool NetworkPublic = false);
+    long TrackingSince, long LastDeviceScan, bool NetworkPublic = false, PermissionSet? Permissions = null);
 
 public static class SettingKeys
 {
