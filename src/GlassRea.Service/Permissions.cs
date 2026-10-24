@@ -29,8 +29,8 @@ public sealed class Permissions(Database db, ILogger<Permissions>? log = null)
         foreach (var f in PermissionKeys.All) db.SetSetting(PermissionKeys.For(f), installed ? "true" : "false");
         db.SetSetting(PermissionKeys.Reviewed, "false");
         // Capture has run since its first hour on such a PC, so new-app alerts keep counting from there.
-        if (installed && db.GetSetting(SettingKeys.FirstEtwHour) is { } first && db.GetSetting(SettingKeys.CaptureFirstHour) is null)
-            db.SetSetting(SettingKeys.CaptureFirstHour, first);
+        if (installed && long.TryParse(db.GetSetting(SettingKeys.FirstEtwHour), out var first) && db.GetSetting(SettingKeys.CaptureStartedAt) is null)
+            db.SetSetting(SettingKeys.CaptureStartedAt, (first * 3600).ToString());
         log?.LogInformation(installed
             ? "Permissions start on, as this PC already used every feature; the app asks once to review them"
             : "Permissions start off until they're allowed in the app");

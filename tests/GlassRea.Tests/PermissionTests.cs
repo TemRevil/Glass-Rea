@@ -3,6 +3,7 @@ using GlassRea.Core.Protocol;
 using GlassRea.Core.Storage;
 using GlassRea.Core.Usage;
 using GlassRea.Service;
+using Microsoft.Extensions.Logging;
 
 namespace GlassRea.Tests;
 
@@ -68,7 +69,7 @@ public class PermissionTests
         var p = new Permissions(db);
         p.Initialize();
         Assert.Equal(new PermissionSet(true, true, true, true, false), p.Current);
-        Assert.Equal("1", db.GetSetting(SettingKeys.CaptureFirstHour));
+        Assert.Equal("3600", db.GetSetting(SettingKeys.CaptureStartedAt));
     }
 
     [Fact]
@@ -183,14 +184,6 @@ public class PermissionWorkerTests
         Assert.Equal(500, GlassRea.Service.History.SrumImporter.Cutoff(0, 500));
         Assert.Equal(400, GlassRea.Service.History.SrumImporter.Cutoff(400, 500));
     }
-
-    [Fact]
-    public void NewAppAlertsWaitForTheFirstCaptureHour()
-    {
-        Assert.False(GlassRea.Service.Capture.FlushService.Settled(0, 9));
-        Assert.False(GlassRea.Service.Capture.FlushService.Settled(9, 9));
-        Assert.True(GlassRea.Service.Capture.FlushService.Settled(9, 10));
-    }
 }
 
 public class BlockingPermissionTests
@@ -273,5 +266,74 @@ public class PermissionRequestTests
         p.Initialize();
         Assert.Throws<InvalidOperationException>(() => p.Apply(new Dictionary<string, string> { ["allow_usage"] = "yes" }));
         Assert.False(p.Current.Usage);
+    }
+}
+
+public class ReviewFixTests
+{
+    private static ILogger<T> Quiet<T>() => Microsoft.Extensions.Logging.Abstractions.NullLogger<T>.Instance;
+
+    [Fact]
+    public async Task ImportSeesItWasFinishedMeanwhile()
+    {
+        using var db = Database.InMemory();
+        var p = new Permissions(db);
+        p.Initialize();
+        var state = new ServiceState(db, p);
+        var importer = new GlassRea.Service.History.SrumImporter(db, state,
+            new GlassRea.Service.Capture.ProcessResolver(state, Quiet<GlassRea.Service.Capture.ProcessResolver>()), p,
+            Quiet<GlassRea.Service.History.SrumImporter>());
+        // Finished by an earlier run that was then switched off and on again.
+        db.SetSetting(SettingKeys.SrumState, "Imported: 3 apps, history from 2026-09-01");
+        db.SetSetting(SettingKeys.SrumTunnelSplit, "done");
+        db.SetSetting(SettingKeys.SrumNetworks, SettingKeys.SrumNetworksDone);
+        await importer.Import(CancellationToken.None).WaitAsync(TimeSpan.FromSeconds(2));
+        Assert.False(db.HasUsage());
+    }
+
+    [Fact]
+    public void RetryDoesNothingOnceBlockingIsOff()
+    {
+        using var db = Database.InMemory();
+        var p = new Permissions(db);
+        p.Initialize();
+        p.Set(Feature.Blocking, true);
+        var id = db.EnsureApp(new AppIdentity(@"e:\game.exe", "Game", @"E:\game.exe", null, false), 0, out _);
+        using var firewall = new FirewallManager(db, p, Quiet<FirewallManager>());
+        firewall.Wait(id, @"e:\game.exe", @"E:\game.exe", null, "Game");
+        p.Set(Feature.Blocking, false); // a timer tick that waited on the lock runs after this
+        firewall.RetryWaiting();
+        Assert.False(firewall.EngineOpen);
+        Assert.Equal(1, firewall.WaitingCount); // untouched: not tried, not dropped
+    }
+
+    private sealed class Recorder : ILogger<FirewallManager>
+    {
+        public readonly List<string> Lines = [];
+        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+        public bool IsEnabled(LogLevel level) => true;
+        public void Log<TState>(LogLevel level, EventId id, TState state, Exception? e, Func<TState, Exception?, string> format) =>
+            Lines.Add(format(state, e));
+    }
+
+    [Fact]
+    public void UnblockStillWorksWhileBlockingIsOff()
+    {
+        using var db = Database.InMemory();
+        var p = new Permissions(db);
+        p.Initialize();
+        var id = db.EnsureApp(new AppIdentity(@"c:.exe", "A", @"C:.exe", null, false), 0, out _);
+        var log = new Recorder();
+        using var firewall = new FirewallManager(db, p, log);
+        firewall.SetBlocked(id, false); // a block left over from before it was turned off
+        Assert.Contains("Unblocked A", log.Lines);
+    }
+
+    [Fact]
+    public void NewAppAlertsWaitAFullHourOfCounting()
+    {
+        Assert.False(GlassRea.Service.Capture.FlushService.Settled(0, 99_999));
+        Assert.False(GlassRea.Service.Capture.FlushService.Settled(10_000, 13_599));
+        Assert.True(GlassRea.Service.Capture.FlushService.Settled(10_000, 13_600));
     }
 }

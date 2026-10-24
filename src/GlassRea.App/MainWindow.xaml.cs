@@ -384,7 +384,7 @@ public sealed partial class MainWindow : Window
 
     private async void OnAllowAll(object sender, RoutedEventArgs e) => await Permit(PermissionState.AllowAll);
 
-    private async void OnPermissionsDone(object sender, RoutedEventArgs e) => await Permit(PermissionState.Reviewed);
+    private async void OnPermissionsDone(object sender, RoutedEventArgs e) => await Permit(() => PermissionState.Choose(ScreenChoices.Chosen()));
 
     private static async Task Permit(Func<Task> change)
     {

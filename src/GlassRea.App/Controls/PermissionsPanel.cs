@@ -14,7 +14,16 @@ namespace GlassRea.App.Controls;
 public sealed partial class PermissionsPanel : UserControl
 {
     private readonly Dictionary<Feature, ToggleSwitch> _switches = [];
-    private bool _showing;
+    private bool _showing, _touched;
+
+    /// <summary>
+    /// The permission screen's: a switch changes nothing until the person presses Done (<see cref="Chosen"/>), and the
+    /// service's own state no longer moves the switches once one has been touched.
+    /// </summary>
+    public bool Deferred { get; set; }
+
+    /// <summary>What the switches show now.</summary>
+    public Dictionary<Feature, bool> Chosen() => _switches.ToDictionary(s => s.Key, s => s.Value.IsOn);
 
     public PermissionsPanel()
     {
@@ -23,7 +32,12 @@ public sealed partial class PermissionsPanel : UserControl
         {
             var toggle = new ToggleSwitch { MinWidth = 0, OnContent = "", OffContent = "" };
             AutomationProperties.SetName(toggle, PermissionText.Title(f));
-            toggle.Toggled += async (_, _) => { if (!_showing) await Turn(f, toggle.IsOn); };
+            toggle.Toggled += async (_, _) =>
+            {
+                if (_showing) return;
+                if (Deferred) _touched = true;
+                else await Turn(f, toggle.IsOn);
+            };
             _switches[f] = toggle;
 
             var text = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
@@ -46,6 +60,7 @@ public sealed partial class PermissionsPanel : UserControl
 
     private void Show()
     {
+        if (_touched) return;
         _showing = true;
         foreach (var (f, toggle) in _switches)
         {

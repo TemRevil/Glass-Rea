@@ -4,7 +4,7 @@ Glass-Rea has no accounts, no telemetry, no analytics and no ads. What it record
 
 ## You choose what it does
 
-The service runs with system rights, and uses them only for what's turned on in the app's permission screen or in Settings > General > Permissions: counting each app's use, blocking apps, reading Windows' own past usage, and finding devices on your network. On a new install all four are off until you turn them on. Turning one off stops it at once. **Delete history** in the same place removes the usage, connections, devices and alerts recorded so far.
+The service runs with system rights, and uses them only for what's turned on in the app's permission screen or in Settings > General > Permissions: counting each app's use, blocking apps, reading Windows' own past usage, and finding devices on your network. On a new install all four are off until you turn them on. Turning one off stops it at once. **Delete history** in the same place removes the usage, connections, devices and alerts recorded so far. The list of apps it has seen (names and program paths) stays, so blocks keep working.
 
 ## What it records, and where
 
@@ -20,7 +20,7 @@ That is the only thing the app or the service sends over the internet by itself.
 
 ## On your own network
 
-To name the devices on your network, the service talks to them directly: it pings them, asks them for their names, and listens for the announcements they broadcast. None of this leaves your network. [SECURITY.md](SECURITY.md#local-network-discovery) lists exactly what it sends and listens for.
+While Device discovery is on, the service names the devices on your network by talking to them directly: it pings them, asks them for their names, and listens for the announcements they broadcast. None of this leaves your network, and turning it off stops it and removes its firewall rule. [SECURITY.md](SECURITY.md#local-network-discovery) lists exactly what it sends and listens for.
 
 ## Setup
 

@@ -121,7 +121,7 @@
                     <TextBlock Text="What Glass-Rea may do" Style="{StaticResource PageTitle}" />
                     <TextBlock Style="{StaticResource Caption}" TextWrapping="Wrap"
                                Text="Glass-Rea's service runs with system rights, and uses them only for what's turned on here. You can change this any time in Settings > General." />
-                    <c:PermissionsPanel />
+                    <c:PermissionsPanel x:Name="ScreenChoices" Deferred="True" />
                     <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
                         <Button Content="Allow all" Click="OnAllowAll" />
                         <Button Content="Done" Style="{StaticResource AccentButtonStyle}" Click="OnPermissionsDone" />

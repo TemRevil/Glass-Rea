@@ -35,6 +35,7 @@ public sealed class FirewallManager(Database db, Permissions permissions, ILogge
     internal int WaitingCount { get { lock (_gate) return _waiting.Count; } }
     internal bool Retrying { get { lock (_gate) return _retry is not null; } }
     internal int BlockedCount { get { lock (_gate) return _blocked.Count; } }
+    internal bool EngineOpen { get { lock (_gate) return _engine is not null; } }
 
     public HashSet<long> BlockedAppIds()
     {
@@ -97,12 +98,8 @@ public sealed class FirewallManager(Database db, Permissions permissions, ILogge
 
     public void SetBlocked(long appId, bool block)
     {
-        if (!permissions.Allowed(Feature.Blocking))
-        {
-            // Nothing is blocked while it's off, so there's nothing to unblock either.
-            if (block) throw new InvalidOperationException(PermissionText.OffBody(Feature.Blocking));
-            return;
-        }
+        // Unblocking always works: it only takes a block away, a leftover one included.
+        if (block && !permissions.Allowed(Feature.Blocking)) throw new InvalidOperationException(PermissionText.OffBody(Feature.Blocking));
         var app = db.GetApp(appId) ?? throw new InvalidOperationException("Unknown app.");
         var key = db.AllApps().First(a => a.Id == appId).Key;
         if (app.Path is null) throw new InvalidOperationException($"{app.Name} has no program file, so Windows Firewall cannot target it.");
@@ -111,6 +108,8 @@ public sealed class FirewallManager(Database db, Permissions permissions, ILogge
 
         lock (_gate)
         {
+            // Again under the lock: Blocking apps may have been turned off, and every block lifted, since the check above.
+            if (block && !permissions.Allowed(Feature.Blocking)) throw new InvalidOperationException(PermissionText.OffBody(Feature.Blocking));
             if (Packaging.IsPackaged)
             {
                 _waiting.Remove(appId);
@@ -169,10 +168,12 @@ public sealed class FirewallManager(Database db, Permissions permissions, ILogge
         log.LogInformation("{App} isn't at {Path} now; it's blocked once it's back", name, path);
     }
 
-    private void RetryWaiting()
+    internal void RetryWaiting()
     {
         lock (_gate)
         {
+            // A tick that waited on the lock while Blocking apps was turned off.
+            if (_retry is null || !permissions.Allowed(Feature.Blocking)) return;
             foreach (var (id, (key, path, service, name)) in _waiting.ToList())
             {
                 try
@@ -192,11 +193,13 @@ public sealed class FirewallManager(Database db, Permissions permissions, ILogge
     /// </summary>
     public void LiftAll()
     {
-        try
+        // One hold of the lock (it's re-entrant), so no retry tick or block lands between lifting and forgetting.
+        var lifted = false;
+        lock (_gate)
         {
-            lock (_gate)
+            try
             {
-                if (Packaging.IsPackaged) { _engine?.Dispose(); _engine = null; }
+                if (Packaging.IsPackaged) { lifted = _engine is not null; _engine?.Dispose(); _engine = null; }
                 else
                 {
                     dynamic rules = Policy().Rules;
@@ -204,12 +207,14 @@ public sealed class FirewallManager(Database db, Permissions permissions, ILogge
                     foreach (dynamic rule in (System.Collections.IEnumerable)rules)
                         if (rule.Grouping is string group && group == Group && rule.Name is string name && IsBlockRule(name)) ours.Add(name);
                     foreach (var name in ours) rules.Remove(name);
+                    lifted = ours.Count > 0;
                 }
             }
+            catch (Exception ex) { log.LogWarning(ex, "Could not remove every block"); }
+            lifted |= _blocked.Count > 0 || _waiting.Count > 0;
+            ForgetBlocks();
         }
-        catch (Exception ex) { log.LogWarning(ex, "Could not remove every block"); }
-        ForgetBlocks();
-        log.LogInformation("Lifted every block");
+        if (lifted) log.LogInformation("Lifted every block");
     }
 
     /// <summary>What <see cref="LiftAll"/> forgets: the list, the blocks waiting for their program, and the retry timer.</summary>

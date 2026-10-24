@@ -1,5 +1,6 @@
 using System.ServiceProcess;
 using GlassRea.Core.Paths;
+using GlassRea.Core.Protocol;
 using GlassRea.Core.Storage;
 using Microsoft.Win32;
 
@@ -62,7 +63,9 @@ public sealed class Standby(ILogger<Standby> log, Func<IHost> startRecording) : 
             if (blocked.Count > 0 && File.Exists(file))
             {
                 using var db = Database.OpenFile(file);
-                db.SetBlocked(blocked);
+                // Blocking apps was turned off in the other copy: its blocks were lifted, not kept for this one.
+                if (db.GetSetting(PermissionKeys.For(Feature.Blocking)) == "false") blocked.Clear();
+                else db.SetBlocked(blocked);
             }
         }
         catch (Exception ex) { log.LogWarning(ex, "Could not carry over the other copy's blocks"); }

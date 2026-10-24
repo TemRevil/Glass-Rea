@@ -29,11 +29,8 @@ public sealed class SrumImporter(Database db, ServiceState state, ProcessResolve
 
     protected override async Task ExecuteAsync(CancellationToken ct)
     {
-        var imported = (db.GetSetting(SettingKeys.SrumState) ?? "").StartsWith("Imported", StringComparison.Ordinal);
-        var tunnelsMarked = db.GetSetting(SettingKeys.SrumTunnelSplit) == "done";
-        var networksMarked = db.GetSetting(SettingKeys.SrumNetworks) == SettingKeys.SrumNetworksDone;
-        if (imported && tunnelsMarked && networksMarked) return;
-        await permissions.WhileOn(Feature.History, run => Import(imported, tunnelsMarked, networksMarked, run), ct);
+        if (Progress() is (true, true, true)) return;
+        await permissions.WhileOn(Feature.History, Import, ct);
     }
 
     /// <summary>
@@ -42,8 +39,16 @@ public sealed class SrumImporter(Database db, ServiceState state, ProcessResolve
     /// </summary>
     public static long Cutoff(long firstLiveHour, long nowHour) => firstLiveHour > 0 ? firstLiveHour : nowHour;
 
-    private async Task Import(bool imported, bool tunnelsMarked, bool networksMarked, CancellationToken ct)
+    /// <summary>How far earlier runs got. Read again at every run: one switched off near its end may still have finished.</summary>
+    private (bool Imported, bool TunnelsMarked, bool NetworksMarked) Progress() => (
+        (db.GetSetting(SettingKeys.SrumState) ?? "").StartsWith("Imported", StringComparison.Ordinal),
+        db.GetSetting(SettingKeys.SrumTunnelSplit) == "done",
+        db.GetSetting(SettingKeys.SrumNetworks) == SettingKeys.SrumNetworksDone);
+
+    internal async Task Import(CancellationToken ct)
     {
+        var (imported, tunnelsMarked, networksMarked) = Progress();
+        if (imported && tunnelsMarked && networksMarked) return;
         // Gives live capture, if it's allowed, time to start first: its first hour is where the import stops.
         await Task.Delay(TimeSpan.FromSeconds(15), ct);
         if (state.FirstLiveHour == 0)

@@ -63,9 +63,9 @@ public sealed class EtwCapture(UsageAccumulator usage, ProcessResolver resolver,
                 var parser = new RegisteredTraceEventParser(session.Source);
                 parser.All += OnEvent;
 
-                var hour = (DateTimeOffset.UtcNow.ToUnixTimeSeconds() / 3600).ToString();
-                if (state.FirstLiveHour == 0) db.SetSetting(SettingKeys.FirstEtwHour, hour);
-                if (state.CaptureFirstHour == 0) db.SetSetting(SettingKeys.CaptureFirstHour, hour);
+                var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+                if (state.FirstLiveHour == 0) db.SetSetting(SettingKeys.FirstEtwHour, (now / 3600).ToString());
+                if (state.CaptureStartedAt == 0) db.SetSetting(SettingKeys.CaptureStartedAt, now.ToString());
                 // The hour this build started in may hold bytes an older build counted without marking VPN traffic.
                 if (db.GetSetting(SettingKeys.TunnelMarkedFrom) is null)
                     db.SetSetting(SettingKeys.TunnelMarkedFrom, (DateTimeOffset.UtcNow.ToUnixTimeSeconds() / 3600 + 1).ToString());

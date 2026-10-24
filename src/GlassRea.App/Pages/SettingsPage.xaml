@@ -81,7 +81,7 @@
                     </Border>
 
                     <!-- What the service may do with its system rights (Controls/PermissionsPanel.cs), and deleting what it recorded. -->
-                    <Border Grid.Row="1" Grid.ColumnSpan="3" Style="{StaticResource Card}">
+                    <Border x:Name="PermissionsCard" Grid.Row="1" Grid.ColumnSpan="3" Style="{StaticResource Card}">
                         <StackPanel Spacing="10">
                             <StackPanel Orientation="Horizontal" Spacing="8"><FontIcon Glyph="&#xE8D7;" FontSize="15" /><TextBlock Text="Permissions" Style="{StaticResource CardTitle}" /></StackPanel>
                             <TextBlock Style="{StaticResource Caption}" TextWrapping="Wrap"

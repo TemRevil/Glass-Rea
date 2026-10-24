@@ -33,7 +33,13 @@ public static class PermissionState
         return Set(all);
     }
 
-    public static Task Reviewed() => Set(new() { [PermissionKeys.Reviewed] = "true" });
+    /// <summary>The permission screen's "Done": what its switches show, and the screen closed.</summary>
+    public static Task Choose(IReadOnlyDictionary<Feature, bool> chosen)
+    {
+        var changes = chosen.ToDictionary(c => PermissionKeys.For(c.Key), c => c.Value ? "true" : "false");
+        changes[PermissionKeys.Reviewed] = "true";
+        return Set(changes);
+    }
 
     private static async Task Set(Dictionary<string, string> changes)
     {

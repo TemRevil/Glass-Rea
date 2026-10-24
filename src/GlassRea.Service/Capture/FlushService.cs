@@ -42,7 +42,7 @@ public sealed class FlushService(UsageAccumulator usage, ProcessResolver resolve
 
     private void OnNewApp(AppIdentity app, long now)
     {
-        if (!Settled(state.CaptureFirstHour, now / 3600) || !state.Flag(SettingKeys.AlertNewApp) || app == AppIdentity.System || app == AppIdentity.Unknown) return;
+        if (!Settled(state.CaptureStartedAt, now) || !state.Flag(SettingKeys.AlertNewApp) || app == AppIdentity.System || app == AppIdentity.Unknown) return;
         var (title, body) = AlertText.NewApp(app.Name, app.Path ?? app.Key);
         db.AddAlert("new_app", title, body, now);
     }
@@ -51,5 +51,5 @@ public sealed class FlushService(UsageAccumulator usage, ProcessResolver resolve
     /// During the first hour live capture runs every app is "new"; alerting then would only be noise. Counted from
     /// capture's own first hour, which can be long after install when Usage per app was turned on later.
     /// </summary>
-    public static bool Settled(long captureFirstHour, long nowHour) => captureFirstHour > 0 && nowHour > captureFirstHour;
+    public static bool Settled(long captureStartedAt, long now) => captureStartedAt > 0 && now - captureStartedAt >= 3600;
 }

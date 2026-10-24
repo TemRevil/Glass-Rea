@@ -27,8 +27,14 @@ public sealed class DeviceListener(Database db, DeviceScanner scanner, FirewallM
 
     private async Task Listen(CancellationToken ct)
     {
+        if (ct.IsCancellationRequested) return; // turned off again before this started
         firewall.AllowDiscovery();
-        try { await Task.WhenAll(ListenDhcp(ct), ListenMdns(ct)).ConfigureAwait(false); }
+        try
+        {
+            await Task.WhenAll(ListenDhcp(ct), ListenMdns(ct)).ConfigureAwait(false);
+            // A port it couldn't open ends its listener early; wait anyway, so turning it off still removes the rule.
+            await Task.Delay(Timeout.Infinite, ct).ConfigureAwait(false);
+        }
         finally { if (!permissions.Allowed(Feature.Devices)) firewall.RemoveDiscovery(); }
     }
 

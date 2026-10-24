@@ -88,8 +88,8 @@ public static class SettingKeys
     /// <summary>The first hour live capture marked what went through a VPN; earlier live hours predate the marking.</summary>
     public const string TunnelMarkedFrom = "tunnel_marked_from";
     /// <summary>
-    /// The hour live capture first ran. <see cref="FirstEtwHour"/> can be earlier: with Usage per app off, importing
+    /// When live capture first ran, in unix seconds. <see cref="FirstEtwHour"/> can be earlier: with Usage per app off, importing
     /// Windows' history sets it to where the import stopped.
     /// </summary>
-    public const string CaptureFirstHour = "capture_first_hour";
+    public const string CaptureStartedAt = "capture_started_at";
 }

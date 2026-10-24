@@ -1,6 +1,7 @@
 using System.Globalization;
 using GlassRea.App.Controls;
 using GlassRea.App.Support;
+using GlassRea.Core.Alerts;
 using GlassRea.Core.Paths;
 using GlassRea.Core.Protocol;
 using GlassRea.Core.Updates;
@@ -540,10 +541,15 @@ public sealed partial class SettingsPage : UserControl, IPage
     {
         var status = await Service.Call<ServiceStatus>("status");
         _serviceVersion = status.Version;
-        ServiceText.Text =
-            (status.Capturing ? $"Recording since {Fmt.DateTime(status.TrackingSince)}." : $"Not recording: {status.CaptureError ?? "starting"}.") + "\n" +
-            $"Windows history: {status.HistoryImport}.\n" +
-            "Data is kept in C:\\ProgramData\\Glass-Rea.";
+        var allowed = status.Permissions;
+        var recording = status.Capturing ? $"Recording since {Fmt.DateTime(status.TrackingSince)}."
+            : allowed is { Usage: false } ? $"Not recording: {PermissionText.OffTitle(Feature.Usage)}."
+            : $"Not recording: {status.CaptureError ?? "starting"}.";
+        var history = allowed is { History: false } && status.HistoryImport == "pending"
+            ? PermissionText.OffTitle(Feature.History) : status.HistoryImport;
+        ServiceText.Text = $"{recording}\nWindows history: {history}.\nData is kept in C:\\ProgramData\\Glass-Rea.";
+        // A service older than 1.2.8 asks nothing and can't delete history.
+        PermissionsCard.Visibility = allowed is null ? Visibility.Collapsed : Visibility.Visible;
         ShowNetworks();
         if (_loaded) return; // load once per visit so typing is never overwritten
 

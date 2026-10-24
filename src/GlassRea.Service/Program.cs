@@ -73,6 +73,10 @@ static IHost Recording(HostApplicationBuilder builder)
     };
     // Asks Windows for the processor share chosen in Settings > General, before capture starts.
     Priority.ApplyToSelf(host.Services.GetRequiredService<ServiceState>().Setting(SettingKeys.Priority));
-    host.Services.GetRequiredService<FirewallManager>().RestoreBlocks();
+    var firewall = host.Services.GetRequiredService<FirewallManager>();
+    // Turned off while the service was stopped, or it stopped part way through: nothing it made stays behind.
+    if (!permissions.Allowed(Feature.Blocking)) firewall.LiftAll();
+    if (!permissions.Allowed(Feature.Devices)) firewall.RemoveDiscovery();
+    firewall.RestoreBlocks();
     return host;
 }
