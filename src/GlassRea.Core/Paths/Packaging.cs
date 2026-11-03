@@ -11,6 +11,9 @@ public static partial class Packaging
     public const string ClassicService = "GlassRea";
     public const string StoreService = "GlassReaStore";
 
+    /// <summary>The Store package's family name: its name and the id Windows derives from its publisher.</summary>
+    public const string StoreFamily = "TemRevil.Glass-Rea_m8znxtvwyfwk8";
+
     /// <summary>Runs from the Microsoft Store package (with its package identity).</summary>
     public static bool IsPackaged { get; } = HasPackage();
 

@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Sockets;
+using GlassRea.Core.Paths;
 using GlassRea.Core.Protocol;
 using GlassRea.Core.Storage;
 using GlassRea.Service.Devices;
@@ -21,7 +22,8 @@ public sealed class DeviceListener(Database db, DeviceScanner scanner, FirewallM
 
     /// <summary>
     /// Listens only while Device discovery is allowed. Turning it off closes both sockets and removes the firewall rule
-    /// that let them hear.
+    /// that let them hear. The Store copy also removes the rule whenever the service stops, since nothing of its own
+    /// runs when the package is removed; it's added again when the service starts.
     /// </summary>
     protected override Task ExecuteAsync(CancellationToken ct) => permissions.WhileOn(Feature.Devices, Listen, ct);
 
@@ -35,7 +37,7 @@ public sealed class DeviceListener(Database db, DeviceScanner scanner, FirewallM
             // A port it couldn't open ends its listener early; wait anyway, so turning it off still removes the rule.
             await Task.Delay(Timeout.Infinite, ct).ConfigureAwait(false);
         }
-        finally { if (!permissions.Allowed(Feature.Devices)) firewall.RemoveDiscovery(); }
+        finally { if (Packaging.IsPackaged || !permissions.Allowed(Feature.Devices)) firewall.RemoveDiscovery(); }
     }
 
     private async Task ListenDhcp(CancellationToken ct)

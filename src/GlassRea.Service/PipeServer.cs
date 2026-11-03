@@ -23,28 +23,65 @@ public sealed class PipeServer(Database db, UsageAccumulator usage, ProcessResol
     /// <summary>Longer than this and a request is logged as slow: the app waits on every one.</summary>
     private static readonly TimeSpan SlowRequest = TimeSpan.FromSeconds(1);
 
-    protected override async Task ExecuteAsync(CancellationToken ct)
+    /// <summary>What a program other than Glass-Rea's app is told before the pipe closes on it.</summary>
+    internal const string Refusal = "Glass-Rea's service only answers Glass-Rea's own app.";
+
+    /// <summary>
+    /// Who may open the pipe at all: people signed in at this PC (not over the network, not other services), and
+    /// SYSTEM and administrators. Only this service may add instances, so nothing else can serve on its name while it
+    /// runs. <see cref="PipeCallers"/> then decides, per connection, whether the program is Glass-Rea's app.
+    /// </summary>
+    internal static PipeSecurity Security()
     {
         var security = new PipeSecurity();
-        security.AddAccessRule(new PipeAccessRule(new SecurityIdentifier(WellKnownSidType.AuthenticatedUserSid, null), PipeAccessRights.ReadWrite, AccessControlType.Allow));
+        security.AddAccessRule(new PipeAccessRule(new SecurityIdentifier(WellKnownSidType.NetworkSid, null), PipeAccessRights.FullControl, AccessControlType.Deny));
+        security.AddAccessRule(new PipeAccessRule(new SecurityIdentifier(WellKnownSidType.InteractiveSid, null), PipeAccessRights.ReadWrite, AccessControlType.Allow));
         security.AddAccessRule(new PipeAccessRule(new SecurityIdentifier(WellKnownSidType.LocalSystemSid, null), PipeAccessRights.FullControl, AccessControlType.Allow));
         security.AddAccessRule(new PipeAccessRule(new SecurityIdentifier(WellKnownSidType.BuiltinAdministratorsSid, null), PipeAccessRights.FullControl, AccessControlType.Allow));
+        return security;
+    }
 
+    protected override async Task ExecuteAsync(CancellationToken ct)
+    {
+        var security = Security();
+        var classicApp = PipeCallers.ClassicApp();
+        var first = true;
         while (!ct.IsCancellationRequested)
         {
-            var pipe = NamedPipeServerStreamAcl.Create(Pipe.Name, PipeDirection.InOut, NamedPipeServerStream.MaxAllowedServerInstances,
-                PipeTransmissionMode.Byte, PipeOptions.Asynchronous, 0, 0, security);
+            NamedPipeServerStream pipe;
+            try
+            {
+                // The first instance must be the first on the name: if something else already holds it, the app would
+                // be talking to that, so wait until it's gone (the app checks which process answers, too).
+                pipe = NamedPipeServerStreamAcl.Create(Pipe.Name, PipeDirection.InOut, NamedPipeServerStream.MaxAllowedServerInstances,
+                    PipeTransmissionMode.Byte, PipeOptions.Asynchronous | (first ? PipeOptions.FirstPipeInstance : 0), 0, 0, security);
+            }
+            catch (UnauthorizedAccessException) when (first)
+            {
+                log.LogWarning("Another program holds the pipe {Pipe}; trying again in 10 seconds", Pipe.Name);
+                try { await Task.Delay(TimeSpan.FromSeconds(10), ct); } catch (OperationCanceledException) { break; }
+                continue;
+            }
+            first = false;
             try { await pipe.WaitForConnectionAsync(ct); }
             catch (OperationCanceledException) { await pipe.DisposeAsync(); break; }
-            _ = Task.Run(() => Serve(pipe, ct), ct);
+            _ = Task.Run(() => Serve(pipe, classicApp, ct), ct);
         }
     }
 
-    private async Task Serve(NamedPipeServerStream pipe, CancellationToken ct)
+    private async Task Serve(NamedPipeServerStream pipe, string? classicApp, CancellationToken ct)
     {
         await using var _ = pipe;
         using var reader = new StreamReader(pipe, new UTF8Encoding(false));
         await using var writer = new StreamWriter(pipe, new UTF8Encoding(false)) { AutoFlush = true };
+        var caller = PipeCallers.Describe(pipe);
+        if (!PipeCallers.Allowed(caller, classicApp))
+        {
+            log.LogWarning("Refused a connection from {Program}", caller.Image ?? "a program Windows wouldn't name");
+            try { await writer.WriteLineAsync(JsonSerializer.Serialize(new Response(false, Error: Refusal), Pipe.Json).AsMemory(), ct); }
+            catch (Exception ex) when (ex is IOException or OperationCanceledException) { }
+            return;
+        }
         try
         {
             while (!ct.IsCancellationRequested && await reader.ReadLineAsync(ct) is { } line)

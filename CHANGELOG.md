@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.2.9
+
+- The service only answers Glass-Rea's own app. Other programs that open its pipe are turned away and noted in the service log, and nothing on another PC can open it at all. An elevated administrator can still talk to it.
+- The app checks that it is talking to Glass-Rea's service before it sends anything.
+- The Microsoft Store version removes its device discovery firewall rule whenever its service stops, so removing the app leaves no rule behind.
+- `docs/service-security.md` describes what the service may do and who may ask it.
+
 ## 1.2.8
 
 - Glass-Rea asks before its service does anything. The first time it opens, a screen lists what the service would use its system rights for (usage per app, blocking apps, past usage from Windows, device discovery), with a line on why each needs them. Nothing runs until it's turned on.

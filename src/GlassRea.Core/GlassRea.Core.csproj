@@ -4,4 +4,7 @@
     <RootNamespace>GlassRea.Core</RootNamespace>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="GlassRea.Tests" />
+  </ItemGroup>
 </Project>
