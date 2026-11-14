@@ -77,8 +77,9 @@ public sealed class PipeServer(Database db, UsageAccumulator usage, ProcessResol
         var caller = PipeCallers.Describe(pipe);
         if (!PipeCallers.Allowed(caller, classicApp))
         {
-            log.LogWarning("Refused a connection from {Program}", caller.Image ?? "a program Windows wouldn't name");
-            try { await writer.WriteLineAsync(JsonSerializer.Serialize(new Response(false, Error: Refusal), Pipe.Json).AsMemory(), ct); }
+            log.LogWarning("Refused a connection from {Program} (package {Family}, its folder {Folder}, elevated administrator {Admin})",
+                caller.Image ?? "a program Windows wouldn't name", caller.PackageFamily ?? "none", caller.PackageFolder ?? "unknown", caller.ElevatedAdmin);
+            try { await Refuse(reader, writer, ct); }
             catch (Exception ex) when (ex is IOException or OperationCanceledException) { }
             return;
         }
@@ -113,6 +114,17 @@ public sealed class PipeServer(Database db, UsageAccumulator usage, ProcessResol
         }
         catch (Exception ex) when (ex is IOException or OperationCanceledException) { /* client went away */ }
         catch (Exception ex) { log.LogWarning(ex, "Pipe client failed"); }
+    }
+
+    /// <summary>
+    /// Answers a program that isn't Glass-Rea's app, once it has sent its request. The pipe has no buffer, so a write
+    /// waits until the other side reads: answering first, while the app is still writing its request, left both
+    /// waiting on each other for good (the Store app on a PC where the check went wrong loaded forever).
+    /// </summary>
+    internal static async Task Refuse(StreamReader reader, StreamWriter writer, CancellationToken ct)
+    {
+        if (await reader.ReadLineAsync(ct) is null) return;
+        await writer.WriteLineAsync(JsonSerializer.Serialize(new Response(false, Error: Refusal), Pipe.Json).AsMemory(), ct);
     }
 
     private object? Handle(Request r)

@@ -72,7 +72,10 @@ internal static unsafe partial class PipeCallers
         var full = new string(buffer, 0, (int)length - 1);
         var path = stackalloc char[Size];
         length = Size;
-        return GetPackagePathByFullName(full, ref length, path) == 0 ? (family, new string(path, 0, (int)length - 1)) : (family, null);
+        // Where it's staged, which is the same for everyone: the service runs as SYSTEM, and GetPackagePathByFullName
+        // finds only packages installed for the calling user, so it never found the app's folder and the Store app
+        // was turned away whenever it ran without administrator rights.
+        return GetStagedPackagePathByFullName(full, ref length, path) == 0 ? (family, new string(path, 0, (int)length - 1)) : (family, null);
     }
 
     private static bool IsElevatedAdmin(nint process)
@@ -111,5 +114,5 @@ internal static unsafe partial class PipeCallers
     private static partial int GetPackageFullName(nint process, ref uint length, char* name);
 
     [LibraryImport("kernel32.dll", StringMarshalling = StringMarshalling.Utf16)]
-    private static partial int GetPackagePathByFullName(string fullName, ref uint length, char* path);
+    private static partial int GetStagedPackagePathByFullName(string fullName, ref uint length, char* path);
 }

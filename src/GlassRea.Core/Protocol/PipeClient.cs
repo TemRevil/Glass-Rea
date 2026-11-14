@@ -16,6 +16,12 @@ public sealed partial class PipeClient(string name = Pipe.Name) : IDisposable
     /// <summary>Why the app hangs up: the program serving the pipe isn't Glass-Rea's service.</summary>
     public const string NotTheService = "The program answering on Glass-Rea's pipe isn't Glass-Rea's service.";
 
+    /// <summary>Whether the process serving the pipe may be talked to; Glass-Rea's services only, but for tests.</summary>
+    internal Func<SafePipeHandle, bool> Trusts { get; init; } = ServedByService;
+
+    /// <summary>How long a request may wait for its answer.</summary>
+    internal TimeSpan Answer { get; init; } = TimeSpan.FromSeconds(30);
+
     private readonly SemaphoreSlim _gate = new(1, 1);
     private NamedPipeClientStream? _pipe;
     private StreamReader? _reader;
@@ -28,14 +34,23 @@ public sealed partial class PipeClient(string name = Pipe.Name) : IDisposable
         {
             for (var attempt = 0; ; attempt++)
             {
+                using var waited = CancellationTokenSource.CreateLinkedTokenSource(ct);
+                waited.CancelAfter(Answer);
                 try
                 {
                     await Connect(ct);
-                    await _writer!.WriteLineAsync(JsonSerializer.Serialize(request, Pipe.Json).AsMemory(), ct);
-                    var line = await _reader!.ReadLineAsync(ct) ?? throw new IOException("The service closed the connection.");
+                    await _writer!.WriteLineAsync(JsonSerializer.Serialize(request, Pipe.Json).AsMemory(), waited.Token);
+                    var line = await _reader!.ReadLineAsync(waited.Token) ?? throw new IOException("The service closed the connection.");
                     var response = JsonSerializer.Deserialize<Response>(line, Pipe.Json)!;
                     if (!response.Ok) throw new ServiceException(response.Error ?? "The service reported an error.");
                     return response.Data is { } data ? data.Deserialize<T>(Pipe.Json)! : default!;
+                }
+                catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+                {
+                    // A service that took the request and never answers: the app shows it isn't answering rather than
+                    // waiting for good. Not sent again, since it may have been a change.
+                    Reset();
+                    throw new TimeoutException($"The service didn't answer the {request.Op} request within {Answer.TotalSeconds:0} seconds.");
                 }
                 catch (Exception e) when (e is IOException or TimeoutException or ObjectDisposedException && e is not NotTheServiceException && attempt == 0)
                 {
@@ -52,7 +67,7 @@ public sealed partial class PipeClient(string name = Pipe.Name) : IDisposable
         Reset();
         _pipe = new NamedPipeClientStream(".", name, PipeDirection.InOut, PipeOptions.Asynchronous);
         await _pipe.ConnectAsync(1500, ct);
-        if (!ServedByService(_pipe.SafePipeHandle)) { Reset(); throw new NotTheServiceException(); }
+        if (!Trusts(_pipe.SafePipeHandle)) { Reset(); throw new NotTheServiceException(); }
         _reader = new StreamReader(_pipe, new UTF8Encoding(false));
         _writer = new StreamWriter(_pipe, new UTF8Encoding(false)) { AutoFlush = true };
     }

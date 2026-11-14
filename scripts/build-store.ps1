@@ -17,8 +17,9 @@ $publisher = 'CN=B99259A6-8006-4D29-8939-B5661113C076'
 $version   = ([xml](Get-Content (Join-Path $root 'Directory.Build.props'))).Project.PropertyGroup.Version
 $version4  = "$version.0" # the Store wants four parts, the last one 0
 
-# Only this folder: publish\ also holds the setups build-setup.ps1 makes.
-foreach ($dir in $out, $work) { if (Test-Path $dir) { Remove-Item $dir -Recurse -Force } }
+# Only this folder: publish\ also holds the setups build-setup.ps1 makes. Emptied rather than removed: a Windows Sandbox
+# that had it mapped keeps the folder itself open for a while after it closes.
+foreach ($dir in $out, $work) { if (Test-Path $dir) { Get-ChildItem $dir -Force | Remove-Item -Recurse -Force } }
 New-Item -ItemType Directory -Force $out, $work | Out-Null
 
 Write-Host 'Building the service...'
@@ -62,17 +63,19 @@ if ($TestSign) {
     & dotnet publish (Join-Path $root 'src\GlassRea.Service\GlassRea.Service.csproj') -c Release -r win-x64 --self-contained true `
         -p:UseAppHost=true -o (Join-Path $out 'classic') --nologo -v quiet
     if ($LASTEXITCODE -ne 0) { throw 'Build of the service failed.' }
-    Copy-Item (Join-Path $PSScriptRoot 'sandbox\test-store.ps1') $out
-    $wsb = @"
+    foreach ($test in @{ Script = 'test-store.ps1'; Wsb = 'Glass-Rea test.wsb' }, @{ Script = 'fresh-store.ps1'; Wsb = 'Glass-Rea fresh.wsb' }) {
+        Copy-Item (Join-Path $PSScriptRoot "sandbox\$($test.Script)") $out
+        $wsb = @"
 <Configuration>
   <MappedFolders>
     <MappedFolder><HostFolder>$out</HostFolder><SandboxFolder>C:\Store</SandboxFolder><ReadOnly>false</ReadOnly></MappedFolder>
   </MappedFolders>
-  <LogonCommand><Command>powershell.exe -NoProfile -ExecutionPolicy Bypass -File C:\Store\test-store.ps1</Command></LogonCommand>
+  <LogonCommand><Command>powershell.exe -NoProfile -ExecutionPolicy Bypass -File C:\Store\$($test.Script)</Command></LogonCommand>
 </Configuration>
 "@
-    [IO.File]::WriteAllText((Join-Path $out 'Glass-Rea test.wsb'), $wsb)
-    Write-Host 'Test-signed. Open "Glass-Rea test.wsb" to test it in Windows Sandbox.'
+        [IO.File]::WriteAllText((Join-Path $out $test.Wsb), $wsb)
+    }
+    Write-Host 'Test-signed. Open "Glass-Rea fresh.wsb" (a clean install, as Store certification does) or "Glass-Rea test.wsb" (the move from setup''s copy) in Windows Sandbox.'
 }
 
 Remove-Item $work -Recurse -Force

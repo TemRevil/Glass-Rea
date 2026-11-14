@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.2.10
+
+- The Microsoft Store version opens for people who aren't administrators. Its service looked up where the app is installed only among its own apps, found nothing, and turned the real app away.
+- An app that is turned away is told so, instead of the app and the service each waiting for the other, which left the window loading for good.
+- When the service takes a request and doesn't answer within 30 seconds, the window says it isn't answering instead of loading forever.
+
 ## 1.2.9
 
 - The service only answers Glass-Rea's own app. Other programs that open its pipe are turned away and noted in the service log, and nothing on another PC can open it at all. An elevated administrator can still talk to it.

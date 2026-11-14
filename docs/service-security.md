@@ -29,7 +29,7 @@ A fresh install starts with every privileged feature off. The first time the app
 
 The pipe's access list only decides who can open it. For each connection, the service then checks which program is calling (`src/GlassRea.Service/PipeCallers.cs`). It asks Windows for the client's process id (`GetNamedPipeClientProcessId`) and opens that process for limited query only. It then accepts the caller if one of these is true:
 
-1. The caller is the Store copy's app. Its package family must be `TemRevil.Glass-Rea_m8znxtvwyfwk8` (`GetPackageFamilyName`), and its program file must be exactly `GlassRea.exe` in that package's install folder (`GetPackagePathByFullName`). A different program started inside the package doesn't qualify, and neither does a `GlassRea.exe` from another package.
+1. The caller is the Store copy's app. Its package family must be `TemRevil.Glass-Rea_m8znxtvwyfwk8` (`GetPackageFamilyName`), and its program file must be exactly `GlassRea.exe` in that package's install folder (`GetStagedPackagePathByFullName`, which finds the package whichever account installed it; the service runs as SYSTEM). A different program started inside the package doesn't qualify, and neither does a `GlassRea.exe` from another package.
 2. The caller is setup's copy of the app, and its program file is exactly `App\GlassRea.exe` in that copy's install folder. Setup restricts that folder so only SYSTEM and administrators can write to it. The Store copy's service never accepts this case.
 3. The caller runs elevated, with the Administrators group enabled in its token. Such a caller could already act as SYSTEM, so the pipe gives it nothing new.
 
@@ -98,7 +98,7 @@ Running at a lower identity would mean giving up the features above. The service
 
 ## How to check this
 
-- The pipe's access list and the caller rules are covered by tests in `tests/GlassRea.Tests/PipeTests.cs`. Among them: setup's app is let in only from its install folder, the Store app only by its package and program, an app that connects to a pipe not served by the service hangs up, and the Store family name matches the package manifest's identity.
+- The pipe's access list and the caller rules are covered by tests in `tests/GlassRea.Tests/PipeTests.cs`. Among them: setup's app is let in only from its install folder, the Store app only by its package and program, an app that connects to a pipe not served by the service hangs up, a refused program gets its answer after it has sent its request (the pipe has no buffer, so answering first left both sides waiting), a request the service never answers fails after 30 seconds, and the Store family name matches the package manifest's identity.
 - The WFP structure layouts are checked against the Windows SDK in `tests/GlassRea.Tests/WfpTests.cs`.
 - `scripts/sandbox/test-store.ps1` installs the package in Windows Sandbox. It checks that blocks stop traffic, come back after a restart, are gone while the service is stopped, and are undone by unblocking.
 

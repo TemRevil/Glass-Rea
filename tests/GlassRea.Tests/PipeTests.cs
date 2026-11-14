@@ -94,6 +94,57 @@ public class PipeTests
     }
 
     [Fact]
+    public async Task ARefusedProgramIsToldSoInsteadOfBothSidesWaiting()
+    {
+        // The service's pipe has no buffer: a write waits until the other side reads.
+        var name = "GlassRea-test-" + Guid.NewGuid().ToString("N");
+        await using var server = new NamedPipeServerStream(name, PipeDirection.InOut, 1, PipeTransmissionMode.Byte, PipeOptions.Asynchronous, 0, 0);
+        var served = Task.Run(async () =>
+        {
+            await server.WaitForConnectionAsync();
+            using var reader = new StreamReader(server, new UTF8Encoding(false), leaveOpen: true);
+            await using var writer = new StreamWriter(server, new UTF8Encoding(false), leaveOpen: true) { AutoFlush = true };
+            await PipeServer.Refuse(reader, writer, CancellationToken.None);
+        });
+
+        await using var pipe = new NamedPipeClientStream(".", name, PipeDirection.InOut, PipeOptions.Asynchronous);
+        await pipe.ConnectAsync(3000);
+        using var reader = new StreamReader(pipe, new UTF8Encoding(false));
+        await using var writer = new StreamWriter(pipe, new UTF8Encoding(false)) { AutoFlush = true };
+        var answer = Task.Run(async () =>
+        {
+            await writer.WriteLineAsync(JsonSerializer.Serialize(new Request("status"), Pipe.Json));
+            return await reader.ReadLineAsync();
+        });
+
+        Assert.Same(answer, await Task.WhenAny(answer, Task.Delay(TimeSpan.FromSeconds(5))));
+        var response = JsonSerializer.Deserialize<Response>((await answer)!, Pipe.Json)!;
+        Assert.False(response.Ok);
+        Assert.Equal(PipeServer.Refusal, response.Error);
+        await served.WaitAsync(TimeSpan.FromSeconds(5));
+    }
+
+    [Fact]
+    public async Task AServiceThatNeverAnswersTimesOutOnceInsteadOfHoldingTheAppForever()
+    {
+        var name = "GlassRea-test-" + Guid.NewGuid().ToString("N");
+        await using var server = new NamedPipeServerStream(name, PipeDirection.InOut, 1, PipeTransmissionMode.Byte, PipeOptions.Asynchronous);
+        var requests = 0;
+        _ = Task.Run(async () =>
+        {
+            await server.WaitForConnectionAsync();
+            using var reader = new StreamReader(server, new UTF8Encoding(false), leaveOpen: true);
+            while (await reader.ReadLineAsync() is not null) Interlocked.Increment(ref requests); // and never answers
+        });
+
+        using var client = new PipeClient(name) { Trusts = _ => true, Answer = TimeSpan.FromSeconds(1) };
+        var call = client.Call<object>(new Request("status"));
+        Assert.Same(call, await Task.WhenAny(call, Task.Delay(TimeSpan.FromSeconds(10))));
+        await Assert.ThrowsAsync<TimeoutException>(() => call);
+        Assert.Equal(1, requests); // not sent again: it may have been a change, and waiting twice is twice as long
+    }
+
+    [Fact]
     public async Task ClosingAfterTheServiceHungUpClosesEverything()
     {
         var name = "GlassRea-test-" + Guid.NewGuid().ToString("N");
