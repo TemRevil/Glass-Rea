@@ -98,7 +98,7 @@ Running at a lower identity would mean giving up the features above. The service
 
 ## How to check this
 
-- The pipe's access list and the caller rules are covered by tests in `tests/GlassRea.Tests/PipeTests.cs`. Among them: setup's app is let in only from its install folder, the Store app only by its package and program, an app that connects to a pipe not served by the service hangs up, a refused program gets its answer after it has sent its request (the pipe has no buffer, so answering first left both sides waiting), a request the service never answers fails after 30 seconds, and the Store family name matches the package manifest's identity.
+- The pipe's access list and the caller rules are covered by tests in `tests/GlassRea.Tests/PipeTests.cs`. Among them: setup's app is let in only from its install folder, the Store app only by its package and program, an app that connects to a pipe not served by the service hangs up, a refused program gets its answer after it has sent its request (the pipe has no buffer, so answering first left both sides waiting) and is dropped if that takes more than 5 seconds or 4 KB, its request thrown away unread, a request the service never answers fails after 30 seconds, and the Store family name matches the package manifest's identity.
 - The WFP structure layouts are checked against the Windows SDK in `tests/GlassRea.Tests/WfpTests.cs`.
 - `scripts/sandbox/test-store.ps1` installs the package in Windows Sandbox. It checks that blocks stop traffic, come back after a restart, are gone while the service is stopped, and are undone by unblocking.
 

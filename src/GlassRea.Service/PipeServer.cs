@@ -119,13 +119,31 @@ public sealed class PipeServer(Database db, UsageAccumulator usage, ProcessResol
     /// <summary>
     /// Answers a program that isn't Glass-Rea's app, once it has sent its request. The pipe has no buffer, so a write
     /// waits until the other side reads: answering first, while the app is still writing its request, left both
-    /// waiting on each other for good (the Store app on a PC where the check went wrong loaded forever).
+    /// waiting on each other for good (the Store app on a PC where the check went wrong loaded forever). The request is
+    /// thrown away unread, and a program that doesn't finish one within a few seconds and a few KB is just dropped, so
+    /// nothing turned away can hold a connection open or fill the service's memory.
     /// </summary>
-    internal static async Task Refuse(StreamReader reader, StreamWriter writer, CancellationToken ct)
+    internal static async Task Refuse(StreamReader reader, StreamWriter writer, CancellationToken ct, TimeSpan? wait = null)
     {
-        if (await reader.ReadLineAsync(ct) is null) return;
-        await writer.WriteLineAsync(JsonSerializer.Serialize(new Response(false, Error: Refusal), Pipe.Json).AsMemory(), ct);
+        using var waited = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        waited.CancelAfter(wait ?? RefusedWait);
+        var buffer = new char[1024];
+        for (var taken = 0; taken < RefusedRequest; )
+        {
+            var n = await reader.ReadAsync(buffer, waited.Token);
+            if (n == 0) return;
+            if (Array.IndexOf(buffer, '\n', 0, n) >= 0)
+            {
+                await writer.WriteLineAsync(JsonSerializer.Serialize(new Response(false, Error: Refusal), Pipe.Json).AsMemory(), waited.Token);
+                return;
+            }
+            taken += n;
+        }
     }
+
+    /// <summary>How long, and how much, a program that is turned away may take to send its request.</summary>
+    private static readonly TimeSpan RefusedWait = TimeSpan.FromSeconds(5);
+    private const int RefusedRequest = 4096;
 
     private object? Handle(Request r)
     {

@@ -125,6 +125,60 @@ public class PipeTests
     }
 
     [Fact]
+    public async Task ARefusedProgramCantHoldTheServiceOrFillItsMemory()
+    {
+        // One that never finishes its request, and one that sends a request with no end.
+        foreach (var flood in new[] { false, true })
+        {
+            var name = "GlassRea-test-" + Guid.NewGuid().ToString("N");
+            await using var server = new NamedPipeServerStream(name, PipeDirection.InOut, 1, PipeTransmissionMode.Byte, PipeOptions.Asynchronous, 0, 0);
+            var counted = new CountingStream(server);
+            var refused = Task.Run(async () =>
+            {
+                await server.WaitForConnectionAsync();
+                using var reader = new StreamReader(counted, new UTF8Encoding(false), leaveOpen: true);
+                await using var writer = new StreamWriter(server, new UTF8Encoding(false), leaveOpen: true) { AutoFlush = true };
+                try { await PipeServer.Refuse(reader, writer, CancellationToken.None, wait: TimeSpan.FromSeconds(1)); }
+                catch (OperationCanceledException) { }
+            });
+
+            await using var pipe = new NamedPipeClientStream(".", name, PipeDirection.InOut, PipeOptions.Asynchronous);
+            await pipe.ConnectAsync(3000);
+            using var stop = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+            var sending = Task.Run(async () =>
+            {
+                var chunk = Encoding.UTF8.GetBytes(new string('x', 4096));
+                try { while (flood && !stop.IsCancellationRequested) await pipe.WriteAsync(chunk, stop.Token); }
+                catch (Exception e) when (e is IOException or OperationCanceledException) { }
+            });
+
+            Assert.Same(refused, await Task.WhenAny(refused, Task.Delay(TimeSpan.FromSeconds(8))));
+            Assert.True(counted.Taken <= 64 * 1024, $"read {counted.Taken} bytes from a refused program");
+            await stop.CancelAsync();
+            pipe.Dispose();
+            await sending;
+        }
+    }
+
+    private sealed class CountingStream(Stream inner) : Stream
+    {
+        public long Taken;
+        public override int Read(byte[] buffer, int offset, int count) => Count(inner.Read(buffer, offset, count));
+        public override async ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken ct = default) => Count(await inner.ReadAsync(buffer, ct));
+        public override Task<int> ReadAsync(byte[] buffer, int offset, int count, CancellationToken ct) => ReadAsync(buffer.AsMemory(offset, count), ct).AsTask();
+        private int Count(int n) { Interlocked.Add(ref Taken, n); return n; }
+        public override bool CanRead => true;
+        public override bool CanSeek => false;
+        public override bool CanWrite => false;
+        public override long Length => throw new NotSupportedException();
+        public override long Position { get => throw new NotSupportedException(); set => throw new NotSupportedException(); }
+        public override void Flush() { }
+        public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
+        public override void SetLength(long value) => throw new NotSupportedException();
+        public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+    }
+
+    [Fact]
     public async Task AServiceThatNeverAnswersTimesOutOnceInsteadOfHoldingTheAppForever()
     {
         var name = "GlassRea-test-" + Guid.NewGuid().ToString("N");
