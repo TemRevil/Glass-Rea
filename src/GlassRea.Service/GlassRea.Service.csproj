@@ -13,7 +13,7 @@
     <PackageReference Include="Microsoft.Extensions.Hosting.WindowsServices" Version="10.0.15" />
     <PackageReference Include="Microsoft.Diagnostics.Tracing.TraceEvent" Version="4.0.0" />
     <PackageReference Include="ManagedEsent" Version="2.0.0" />
-    <PackageReference Include="System.Management" Version="10.0.15" />
+    <PackageReference Include="System.Management" Version="11.0.0" />
   </ItemGroup>
   <ItemGroup>
     <!-- Network card makers from the IEEE registries; refresh with scripts/update-oui.ps1. -->
