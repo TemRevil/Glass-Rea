@@ -25,7 +25,7 @@ A free, private data usage monitor and network monitor for Windows, made of glas
 
 ## 📥 Install
 
-**From the Microsoft Store (recommended):** [get Glass-Rea](https://apps.microsoft.com/detail/9PH88K5B2QX2), or run `winget install --id 9PH88K5B2QX2 --source msstore`. Microsoft signs it, so Smart App Control lets it run, and the Store keeps it up to date. Where it differs from setup's copy is [below](#-microsoft-store-version).
+**From the Microsoft Store (recommended):** [get Glass-Rea](https://apps.microsoft.com/detail/9PH88K5B2QX2), or run `winget install --id 9PH88K5B2QX2 --source msstore --accept-source-agreements --accept-package-agreements`. Microsoft signs it, so Smart App Control lets it run, and the Store keeps it up to date. Where it differs from setup's copy is [below](#-microsoft-store-version).
 
 **Or with setup from GitHub:**
 

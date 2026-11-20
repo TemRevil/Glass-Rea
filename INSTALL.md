@@ -27,7 +27,7 @@ ARM PCs (such as Snapdragon laptops) are not supported. Recommended specs and me
 The official listing is https://apps.microsoft.com/detail/9PH88K5B2QX2 (publisher **Tem Revil**). From PowerShell:
 
 ```powershell
-winget install --id 9PH88K5B2QX2 --source msstore --accept-package-agreements
+winget install --id 9PH88K5B2QX2 --source msstore --accept-package-agreements --accept-source-agreements
 ```
 
 Or open the listing and click **Get**. Then open Glass-Rea from Start; the first window asks what it may do (see step 6). It runs the service `GlassReaStore`, so check it with `Get-Service GlassReaStore`. If setup's copy is already installed, the Store copy's service waits; the app offers to remove setup's copy and keep the history, and takes over within a minute, blocks included.
