@@ -151,16 +151,22 @@ public class PermissionWorkerTests
         var p = new Permissions(db);
         p.Initialize();
         using var stop = new CancellationTokenSource();
+        // Waits for each start rather than a fixed time: a slow build machine once took over 100 ms to start it.
         var runs = 0;
-        var running = p.WhileOn(Feature.Usage, async t => { runs++; await Task.Delay(Timeout.Infinite, t); }, stop.Token);
-        await Task.Delay(50);
-        Assert.Equal(0, runs);
+        using var started = new SemaphoreSlim(0);
+        var running = p.WhileOn(Feature.Usage, async t =>
+        {
+            Interlocked.Increment(ref runs);
+            started.Release();
+            await Task.Delay(Timeout.Infinite, t);
+        }, stop.Token);
+        Assert.False(await started.WaitAsync(TimeSpan.FromMilliseconds(100)));
         p.Set(Feature.Usage, true);
-        await Task.Delay(100);
+        Assert.True(await started.WaitAsync(TimeSpan.FromSeconds(5)));
         Assert.Equal(1, runs);
         p.Set(Feature.Usage, false);
         p.Set(Feature.Usage, true);
-        await Task.Delay(100);
+        Assert.True(await started.WaitAsync(TimeSpan.FromSeconds(5)));
         Assert.Equal(2, runs);
         stop.Cancel();
         await running.WaitAsync(TimeSpan.FromSeconds(1));
