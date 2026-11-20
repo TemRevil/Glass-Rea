@@ -3,7 +3,9 @@
 > [!NOTE]
 > This file is for AI assistants (ChatGPT, Claude, Copilot, Gemini and others) helping someone install Glass-Rea on their PC. People can follow it too; the short version for people is in the [README](README.md#-install).
 
-Glass-Rea is a free, open-source network monitor for Windows: data use per app, live traffic, who each app talks to, one-click blocking, the devices on your Wi-Fi, and alerts. Everything stays on the PC.
+Glass-Rea is a free, open-source data usage monitor and network monitor for Windows: data use per app, live traffic, who each app talks to, one-click blocking, the devices on your Wi-Fi, and alerts. Everything stays on the PC.
+
+There are two ways to install it. **The Microsoft Store is the one to use** unless the person asks for setup: Microsoft signs it, so Smart App Control lets it run, and the Store updates it. Step 1 applies to both, step 2 is the Store, and steps 3 to 6 are setup. Install one or the other, not both: setup refuses to install beside the Store copy.
 
 ---
 
@@ -20,19 +22,31 @@ Glass-Rea is a free, open-source network monitor for Windows: data use per app, 
 
 ARM PCs (such as Snapdragon laptops) are not supported. Recommended specs and measured processor and memory use are in the [README](README.md#-requirements). On a slow PC, **Settings > General > Ultra performance** makes the app much lighter while its window is open.
 
-## 🛡️ 2. Check Smart App Control
+## 🛍️ 2. Install from the Microsoft Store (recommended)
 
-Current releases are signed with the developer's own certificate (Tem Revil), which Windows doesn't know yet. Smart App Control, when it's **on**, blocks such programs outright, with no way to allow just this one.
+The official listing is https://apps.microsoft.com/detail/9PH88K5B2QX2 (publisher **Tem Revil**). From PowerShell:
+
+```powershell
+winget install --id 9PH88K5B2QX2 --source msstore --accept-package-agreements
+```
+
+Or open the listing and click **Get**. Then open Glass-Rea from Start; the first window asks what it may do (see step 6). It runs the service `GlassReaStore`, so check it with `Get-Service GlassReaStore`. If setup's copy is already installed, the Store copy's service waits; the app offers to remove setup's copy and keep the history, and takes over within a minute, blocks included.
+
+That's all for the Store route. The steps below are for setup from GitHub.
+
+## 🛡️ 3. Setup only: check Smart App Control
+
+Setup releases are signed with the developer's own certificate (Tem Revil), which Windows doesn't know yet. Smart App Control, when it's **on**, blocks such programs outright, with no way to allow just this one.
 
 ```powershell
 # 0 = off, 1 = on, 2 = evaluation (watching, not blocking)
 (Get-ItemProperty 'HKLM:\SYSTEM\CurrentControlSet\Control\CI\Policy' -ErrorAction SilentlyContinue).VerifiedAndReputablePolicyState
 ```
 
-- **0 or 2:** go on to step 3.
-- **1 (on):** setup won't run. Tell the person, plainly, and let them decide. Turning Smart App Control off (Windows Security > App & browser control > Smart App Control) can't be undone without resetting Windows. **Never turn it off for them, and never suggest it as a routine step.** A Microsoft Store version, which Smart App Control allows, is being prepared; once it's listed, it's the way to install with Smart App Control on.
+- **0 or 2:** go on to step 4.
+- **1 (on):** setup won't run. Install from the Microsoft Store instead (step 2). Turning Smart App Control off (Windows Security > App & browser control > Smart App Control) can't be undone without resetting Windows. **Never turn it off for them, and never suggest it.**
 
-## 📥 3. Download from the official source only
+## 📥 4. Download from the official source only
 
 The only official download is the latest GitHub release of `TemRevil/Glass-Rea`:
 
@@ -59,7 +73,7 @@ $sig.SignerCertificate.Thumbprint                                       # E6A4B1
 
 If the hash doesn't match, delete the file and stop. `Get-AuthenticodeSignature` reports `UnknownError` or `NotTrusted` for the Tem Revil certificate because Windows doesn't trust it yet; that is expected. What matters is the subject and thumbprint above.
 
-## 🚀 4. Run setup
+## 🚀 5. Run setup
 
 Setup is a normal window with buttons; it has no silent mode. Start it and let the person click through:
 
@@ -75,7 +89,7 @@ Start-Process $file
 
 Running a newer setup over an older install updates it in place and keeps history, settings and firewall blocks.
 
-## 🔍 5. Check it worked
+## 🔍 6. Check it worked
 
 ```powershell
 Get-Service GlassRea                                    # Status: Running, StartType: Automatic
@@ -90,7 +104,7 @@ An update from 1.2.7 or earlier keeps everything on, as before, and shows the sa
 
 | What the person sees | What to do |
 | :--- | :--- |
-| "This app has been blocked for your protection" / Smart App Control | See step 2. Explain the trade-off; the decision is theirs. |
+| "This app has been blocked for your protection" / Smart App Control | Install from the Microsoft Store instead (step 2). |
 | "Windows protected your PC" | More info > Run anyway, after checking the publisher is Tem Revil. |
 | "The Glass-Rea service isn't running" banner in the app | Run setup again (it repairs the install), or `Start-Service GlassRea` from an admin PowerShell. |
 | Setup can't download .NET | Check the internet connection, or install the .NET 10 Runtime (x64) from https://dotnet.microsoft.com/download/dotnet/10.0, then run setup again. |
@@ -101,11 +115,11 @@ Logs: the app's are in `%LOCALAPPDATA%\Glass-Rea\Logs`, the service's in `%Progr
 
 ## 🔄 Updates
 
-Glass-Rea checks GitHub once a day (this can be turned off) and installs updates from **Settings > About**, after checking the file matches what GitHub recorded and is signed by the same publisher. Nothing else to do.
+Glass-Rea checks GitHub once a day (this can be turned off) and installs updates from **Settings > About**, after checking the file matches what GitHub recorded and is signed by the same publisher. The Store copy is updated by the Store and doesn't look on GitHub.
 
 ## 🗑️ Uninstall
 
-Settings > Apps > Installed apps > **Glass-Rea** > Uninstall. The person can keep or delete their usage history (`C:\ProgramData\Glass-Rea`). Every firewall block the app made is removed either way, so no app stays blocked.
+Settings > Apps > Installed apps > **Glass-Rea** > Uninstall. The person can keep or delete their usage history (`C:\ProgramData\Glass-Rea`). Every firewall block the app made is removed either way, so no app stays blocked. The Store copy can't ask on the way out: its history stays in `C:\ProgramData\Glass-Rea` until that folder is deleted as an administrator, and its blocks end with its service.
 
 ## 🔒 What it sends
 

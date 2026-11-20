@@ -5,7 +5,7 @@
 # Glass-Rea
 
 **See what's using your internet, and stop it.**<br/>
-A free, private network monitor for Windows, made of glass.
+A free, private data usage monitor and network monitor for Windows, made of glass.
 
 [![Latest release](https://img.shields.io/github/v/release/TemRevil/Glass-Rea?style=flat-square&label=release&color=C46532)](https://github.com/TemRevil/Glass-Rea/releases/latest)
 [![Downloads](https://img.shields.io/github/downloads/TemRevil/Glass-Rea/total?style=flat-square&color=C46532)](https://github.com/TemRevil/Glass-Rea/releases)
@@ -17,13 +17,17 @@ A free, private network monitor for Windows, made of glass.
 ![WinUI 3](https://img.shields.io/badge/WinUI-3-0078D4?style=flat-square)
 ![C#](https://img.shields.io/badge/C%23-239120?style=flat-square&logo=csharp&logoColor=white)
 
-[📥 **Download**](https://github.com/TemRevil/Glass-Rea/releases/latest) · [🤖 Install guide for AI agents](INSTALL.md) · [📝 Changelog](CHANGELOG.md) · [🔒 Privacy](PRIVACY.md)
+[🛍️ **Microsoft Store**](https://apps.microsoft.com/detail/9PH88K5B2QX2) · [📥 **Download setup**](https://github.com/TemRevil/Glass-Rea/releases/latest) · [🤖 Install guide for AI agents](INSTALL.md) · [📝 Changelog](CHANGELOG.md) · [🔒 Privacy](PRIVACY.md)
 
 </div>
 
 ---
 
 ## 📥 Install
+
+**From the Microsoft Store (recommended):** [get Glass-Rea](https://apps.microsoft.com/detail/9PH88K5B2QX2), or run `winget install --id 9PH88K5B2QX2 --source msstore`. Microsoft signs it, so Smart App Control lets it run, and the Store keeps it up to date. Where it differs from setup's copy is [below](#-microsoft-store-version).
+
+**Or with setup from GitHub:**
 
 1. **Download** `Glass-Rea.Setup.exe` from the [latest release](https://github.com/TemRevil/Glass-Rea/releases/latest).
 2. **Run it** and approve the admin prompt. If Windows says *"Windows protected your PC"*, click **More info**, check the publisher is **Tem Revil**, then **Run anyway**.
@@ -34,7 +38,7 @@ A free, private network monitor for Windows, made of glass.
 > **Using an AI assistant?** Ask it to *"install Glass-Rea using https://github.com/TemRevil/Glass-Rea/blob/main/INSTALL.md"*. That guide walks it through checking your PC, downloading from the official release only, verifying the file, and the setup steps.
 
 > [!IMPORTANT]
-> Releases are signed with the developer's own certificate for now, which Windows doesn't know yet. If **Smart App Control** is on, Windows blocks setup and there's no way to allow just this one app. Turning Smart App Control off can't be undone without resetting Windows, so think it over. A Microsoft Store version, which Smart App Control allows, is on its way (see [below](#-microsoft-store-version)).
+> Releases are signed with the developer's own certificate for now, which Windows doesn't know yet. If **Smart App Control** is on, Windows blocks setup and there's no way to allow just this one app. Turning Smart App Control off can't be undone without resetting Windows, so install the [Microsoft Store version](https://apps.microsoft.com/detail/9PH88K5B2QX2) instead, which Smart App Control allows.
 
 <details>
 <summary><b>What setup does</b></summary>
@@ -148,7 +152,7 @@ From what they say about themselves on the local network: the name they send whe
 
 ## 🛍️ Microsoft Store version
 
-The same app and service, packaged for the Microsoft Store, which signs it, so Smart App Control lets it run. It's being prepared for the Store and isn't listed yet. Where it differs from setup's copy:
+The same app and service, packaged for the Microsoft Store, which signs it, so Smart App Control lets it run: [Glass-Rea on the Microsoft Store](https://apps.microsoft.com/detail/9PH88K5B2QX2). Where it differs from setup's copy:
 
 - **Updates** come from the Store, by themselves. Settings > About doesn't look on GitHub.
 - **Blocks** live in the recording service while it runs, as filters in Windows' firewall engine, not as Windows Firewall rules. Removing the app can't leave an app blocked, and while the service is stopped nothing is blocked. It blocks them again each time it starts.
