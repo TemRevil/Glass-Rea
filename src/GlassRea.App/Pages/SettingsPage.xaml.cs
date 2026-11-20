@@ -56,6 +56,8 @@ public sealed partial class SettingsPage : UserControl, IPage
         VersionText.Text = $"Version {Updater.Current.ToString(3)}{(Packaging.IsPackaged ? ", from the Microsoft Store" : "")}";
         AutoUpdateBox.IsOn = Preferences.State.CheckForUpdates;
         if (Packaging.IsPackaged) CheckButton.Visibility = AutoUpdateRow.Visibility = Visibility.Collapsed;
+        // Only the Store copy has a listing to rate.
+        if (Packaging.IsPackaged) RateButton.Visibility = Visibility.Visible;
         ShowUpdate();
         // The page is kept between visits: listen only while it's on screen.
         Unloaded += (_, _) => { SectionRequested -= OnSectionRequested; Updater.Checked -= OnUpdateChecked; };
@@ -517,6 +519,13 @@ public sealed partial class SettingsPage : UserControl, IPage
             ShowLogs(InfoBarSeverity.Error, "Couldn't save the logs", ex.Message);
         }
         finally { SaveLogsButton.IsEnabled = true; }
+    }
+
+    /// <summary>Opens the Store's rating and review page for Glass-Rea.</summary>
+    private async void OnRate(object sender, RoutedEventArgs e)
+    {
+        try { await Windows.System.Launcher.LaunchUriAsync(new Uri($"ms-windows-store://review/?ProductId={Packaging.StoreProductId}")); }
+        catch (Exception ex) { Log.Error("Settings", "Couldn't open the Store's review page", ex); }
     }
 
     private void OnOpenLogs(object sender, RoutedEventArgs e)

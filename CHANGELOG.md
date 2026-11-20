@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- The Microsoft Store version has a Rate Glass-Rea link in Settings > About, which opens its review page in the Store.
+
 ## 1.2.10
 
 - The Microsoft Store version opens for people who aren't administrators. Its service looked up where the app is installed only among its own apps, found nothing, and turned the real app away.

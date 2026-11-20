@@ -14,6 +14,9 @@ public static partial class Packaging
     /// <summary>The Store package's family name: its name and the id Windows derives from its publisher.</summary>
     public const string StoreFamily = "TemRevil.Glass-Rea_m8znxtvwyfwk8";
 
+    /// <summary>The Store listing's product id (apps.microsoft.com/detail/&lt;id&gt;).</summary>
+    public const string StoreProductId = "9PH88K5B2QX2";
+
     /// <summary>Runs from the Microsoft Store package (with its package identity).</summary>
     public static bool IsPackaged { get; } = HasPackage();
 

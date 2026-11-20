@@ -287,7 +287,10 @@
                                 </StackPanel>
                             </StackPanel>
                             <TextBlock Style="{StaticResource Caption}" Text="A personal network monitor for this PC: what uses the internet, how much, and what's on your network." />
-                            <HyperlinkButton Content="temrevil.com" NavigateUri="https://temrevil.com" Padding="0" AutomationProperties.Name="Visit temrevil.com" />
+                            <StackPanel Orientation="Horizontal" Spacing="20">
+                                <HyperlinkButton Content="temrevil.com" NavigateUri="https://temrevil.com" Padding="0" AutomationProperties.Name="Visit temrevil.com" />
+                                <HyperlinkButton x:Name="RateButton" Content="Rate Glass-Rea" Click="OnRate" Padding="0" Visibility="Collapsed" AutomationProperties.Name="Rate Glass-Rea in the Microsoft Store" />
+                            </StackPanel>
                         </StackPanel>
                     </Border>
 
