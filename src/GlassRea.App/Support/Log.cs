@@ -139,6 +139,6 @@ public static class Log
             $".NET {Environment.Version}",
             $"Time zone {TimeZoneInfo.Local.Id}",
             $"Made {DateTimeOffset.Now.ToString("yyyy-MM-dd HH:mm:ss zzz", CultureInfo.InvariantCulture)}", "");
-        LogBundle.Write(output, [("app", File.Directory), ("service", ServiceFolder)], about);
+        LogBundle.Write(output, ((string, string)[])[("app", File.Directory), ("service", ServiceFolder)], about);
     }
 }

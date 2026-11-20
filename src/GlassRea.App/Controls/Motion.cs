@@ -120,7 +120,7 @@ public static class Motion
         surface.SourceSize = size + new Vector2(pad * 2);
         _ghostBlur ??= c.CreateEffectFactory(
             new GaussianBlurEffect { Name = "Blur", BlurAmount = 0, BorderMode = EffectBorderMode.Soft, Optimization = EffectOptimization.Speed, Source = new CompositionEffectSourceParameter("page") },
-            ["Blur.BlurAmount"]);
+            (string[])["Blur.BlurAmount"]);
         var brush = _ghostBlur.CreateBrush();
         brush.SetSourceParameter("page", c.CreateSurfaceBrush(surface));
         var at = host.TransformToVisual(ghostLayer).TransformPoint(default);

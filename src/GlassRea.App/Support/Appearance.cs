@@ -62,7 +62,7 @@ public sealed class AppearanceState
 /// </summary>
 public static class Appearance
 {
-    public static readonly IReadOnlyList<PaletteDef> Palettes =
+    public static readonly IReadOnlyList<PaletteDef> Palettes = (PaletteDef[])
     [
         P("blue", "Blue", "#0F62D6", "#B5472F", "#6CB4FF", "#FF9B85", "#5B9BFF", "#0A3F9E", "#A9D1FF", "#2F7BEA"),
         P("iris", "Iris", "#6150D1", "#13857A", "#ADA2FF", "#5ED8C6", "#8B7CF0", "#3E2FA8", "#C9C1FF", "#6F5FE8"),

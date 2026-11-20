@@ -141,7 +141,7 @@ public sealed class Glass : ContentControl
         var based = new CompositeEffect { Mode = Microsoft.Graphics.Canvas.CanvasComposite.SourceOver, Sources = { new ColorSourceEffect { Name = "Base", Color = Appearance.WindowTint }, blur } };
         var saturate = new SaturationEffect { Saturation = 1.8f, Source = based };
         var tint = new TintEffect { Name = "Tint", Color = Appearance.GlassTint, Source = saturate };
-        _brush = c.CreateEffectFactory(tint, ["Blur.BlurAmount", "Tint.Color", "Base.Color"]).CreateBrush();
+        _brush = c.CreateEffectFactory(tint, (string[])["Blur.BlurAmount", "Tint.Color", "Base.Color"]).CreateBrush();
         _surface = c.CreateVisualSurface();
         var copy = c.CreateSurfaceBrush(_surface);
         copy.Stretch = CompositionStretch.None;
