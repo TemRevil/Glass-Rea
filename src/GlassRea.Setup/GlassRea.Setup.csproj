@@ -34,9 +34,9 @@
   <ItemGroup>
     <!-- Only the parts of the Windows App SDK in use (WinUI brings Foundation and InteractiveExperiences). The whole SDK
          also copies its AI, machine learning, search and widgets runtimes (about 60 MB) into the install folder. -->
-    <PackageReference Include="Microsoft.WindowsAppSDK.WinUI" Version="2.6.5" />
-    <PackageReference Include="Microsoft.WindowsAppSDK.Foundation" Version="2.6.5" />
-    <PackageReference Include="Microsoft.WindowsAppSDK.InteractiveExperiences" Version="2.6.5" />
+    <PackageReference Include="Microsoft.WindowsAppSDK.WinUI" Version="2.7.0" />
+    <PackageReference Include="Microsoft.WindowsAppSDK.Foundation" Version="2.7.0" />
+    <PackageReference Include="Microsoft.WindowsAppSDK.InteractiveExperiences" Version="2.7.0" />
     <PackageReference Include="System.ServiceProcess.ServiceController" Version="10.0.15" />
   </ItemGroup>
   <ItemGroup>
